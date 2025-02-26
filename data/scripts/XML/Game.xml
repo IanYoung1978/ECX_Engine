@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!-- Configuration Files -->
+<Game>
+	<Window filename="data/scripts/XML/window.xml"></Window>
+	<!-- Game Data files -->
+	<!-- Here game modes are defined -->
+	<GameMode filename="data/scripts/XML/TestMode.xml"></GameMode>
+	
+</Game>

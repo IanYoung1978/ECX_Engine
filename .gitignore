@@ -1,32 +1,19 @@
-# Prerequisites
-*.d
+#Ignore VS temp files and directories
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+/X64/
+/.vs/
+/[Dd]ebug/
+/[Rr]elease/
+/eclipsis-framework/[Dd]ebug/
+/eclipsis-framework/[Rr]elease/
+/eclipsis-framework/[xX]64/
+/ipch/
+/Hello Triangle/[Dd]ebug/
+/Hello Triangle/[Rr]ebug/
+*.VC.db
+/Eclipsis/Debug
+/Eclipsis/Release
+/Eclipsis/x64
+/Eclipsis/data/assets/shaders/glslangValidator.exe
+/[Bb]uild/
+/[Oo]ut/

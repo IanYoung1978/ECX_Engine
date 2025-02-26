@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<KeyMapping>
+	<Key action="forward">W</Key>
+	<Key action="back">S</Key>
+	<Key action="strafe left">A</Key>
+	<Key action="strafe right">D</Key>
+	<Key action="up">SPACE</Key>
+	<Key action="down">C</Key>
+	<Key action="quit">ESCAPE</Key>
+</KeyMapping>
