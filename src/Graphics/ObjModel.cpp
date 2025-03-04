@@ -60,7 +60,7 @@ unsigned int ObjModel::getVertCount()
 	return m_NumVerts;
 }
 
-void ObjModel::draw()
+void ObjModel::draw() const
 {
 	glBindVertexArray(m_MeshLocation);
 	glDrawElements(GL_TRIANGLES, m_NumVerts, GL_UNSIGNED_INT, 0);

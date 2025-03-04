@@ -15,7 +15,7 @@ public:
 	void unload();
 	unsigned int getHandle();
 	unsigned int getVertCount();
-	void draw();	
+	void draw() const;	
 	void initialise(void);
 	virtual ~ObjModel();
 private:

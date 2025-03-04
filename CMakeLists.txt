@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.2.0)
+cmake_minimum_required(VERSION 3.2.5)
 
 # attach to vcpkg's cmake configuration for project dependencies
-set(CMAKE_TOOLCHAIN_FILE "C:/Lib/vcpkg/scripts/buildsystems/vcpkg.cmake")
+set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
 
 project(ECX)
 
