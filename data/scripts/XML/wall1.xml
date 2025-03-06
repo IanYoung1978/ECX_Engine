@@ -11,12 +11,12 @@
 		</Transform>
 		<Gfx>
 			<PBRMaterial>
-				<Albedo>data/assets/Images/bricks/bricks_diffuseOriginal.png</Albedo>
-				<Normal>data/assets/Images/bricks/bricks_normal.png</Normal>
-				<Smoothness>data/assets/Images/bricks/bricks_normal.png</Smoothness>
-				<Height>data/assets/Images/bricks/bricks_height.png</Height>
-				<Metallic>data/assets/Images/bricks/bricks_metallic.png</Metallic>
-				<AO>data/assets/Images/bricks/bricks_ao.png</AO>
+				<Albedo>data/assets/Images/alley-brick-wall/alley-brick-wall_albedo.png</Albedo>
+				<Normal>data/assets/Images/alley-brick-wall/alley-brick-wall_normal-dx.png</Normal>
+				<Smoothness>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</Smoothness>
+				<Height>data/assets/Images/alley-brick-wall/alley-brick-wall_height.png</Height>
+				<Metallic>data/assets/Images/alley-brick-wall/alley-brick-wall_metallic.png</Metallic>
+				<AO>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</AO>
 			</PBRMaterial>
 			<Model>data/assets/models/plane.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
