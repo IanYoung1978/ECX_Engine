@@ -20,6 +20,10 @@ void EC_OnMouseMoveHandler::handleEvent(ECXEvent& e, EC_Game& game, EC_LuaScript
 	try
 	{
 		auto retval = script(m, proxy, g);
+		if (!retval)
+		{
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Error in onMouseMove script: " + retval.errorMessage(), LOGGING::LogLevel::CRITICAL);
+		}
 	}
 	catch (luabridge::LuaException const& e)
 	{

@@ -4,6 +4,7 @@
 #include <GL\glew.h>
 #include <fstream>
 #include "BufferType.h"
+#include "Logging/ECX_Logging.h"
 
 ShaderManager::ShaderManager()
 {
@@ -60,7 +61,11 @@ void ShaderManager::finaliseShaders()
 			}
 			else
 			{
+				s.first.first;
 				//throw/log error
+				char m_error[256];
+				sprintf_s(m_error, "Failed to load shader files to GPU: %s, or %s", s.first.first.c_str(), s.first.second.c_str());
+				LOGGING::ECX_Logger::GetInstance()->LogMessage(m_error, LOGGING::LogLevel::CRITICAL);
 			}
 		}
 	}

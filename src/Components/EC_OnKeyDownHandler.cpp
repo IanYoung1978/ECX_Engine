@@ -21,6 +21,10 @@ void EC_OnKeyDownHandler::handleEvent(ECXEvent& e, EC_Game & game, EC_LuaScriptP
 	{
 		luabridge::LuaRef script = luabridge::getGlobal(m_state, "onKeyDown");
 		auto retval = script(key, proxy, g);
+		if (!retval)
+		{
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Error in onKeyDown script: " + retval.errorMessage(), LOGGING::LogLevel::CRITICAL);
+		}
 	}
 	catch (std::exception const& e)
 	{

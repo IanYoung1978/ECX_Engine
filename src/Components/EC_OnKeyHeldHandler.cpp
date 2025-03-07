@@ -19,6 +19,10 @@ void EC_OnKeyHeldHandler::handleEvent(ECXEvent& e, EC_Game & game, EC_LuaScriptP
 	{
 		luabridge::LuaRef script = luabridge::getGlobal(m_state, "onKeyHeld");
 		auto retval = script(key, proxy, g);
+		if (!retval)
+		{
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Error in onKeyHeld script: " + retval.errorMessage(), LOGGING::LogLevel::CRITICAL);
+		}
 	}
 	catch (std::exception const& e)
 	{

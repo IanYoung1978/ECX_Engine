@@ -1,6 +1,6 @@
 #include "MeshManager.h"
 #include "ObjModel.h"
-
+#include "Logging/ECX_Logging.h"
 
 MeshManager::MeshManager()
 {
@@ -15,6 +15,10 @@ void MeshManager::loadObjModel(const std::string & fname)
 		if (m->loadModel(fname))
 		{
 			m_models.emplace(fname, m);
+		}
+		else
+		{
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to load obj model file: " + fname, LOGGING::LogLevel::CRITICAL);
 		}
 	}
 }
