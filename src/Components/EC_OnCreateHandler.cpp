@@ -1,5 +1,5 @@
 #include "EC_OnCreateHandler.h"
-
+#include "Logging/ECX_Logging.h"
 
 
 EC_OnCreateHandler::EC_OnCreateHandler(const std::string& filename) :EC_Lua_Script(filename)
@@ -16,6 +16,10 @@ void EC_OnCreateHandler::handleEvent(ECXEvent& e, EC_Game & game, EC_LuaScriptPr
 	if (e.type == ECXEventType::EntityCreate) 
 	{
 		auto script = luabridge::getGlobal(m_state, "onCreate");
-		auto retval = script(e, proxy, GameProxy(game));
+		luabridge::LuaResult retval = script(e, proxy, GameProxy(game));
+		if (!retval)
+		{
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Error in OnCreate script: " + retval.errorMessage(), LOGGING::LogLevel::CRITICAL);
+		}
 	}
 }

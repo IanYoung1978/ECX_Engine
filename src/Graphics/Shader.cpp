@@ -103,7 +103,7 @@ bool Shader::loadShader(char * vs, int vLength, char * fs, int fLength)
 	if (!compiled)
 	{
 		//compilation error
-		
+		LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to compile vertex shader", LOGGING::LogLevel::CRITICAL);
 		return false;
 	}
 	glCompileShader(frag);
@@ -112,7 +112,7 @@ bool Shader::loadShader(char * vs, int vLength, char * fs, int fLength)
 	if (!compiled)
 	{
 		//compilation error
-		
+		LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to compile fragment shader", LOGGING::LogLevel::CRITICAL);
 		glDeleteShader(vert);
 		return false;
 	}
