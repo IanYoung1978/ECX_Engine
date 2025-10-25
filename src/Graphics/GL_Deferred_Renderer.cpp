@@ -84,7 +84,7 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window)
 	m_LightPassShader = std::make_shared<Shader>();
 
 	// TODO: Get rid of these hard coded paths and implement a config file
-	// TODO: Update API to 1, Take a config file path and load it, and 2. report errors properly if a shader fails to load. 
+	// TODO: Update API to 1, Take a config file path and load it
 
 	if (!m_LightPassShader->loadShader(std::string("data/assets/shaders/lightpass.vert"), std::string("data/assets/shaders/lightpass.frag")))  // <<-- config controlled
 	{
@@ -181,6 +181,7 @@ void GL_Deferred_Renderer::renderScene()
 	else
 	{
 		//log no camera error
+		LOGGING::ECX_Logger::GetInstance()->LogMessage("No camera present", LOGGING::LogLevel::SEVERE);
 	}
 }
 
