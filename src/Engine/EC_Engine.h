@@ -20,9 +20,6 @@ public:
 	void init(const std::string& config, EC_Game& game, ECXMessenger& messenger);
 	// Inherited via ICommandListener
 	void receive(ECXCommand& command) override;
-	void addEntity(std::shared_ptr<GameEntity> e);
-	void removeEntity(unsigned int entityID);
-	void clearEntities();
 	void pause();
 	void resume();
 	void start();

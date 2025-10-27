@@ -10,6 +10,7 @@
 #include "Components/ProxyHelper.h"
 #include "Logging/ECX_Logging.h"
 #include "Window/Window.h"
+#include "Entity/EntityManager.h"
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
 {
@@ -126,63 +127,15 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window)
 	glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
-void GL_Deferred_Renderer::addEntity(std::shared_ptr<GameEntity> e)
-{
-	std::unique_lock<std::mutex> lock(m_lock);
-	m_toAdd.push_back(e);
-}
-
-void GL_Deferred_Renderer::removeEntity(unsigned int entityID)
-{
-	std::unique_lock<std::mutex> lock(m_lock);
-	m_toRemove.push_back(entityID);
-
-}
-
 void GL_Deferred_Renderer::renderScene()
 {
-	{
-		std::unique_lock<std::mutex> lock(m_lock);
-		if (!m_toAdd.empty())
-		{
-			for (auto e : m_toAdd)
-			{
-				createProxy(e);
-			}
-		}
-		m_toAdd.clear();
-		if (!m_toRemove.empty())
-		{
-			for (auto id : m_toRemove)
-			{
-				removeProxy(id);
-			}
-		}
-		m_toRemove.clear();
-	}
-	if (!m_cameras.empty())
-	{
-		for (size_t i = 0; i < m_cameras.size(); i++)
-		{
-			if (m_cameras[i].entity->isActive())
-			{
-				m_ActiveCamera = i;
-				break;
-			}
-		}
-		m_FrameBuffer.initFrame();
-		geometryPass();
-		glowPass();
-		lightPass();
+	m_FrameBuffer.initFrame();
+	geometryPass();
+	glowPass();
+	lightPass();
 
-		//postProcess();
-		finalPass();
-	}
-	else
-	{
-		//log no camera error
-		LOGGING::ECX_Logger::GetInstance()->LogMessage("No camera present", LOGGING::LogLevel::SEVERE);
-	}
+	//postProcess();
+	finalPass();
 }
 
 void GL_Deferred_Renderer::changeResolution(int width, int height)
@@ -190,160 +143,137 @@ void GL_Deferred_Renderer::changeResolution(int width, int height)
 	m_FrameBuffer.resize(width, height);
 }
 
-void GL_Deferred_Renderer::clearScene()
-{
-	m_cameras.clear();
-	m_Proxies.clear();
-	m_lights.clear();
-	m_Skyboxes.clear();
-	m_Points.clear();
-	m_Spots.clear();
-	m_Directionals.clear();
-	m_ShadowDirs.clear();
-	m_ShadowPoints.clear();
-	m_ShadowSpots.clear();
-}
+//void GL_Deferred_Renderer::clearScene()
+//{
+//	m_cameras.clear();
+//	m_Proxies.clear();
+//	m_lights.clear();
+//	m_Skyboxes.clear();
+//	m_Points.clear();
+//	m_Spots.clear();
+//	m_Directionals.clear();
+//	m_ShadowDirs.clear();
+//	m_ShadowPoints.clear();
+//	m_ShadowSpots.clear();
+//}
 
-void GL_Deferred_Renderer::createProxy(std::shared_ptr<GameEntity> e)
-{
-	if (e->hasComponent<Transform>() && e->hasComponent<GraphicsData>())
-	{
-		m_Proxies.emplace_back(e);
-
-	}
-	if (e->hasComponent<Light>())
-	{
-		m_lights.emplace_back(e);
-	}
-	if (e->hasComponent<EC_CameraComponent>())
-	{
-		//this doesn't work
-		m_cameras.emplace_back(e);
-	}
-}
-
-void GL_Deferred_Renderer::removeProxy(unsigned int entityID)
-{
-	for (size_t i = 0; i < m_Proxies.size(); i++)
-	{
-		if (m_Proxies[i].entity->getUID() == entityID)
-		{
-			m_Proxies[i].UnRegister();
-			m_Proxies[i] = std::move(m_Proxies.back());
-			m_Proxies.resize(m_Proxies.size() - 1);
-			return;
-		}
-	}
-	for (size_t i = 0; i < m_lights.size(); i++)
-	{
-		if (m_lights[i].entity->getUID() == entityID)
-		{
-			m_lights[i].UnRegister();
-			m_lights[i] = std::move(m_lights.back());
-			m_lights.resize(m_lights.size() - 1);
-			return;
-		}
-	}
-	for (size_t i = 0; i < m_cameras.size(); i++)
-	{
-		if (m_cameras[i].entity->getUID() == entityID)
-		{
-			m_cameras[i].UnRegister();
-			m_cameras[i] = std::move(m_cameras.back());
-			m_cameras.resize(m_cameras.size() - 1);
-			return;
-		}
-	}
-}
 
 void GL_Deferred_Renderer::geometryPass()
 {
-	if (!m_cameras.empty())
+	auto cameras = EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(EC_CameraComponent)));
+	for (size_t j = 0; j < cameras.size(); j++)
 	{
-		glm::mat4 view(1.0f);
-		glm::mat4 projection(1.0f);
-
-		projection = glm::perspective(
-			glm::radians(m_cameras[m_ActiveCamera].cam->getFOVAngle()), 
-			(float)m_Window->getWidth() / m_Window->getHeight(), 
-			1.0f, 
-			m_cameras[m_ActiveCamera].cam->getDrawDistance()
-		);
-
-		view = m_cameras[m_ActiveCamera].cam->getViewMatrix();
-
-		m_FrameBuffer.GeometryPass();
-
-		glEnable(GL_DEPTH_TEST);
-		glDepthMask(GL_TRUE);
-		glDepthFunc(GL_LESS);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		glEnable(GL_CULL_FACE);
-		glCullFace(GL_BACK);
-		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-
-		for (size_t i = 0; i < m_Proxies.size();i++) 
+		
+		if (cameras[j]->isActive())
 		{
-			if (m_Proxies[i].entity->isActive())
-			{
-				auto transform = m_Proxies[i].transform;
-				glm::mat3 nm = glm::transpose(glm::inverse(transform));
-				m_Proxies[i].shader->activate();
-				m_Proxies[i].shader->setUniform("camPos", m_cameras[m_ActiveCamera].spatial->getPosition());
-				//m_Proxies[i].shader->setUniform("NormalTransform", nm);
-				m_Proxies[i].shader->setUniform("ViewTransform", view);
-				m_Proxies[i].shader->setUniform("ProjTransform", projection);
-				m_Proxies[i].shader->setUniform("ModelTransform", transform);
+			auto cam = cameras[j]->getComponent<EC_CameraComponent>();
+			auto cam_spatial = cameras[j]->getComponent<Spatial>();
+			glm::mat4 view(1.0f);
+			glm::mat4 projection(1.0f);
 
-				if (m_Proxies[i].hasTextures)
+			projection = glm::perspective(
+				glm::radians(cam->getFOVAngle()),
+				(float)m_Window->getWidth() / m_Window->getHeight(),
+				1.0f,
+				cam->getDrawDistance()
+			);
+
+			view = cam->getViewMatrix();
+
+			m_FrameBuffer.GeometryPass();
+
+			glEnable(GL_DEPTH_TEST);
+			glDepthMask(GL_TRUE);
+			glDepthFunc(GL_LESS);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glEnable(GL_CULL_FACE);
+			glCullFace(GL_BACK);
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+			auto entities = EntityManager::getInstance().getEntitiesWithComponents({
+				std::type_index(typeid(Transform)),
+				std::type_index(typeid(GraphicsData))
+				});
+
+			for (size_t i = 0; i < entities.size(); i++)
+			{
+				if (entities[i]->isActive())
 				{
-					m_Proxies[i].shader->setUniform("hasMaterial", 1);
-					m_Proxies[i].textures->bindTextures(m_Proxies[i].shader);
-				}
-				else
-				{
-					m_Proxies[i].shader->setUniform("hasMaterial", 0);
-					m_Proxies[i].shader->setUniform("incolour", m_Proxies[i].colour);
-				}
-				glBindVertexArray(m_Proxies[i].mesh_ID);
-				glDrawElements(GL_TRIANGLES, m_Proxies[i].num_Verts, GL_UNSIGNED_INT, 0);
-				glBindVertexArray(0);
-				for (int i = 0; i < 10; i++)
-				{
-					glActiveTexture(GL_TEXTURE0 + i);
-					glBindTexture(GL_TEXTURE_2D, 0);
+					auto transform = entities[i]->getComponent	<Transform>()->getTransform();
+					auto gfx = entities[i]->getComponent<GraphicsData>();
+					gfx->Finalize();
+					auto shader = gfx->getShader();
+					glm::mat3 nm = glm::transpose(glm::inverse(transform));
+					shader->activate();
+					
+					shader->setUniform("camPos", cam_spatial->getPosition());
+					//entities[i].shader->setUniform("NormalTransform", nm);
+					shader->setUniform("ViewTransform", view);
+					shader->setUniform("ProjTransform", projection);
+					shader->setUniform("ModelTransform", transform);
+
+					if (gfx->getTextures()!= nullptr)
+					{
+						shader->setUniform("hasMaterial", 1);
+						gfx->getTextures()->bindTextures(shader);
+					}
+					else
+					{
+						shader->setUniform("hasMaterial", 0);
+						shader->setUniform("incolour", gfx->getColour());
+					}
+					glBindVertexArray(gfx->getModel()->getHandle());
+					glDrawElements(GL_TRIANGLES, gfx->getModel()->getVertCount(), GL_UNSIGNED_INT, 0);
+					glBindVertexArray(0);
+					for (int i = 0; i < 10; i++)
+					{
+						glActiveTexture(GL_TEXTURE0 + i);
+						glBindTexture(GL_TEXTURE_2D, 0);
+					}
 				}
 			}
+
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glUseProgram(0);
+			glBindTexture(GL_TEXTURE_2D, 0);
+			break;
 		}
 	}
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glUseProgram(0);
-	glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 void GL_Deferred_Renderer::lightPass()
 {
 	if (m_LightPassShader)
 	{
-		updateLights();
-		// activate shader for non shadow casting lights
-		m_LightPassShader->activate();
-		m_FrameBuffer.LightingPass(*m_LightPassShader);
-		m_LightBuffer.updatePointLights((int)m_Points.size(), m_Points.data());
-		m_LightBuffer.updateSpotLights((int)m_Spots.size(), m_Spots.data());
+		auto cameras = EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(EC_CameraComponent)));
+		for (auto& cam_entity : cameras)
+		{
+			if (cam_entity->isActive())
+			{
+				auto cam = cam_entity->getComponent<EC_CameraComponent>();
+				auto spatial = cam_entity->getComponent<Spatial>();
+				updateLights();
+				// activate shader for non shadow casting lights
+				m_LightPassShader->activate();
+				m_FrameBuffer.LightingPass(*m_LightPassShader);
+				m_LightBuffer.updatePointLights((int)m_Points.size(), m_Points.data());
+				m_LightBuffer.updateSpotLights((int)m_Spots.size(), m_Spots.data());
 
-		m_LightBuffer.bindPointLights();
-		m_LightPassShader->setUniform(("NumPoints"), (int)m_Points.size());
-		m_LightBuffer.bindSpotLights();
-		m_LightPassShader->setUniform(("NumSpots"), (int)m_Spots.size());
-		m_LightPassShader->setUniform(("WSCamPos"), m_cameras[m_ActiveCamera].spatial->getPosition());
-		if(!m_Directionals.empty())
-			m_LightPassShader->setDirLight(("dirLight"), m_Directionals[0]);
-		//render
-		renderQuad();
+				m_LightBuffer.bindPointLights();
+				m_LightPassShader->setUniform(("NumPoints"), (int)m_Points.size());
+				m_LightBuffer.bindSpotLights();
+				m_LightPassShader->setUniform(("NumSpots"), (int)m_Spots.size());
+				m_LightPassShader->setUniform(("WSCamPos"), spatial->getPosition());
+				if (!m_Directionals.empty())
+					m_LightPassShader->setDirLight(("dirLight"), m_Directionals[0]);
+				//render
+				renderQuad();
 
-		shadowLightingPass();
+				shadowLightingPass();
+				break;
+			}
+		}
 	}
 }
 
@@ -409,33 +339,38 @@ void GL_Deferred_Renderer::updateLights()
 	m_ShadowDirs.clear();
 	m_ShadowSpots.clear();
 	m_ShadowPoints.clear();
+
+
+	auto lights = EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(Light)));
+
 	//process directional and spotlights
-	for (size_t i = 0; i < m_lights.size() ; i++)
+	for (size_t i = 0; i < lights.size() ; i++)
 	{
-		if (m_lights[i].entity->isActive())
+		if (lights[i]->isActive())
 		{
-			if (m_lights[i].light->getLightType() == LightType::Directional)
+			auto light = lights[i]->getComponent<Light>();
+			if (light->getLightType() == LightType::Directional)
 			{
-				if (!m_lights[i].light->castsShadow())
-					m_Directionals.push_back(static_cast<DirLightData&>(m_lights[i].light->getLightData()));
+				if (!light->castsShadow())
+					m_Directionals.push_back(static_cast<DirLightData&>(light->getLightData()));
 				else
-					m_ShadowDirs.push_back(static_cast<DirLightData&>(m_lights[i].light->getLightData()));
+					m_ShadowDirs.push_back(static_cast<DirLightData&>(light->getLightData()));
 
 			}
-			else if (m_lights[i].light->getLightType() == LightType::SpotLight)
+			else if (light->getLightType() == LightType::SpotLight)
 			{
-				if (!m_lights[i].light->castsShadow())
-					m_Spots.push_back(static_cast<SpotLightData&>(m_lights[i].light->getLightData()));
+				if (!light->castsShadow())
+					m_Spots.push_back(static_cast<SpotLightData&>(light->getLightData()));
 				else
-					m_ShadowSpots.push_back(static_cast<SpotLightData&>(m_lights[i].light->getLightData()));
+					m_ShadowSpots.push_back(static_cast<SpotLightData&>(light->getLightData()));
 			}
-		}
-		else
-		{
-			if (!m_lights[i].light->castsShadow())
-				m_Points.push_back(m_lights[i].light->getLightData());
 			else
-				m_ShadowPoints.push_back(m_lights[i].light->getLightData());
+			{
+				if (!light->castsShadow())
+					m_Points.push_back(light->getLightData());
+				else
+					m_ShadowPoints.push_back(light->getLightData());
+			}
 		}
 	}
 }
@@ -465,21 +400,30 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer & target, DirLightData& li
 	projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
 	glm::mat4 pv = projection*view;
 	m_ShadowDirMatrix = biasMatrix*pv;
-
-	for (auto const &e : m_Proxies)
+	auto entities = EntityManager::getInstance().getEntitiesWithComponents({
+		std::type_index(typeid(Transform)),
+		std::type_index(typeid(GraphicsData))
+		});
+	for (auto const &e : entities)
 	{
-		if (e.entity->isActive())
+		if (e->isActive())
 		{
-			//activate shadow shader
-			m_ShadowShader.activate();
-			//set transforms
-			m_ShadowShader.setUniform(std::string("ViewTransform"), view);
-			m_ShadowShader.setUniform(std::string("ProjTransform"), projection);
-			m_ShadowShader.setUniform(std::string("ModelTransform"), e.transform);
+			auto transform = e->getComponent<Transform>()->getTransform();
+			auto gfx = e->getComponent<GraphicsData>();
+			auto model = gfx->getModel();
+			if (model != nullptr)
+			{
+				//activate shadow shader
+				m_ShadowShader.activate();
+				//set transforms
+				m_ShadowShader.setUniform(std::string("ViewTransform"), view);
+				m_ShadowShader.setUniform(std::string("ProjTransform"), projection);
+				m_ShadowShader.setUniform(std::string("ModelTransform"), transform);
 
-			glBindVertexArray(e.mesh_ID);
-			glDrawElements(GL_TRIANGLES, e.num_Verts, GL_UNSIGNED_INT, 0);
-			glBindVertexArray(0);
+				glBindVertexArray(model->getHandle());
+				glDrawElements(GL_TRIANGLES, model->getVertCount(), GL_UNSIGNED_INT, 0);
+				glBindVertexArray(0);
+			}
 		}
 	}
 	glUseProgram(0);
@@ -518,20 +462,29 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer & target, SpotLightData& 
 	glm::mat4 pv = projection*view;
 	m_ShadowSpotMatrix = biasMatrix*pv;
 
-	for (auto const &e : m_Proxies)
+	auto entities = EntityManager::getInstance().getEntitiesWithComponents({
+		std::type_index(typeid(Transform)),
+		std::type_index(typeid(GraphicsData))
+		});
+	for (auto const& e : entities)
 	{
-		if (e.entity->isActive())
+		if (e->isActive())
 		{
+			auto transform = e->getComponent<Transform>()->getTransform();
+			auto gfx = e->getComponent<GraphicsData>();
+			auto model = gfx->getModel();
+			if (model == nullptr)
+				continue;
 			//activate shadow shader
 			m_ShadowShader.activate();
 			//set transforms
 			m_ShadowShader.setUniform(std::string("ViewTransform"), view);
 			m_ShadowShader.setUniform(std::string("ProjTransform"), projection);
-			m_ShadowShader.setUniform(std::string("ModelTransform"), e.transform);
+			m_ShadowShader.setUniform(std::string("ModelTransform"), transform);
 
 			//draw
-			glBindVertexArray(e.mesh_ID);
-			glDrawElements(GL_TRIANGLES, e.num_Verts, GL_UNSIGNED_INT, 0);
+			glBindVertexArray(gfx->getModel()->getHandle());
+			glDrawElements(GL_TRIANGLES, gfx->getModel()->getVertCount(), GL_UNSIGNED_INT, 0);
 			glBindVertexArray(0);
 		}
 	}
@@ -549,58 +502,69 @@ void GL_Deferred_Renderer::shadowPointPass(ShadowBuffer & target, LightData& lig
 
 void GL_Deferred_Renderer::shadowLightingPass()
 {
+	auto cameras = EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(EC_CameraComponent)));
+	for (auto& cam_entity : cameras)
+	{
+		if (cam_entity->isActive())
+		{
+			auto cam = cam_entity->getComponent<EC_CameraComponent>();
+			auto spatial = cam_entity->getComponent<Spatial>();
+			for (size_t i = 0; i < m_ShadowDirs.size(); i++)
+			{
+				//render shadow map
+				shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i]);
 
-	for (size_t i = 0; i < m_ShadowDirs.size(); i++)
-	{
-		//render shadow map
-		shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i]);
+				// activate shader for non shadow casting lights
+				m_ShadowDirLightShader.activate();
+				m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_ONE, GL_ONE);
+				m_ShadowDirLightShader.setUniform(("WSCamPos"), spatial->getPosition());
+				m_ShadowDirLightShader.setDirLight(("dirLight"), static_cast<DirLightData&>(m_ShadowDirs[i]));
+				m_ShadowDirLightShader.setUniform(("ShadowTransform"), m_ShadowDirMatrix);
+				//bind depth map
+				m_ShadowDirLightShader.bindTexture(("shadowMap"), 5, m_ShadowBuffer.getDepthTexture());
+				//render
+				renderQuad();
+				glDisable(GL_BLEND);
+			}
+			for (size_t i = 0; i < m_ShadowSpots.size(); i++)
+			{
+				shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i]);
+				m_ShadowSpotLightShader.activate();
+				m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_ONE, GL_ONE);
+				m_ShadowSpotLightShader.setUniform(("WSCamPos"), spatial->getPosition());
+				m_ShadowSpotLightShader.setSpotLight(("spotLight"), static_cast<SpotLightData&>(m_ShadowSpots[i]));
+				m_ShadowDirLightShader.setUniform(("ShadowTransform"), m_ShadowSpotMatrix);
+				//bind depth map
+				m_ShadowSpotLightShader.bindTexture(("shadowMap"), 5, m_ShadowBuffer.getDepthTexture());
+				//render
+				renderQuad();
+				glDisable(GL_BLEND);
+			}
+			for (size_t i = 0; i < m_ShadowPoints.size(); i++)
+			{
+				shadowPointPass(m_ShadowBuffer, m_ShadowPoints[i]);
+				m_ShadowPointLightShader.activate();
+				m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_ONE, GL_ONE);
+				m_ShadowPointLightShader.setUniform(("WSCamPos"), spatial->getPosition());
+				m_ShadowPointLightShader.setLight(("pointLight"), m_ShadowPoints[i]);
+				m_ShadowPointLightShader.setUniform(("ShadowTransform"), m_ShadowDirMatrix);
+				//bind depth map
+				m_ShadowPointLightShader.bindTexture(("shadowMap"), 5, m_ShadowBuffer.getDepthTexture());
+				//render
+				renderQuad();
+				glDisable(GL_BLEND);
+			}
+			break;
+		}
+	}
 
-		// activate shader for non shadow casting lights
-		m_ShadowDirLightShader.activate();
-		m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_ONE, GL_ONE);
-		m_ShadowDirLightShader.setUniform(("WSCamPos"), m_cameras[m_ActiveCamera].spatial->getPosition());
-		m_ShadowDirLightShader.setDirLight(("dirLight"), static_cast<DirLightData&>(m_ShadowDirs[i]));
-		m_ShadowDirLightShader.setUniform(("ShadowTransform"), m_ShadowDirMatrix);
-		//bind depth map
-		m_ShadowDirLightShader.bindTexture(("shadowMap"),5, m_ShadowBuffer.getDepthTexture());
-		//render
-		renderQuad();
-		glDisable(GL_BLEND);
-	}
-	for (size_t i = 0; i < m_ShadowSpots.size(); i++)
-	{
-		shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i]);
-		m_ShadowSpotLightShader.activate();
-		m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_ONE, GL_ONE);
-		m_ShadowSpotLightShader.setUniform(("WSCamPos"), m_cameras[m_ActiveCamera].spatial->getPosition());
-		m_ShadowSpotLightShader.setSpotLight(("spotLight"), static_cast<SpotLightData&>(m_ShadowSpots[i]));
-		m_ShadowDirLightShader.setUniform(("ShadowTransform"), m_ShadowSpotMatrix);
-		//bind depth map
-		m_ShadowSpotLightShader.bindTexture(("shadowMap"), 5, m_ShadowBuffer.getDepthTexture());
-		//render
-		renderQuad();
-		glDisable(GL_BLEND);
-	}
-	for (size_t i = 0; i < m_ShadowPoints.size(); i++)
-	{
-		shadowPointPass(m_ShadowBuffer, m_ShadowPoints[i]);
-		m_ShadowPointLightShader.activate();
-		m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
-		glEnable(GL_BLEND);
-		glBlendFunc(GL_ONE, GL_ONE);
-		m_ShadowPointLightShader.setUniform(("WSCamPos"), m_cameras[m_ActiveCamera].spatial->getPosition());
-		m_ShadowPointLightShader.setLight(("pointLight"), m_ShadowPoints[i]);
-		m_ShadowPointLightShader.setUniform(("ShadowTransform"), m_ShadowDirMatrix);
-		//bind depth map
-		m_ShadowPointLightShader.bindTexture(("shadowMap"), 5, m_ShadowBuffer.getDepthTexture());
-		//render
-		renderQuad();
-		glDisable(GL_BLEND);
-	}
+
 	glUseProgram(0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

@@ -5,7 +5,7 @@
 #include "Engine/Config.h"
 #include "Engine/GameMode.h"
 #include "Logging/ECX_Logging.h"
-
+#include "Entity/EntityManager.h"
 
 EC_Game::EC_Game() :m_Running(true)
 {
@@ -100,12 +100,12 @@ std::shared_ptr<GameEntity> EC_Game::getEntityByName(const std::string & eName)
 	std::scoped_lock<std::mutex> lock(m_lock);
 	//find the first entity with specified name
 	
-	return m_Modes[m_CurrentMode]->getEntity(eName);
+	return EntityManager::getInstance().getEntity(eName);
 }
 
 void EC_Game::clearEntities()
 {
-	m_Modes[m_CurrentMode]->clearEntities();
+	EntityManager::getInstance().clearEntities();
 }
 
 void EC_Game::shutDown()

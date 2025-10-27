@@ -4,6 +4,7 @@
 #include <exception>
 #include <iostream>
 #include "Messaging/ECXMessenger.h"
+#include "Entity/EntityManager.h"
 
 EC_ScriptingSystem::EC_ScriptingSystem()
 {
@@ -35,40 +36,12 @@ void EC_ScriptingSystem::update(const float & deltaTimeS, EC_Game & game)
 
 }
 
-void EC_ScriptingSystem::addEntity(std::shared_ptr<GameEntity>& e)
-{
-	std::scoped_lock<std::mutex> lock(m_lock);
-	if (e->hasComponent<Spatial>() && e->hasComponent<EC_ScriptComponent>())
-	{
-		m_entities.emplace_back(e);
-	}
-}
-
-void EC_ScriptingSystem::removeEntity(unsigned int entityID)
-{
-	std::scoped_lock<std::mutex> lock(m_lock);
-	for (size_t i = 0; i < m_entities.size(); i++)
-	{
-		if (m_entities[i].m_entity->getUID() == entityID)
-		{
-			m_entities[i].UnRegister();
-			m_entities[i] = std::move(m_entities.back());
-			m_entities.resize(m_entities.size() - 1);
-			break;
-		}
-	}
-}
-
-void EC_ScriptingSystem::clearEntities()
-{
-	std::scoped_lock<std::mutex> lock(m_lock);
-	m_entities.clear();
-}
-
 void EC_ScriptingSystem::receive(ECXEvent& Event)
 {
-	for (auto iter = m_entities.begin(); iter != m_entities.end(); iter++)
+	auto entities = EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(EC_ScriptComponent)));
+	for (auto e : entities)
 	{
-		(*iter).handleEvent(Event, *m_game);
+		EC_Lua_Entity_Proxy proxy(e);
+		proxy.handleEvent(Event, *m_game);
 	}
 }

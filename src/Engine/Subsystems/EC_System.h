@@ -14,9 +14,6 @@ public:
 	EC_System();
 	virtual void init(ECXMessenger& messenger, EC_Game& game) = 0;
 	virtual void update(const float& deltaTimeS, EC_Game& game) = 0;
-	virtual void addEntity(std::shared_ptr<GameEntity>& e) = 0;
-	virtual void removeEntity(unsigned int entityID) = 0;
-	virtual void clearEntities() = 0;
 	virtual ~EC_System();
 protected:
 	std::mutex m_lock;

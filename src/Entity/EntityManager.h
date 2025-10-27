@@ -19,7 +19,7 @@ public:
 	std::shared_ptr<GameEntity> getEntity(std::string name);
 	std::vector<std::shared_ptr<GameEntity>>& getEntities();
 	std::vector<std::shared_ptr<GameEntity>> getEntitiesWithComponent(std::type_index type);
-	std::vector<std::shared_ptr<GameEntity>> getEntitiesWithComponent(std::vector<std::type_index> types);
+	std::vector<std::shared_ptr<GameEntity>> getEntitiesWithComponents(std::vector<std::type_index> types);
 	virtual ~EntityManager();
 private:
 	EntityManager();

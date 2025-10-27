@@ -90,8 +90,14 @@ std::vector<std::shared_ptr<GameEntity>> EntityManager::getEntitiesWithComponent
 	return entities;
 }
 
-std::vector<std::shared_ptr<GameEntity>> EntityManager::getEntitiesWithComponent(std::vector<std::type_index> types)
+std::vector<std::shared_ptr<GameEntity>> EntityManager::getEntitiesWithComponents(std::vector<std::type_index> types)
 {
+	// TODO: Optimize this function
+	// Current implementation checks each entity for all component types
+	// which can be inefficient for large numbers of entities and component types
+	// Consider using a more efficient data structure or indexing method
+	// to keep track of entities by their components
+	// Bitset or component masks could be a solution
 	std::scoped_lock<std::mutex> lock(m_lock);
 	std::vector<std::shared_ptr<GameEntity>> entities;
 	for (auto entity : m_entities)

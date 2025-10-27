@@ -10,7 +10,7 @@ class EntityFactory
 {
 public:
 	EntityFactory();
-	std::shared_ptr<GameEntity> constructEntity(TiXmlElement& descriptor);
+	void constructEntity(TiXmlElement& descriptor);
 	void constructCamera(TiXmlElement& descriptor);
 	void performPostLoadActions();
 	void performPostLoadActions(std::shared_ptr<GameEntity> & entity);

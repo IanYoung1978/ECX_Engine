@@ -31,12 +31,6 @@ public:
 	EC_GameMode();
 	void init(EC_Game& game, std::string& config, ECXMessenger& messenger);
 	void update(float deltaTimeS, EC_Game& game);
-	void addEntity(std::shared_ptr<GameEntity>& entity);
-	std::shared_ptr<GameEntity> getEntity(const std::string& name);
-	std::shared_ptr<GameEntity> getEntity(unsigned int id);
-	void removeEntity(const std::string& name);
-	void removeEntity(unsigned int id);
-	void clearEntities();
 	void reset();
 	void openMenu();
 	void changeMode(Game_Mode mode);
@@ -52,7 +46,6 @@ private:
 	std::vector<std::string> m_GameWorlds;
 	EC_Engine m_engine;
 	std::unique_ptr<Renderer> m_scene_renderer;
-	std::vector<std::shared_ptr<GameEntity>> m_entities;
 	std::deque<std::shared_ptr<EC_Event>> m_events;
 	std::shared_ptr<EC_File_IO_Task> m_loader;
 	EC_ThreadManager m_ThreadManager;
