@@ -59,39 +59,6 @@ void EC_Engine::stop()
 	}
 }
 
-void EC_Engine::addEntity(std::shared_ptr<GameEntity> e)
-{
-	for (size_t i = 0; i < m_Systems.size(); i++)
-	{
-		if (m_Systems[i] != nullptr)
-		{
-			m_Systems[i]->addEntity(e);
-		}
-	}
-}
-
-void EC_Engine::removeEntity(unsigned int entityID)
-{
-	for (size_t i = 0; i < m_Systems.size(); i++)
-	{
-		if (m_Systems[i])
-		{
-			m_Systems[i]->removeEntity(entityID);
-		}
-	}
-}
-
-void EC_Engine::clearEntities()
-{
-	for (size_t i = 0; i < m_Systems.size(); i++)
-	{
-		if (m_Systems[i])
-		{
-			m_Systems[i]->clearEntities();
-		}
-	}
-}
-
 void EC_Engine::pause()
 {
 	for (auto t : m_tasks)

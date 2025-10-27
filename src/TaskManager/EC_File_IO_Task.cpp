@@ -21,18 +21,16 @@ EC_File_IO_Task::~EC_File_IO_Task()
 	m_scheduled_files_load.clear();
 }
 
-void EC_File_IO_Task::ScheduleloadEntity(const std::string & filename, EC_AddEntityCallback cb)
+void EC_File_IO_Task::ScheduleloadEntity(const std::string & filename)
 {
 	std::unique_lock<std::mutex> lock(m_lock);
-	callback = cb;
 	m_scheduled_files_load.push_back(filename);
 
 }
 
-void EC_File_IO_Task::ScheduleloadScene(const std::string & filename, EC_AddEntityCallback cb)
+void EC_File_IO_Task::ScheduleloadScene(const std::string & filename)
 {
 	std::unique_lock<std::mutex> lock(m_lock);
-	callback = cb;
 	m_full_Scene = true;
 	m_scheduled_scene_load.push_back(filename);
 }
@@ -164,7 +162,7 @@ int EC_File_IO_Task::loadEntity(const std::string & filename)
 		LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to load entity: " + filename, LOGGING::LogLevel::TRIVIAL);
 		return -1;
 	}
-	callback.execute(m_factory.constructEntity(*doc.FirstChildElement()));
+	m_factory.constructEntity(*doc.FirstChildElement());
 	LOGGING::ECX_Logger::GetInstance()->LogMessage("Loaded: " + filename, LOGGING::LogLevel::INFORMATION);
 	return 0;
 }
@@ -202,7 +200,7 @@ int EC_File_IO_Task::loadSceneFile(const std::string & filename)
 				}
 				else
 				{
-					callback.execute(m_factory.constructEntity(*elem));
+					m_factory.constructEntity(*elem);
 				}
 			}
 			else

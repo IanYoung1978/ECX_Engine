@@ -4,7 +4,6 @@
 #include <deque>
 #include <mutex>
 #include "Entity/EntityFactory.h"
-#include "Engine/EC_AddEntityCallback.h"
 
 class EC_GameMode;
 
@@ -17,9 +16,9 @@ public:
 	// Public API
 
 	// Schedules an entity descriptor to be loaded from hdd
-	void ScheduleloadEntity(const std::string& filename, EC_AddEntityCallback cb);
+	void ScheduleloadEntity(const std::string& filename);
 	// schedules an entire scene(game world) to be loaded from hdd
-	void ScheduleloadScene(const std::string& filename, EC_AddEntityCallback cb);
+	void ScheduleloadScene(const std::string& filename);
 	// When all assets are loaded, any gpu assets (VBO etc) will be created on main thread.
 	void finalize();
 	// start the task
@@ -53,6 +52,5 @@ private:
 	EntityFactory m_factory;
 	EC_GameMode* m_current_mode;
 	std::mutex m_lock;
-	EC_AddEntityCallback callback;
 };
 

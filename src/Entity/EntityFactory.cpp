@@ -16,6 +16,7 @@
 #include "Components/EC_OnMouseMoveHandler.h"
 #include "Graphics/ADS_TextureSet.h"
 #include "Graphics/PBR_TextureSet.h"
+#include "EntityManager.h"
 
 TextureManager EntityFactory::s_TexManager;
 MeshManager EntityFactory::s_MeshManager;
@@ -29,7 +30,7 @@ EntityFactory::EntityFactory()
 	s_TexManager.init();
 }
 
-std::shared_ptr<GameEntity> EntityFactory::constructEntity(TiXmlElement & descriptor)
+void  EntityFactory::constructEntity(TiXmlElement & descriptor)
 {
 	auto e = std::make_shared<GameEntity>();
 
@@ -454,14 +455,16 @@ std::shared_ptr<GameEntity> EntityFactory::constructEntity(TiXmlElement & descri
 				{
 					scripts->setBehaviour(EC_BehaviourType::key_held, std::make_shared<EC_OnKeyHeldHandler>(child->GetText()));
 				}
-				////else if (strcmp(child->Value(), "OnUpdate") == 0)
-				////{
-				////	scripts->setBehaviour(EC_BehaviourType::OnUpdate, std::make_shared<EC_Lua_Script>(child->GetText()));
-				////}
+				// TODO: Re-implement update scripts
+				//else if (strcmp(child->Value(), "OnUpdate") == 0)
+				//{
+				//	scripts->setBehaviour(EC_BehaviourType::OnUpdate, std::make_shared<EC_Lua_Script>(child->GetText()));
+				//}
 				else if (strcmp(child->Value(), "OnCreate") == 0)
 				{
 					scripts->setBehaviour(EC_BehaviourType::EntityCreate, std::make_shared<EC_OnCreateHandler>(child->GetText()));
 				}
+				// TODO: Re-implement death scripts
 				//else if (strcmp(child->Value(), "OnDeath") == 0)
 				//{
 				//	scripts->setBehaviour(EC_BehaviourType::OnDeath, std::make_shared<EC_Lua_Script>(child->GetText()));
@@ -477,8 +480,8 @@ std::shared_ptr<GameEntity> EntityFactory::constructEntity(TiXmlElement & descri
 		elem = elem->NextSiblingElement();
 	}
 	e->activate();
+	EntityManager::getInstance().addEntity(e);
 	s_entities.push_back(e);
-	return e;
 }
 
 void EntityFactory::constructCamera(TiXmlElement & descriptor)
@@ -545,6 +548,7 @@ void EntityFactory::constructCamera(TiXmlElement & descriptor)
 	}
 	cam->activate();
 	s_Cameras.push_back(cam);
+	EntityManager::getInstance().addEntity(cam);
 }
 
 void EntityFactory::performPostLoadActions()
@@ -561,6 +565,9 @@ void EntityFactory::performPostLoadActions()
 			gfx->Finalize();
 		}
 	}
+	s_entities.clear();
+	s_Cameras.clear();
+	s_lights.clear();
 }
 
 void EntityFactory::performPostLoadActions(std::shared_ptr<GameEntity>& entity)

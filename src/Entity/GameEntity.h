@@ -18,6 +18,7 @@ public:
 		return nullptr;
 	}
 	void addComponent(std::type_index type, std::shared_ptr<IComponent> component);
+
 	template <typename T>
 	bool hasComponent()
 	{
@@ -26,6 +27,15 @@ public:
 			return true;
 		return false;
 	}
+
+	bool hasComponent(std::type_index type)
+	{
+		auto it = m_Components.find(type);
+		if (it != m_Components.end())
+			return true;
+		return false;
+	}
+
 	void setName(std::string name);
 	std::string getName();
 	unsigned int getUID();

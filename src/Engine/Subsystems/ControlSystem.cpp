@@ -6,6 +6,7 @@
 ControlSystem::ControlSystem()
 {
 	m_Controllers.resize((size_t)Controls::Num_Types);
+	m_Messenger = nullptr;
 }
 
 std::shared_ptr<Controller> ControlSystem::getController(Controls c)
@@ -60,19 +61,6 @@ void ControlSystem::update(const float & deltaTimeS, EC_Game & game)
 	}
 }
 
-void ControlSystem::addEntity(std::shared_ptr<GameEntity>& e)
-{
-	//Not used
-}
-
-void ControlSystem::removeEntity(unsigned int entityID)
-{
-	//not used
-}
-
-void ControlSystem::clearEntities()
-{
-}
 
 void ControlSystem::shutdown()
 {

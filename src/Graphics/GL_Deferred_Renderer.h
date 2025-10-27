@@ -123,14 +123,9 @@ public:
 	virtual ~GL_Deferred_Renderer();
 	// Inherited via Renderer
 	virtual void init(std::shared_ptr<Window> window) override;
-	virtual void addEntity(std::shared_ptr<GameEntity> e) override;
-	virtual void removeEntity(unsigned int entityID) override;
 	virtual void renderScene() override;
 	virtual void changeResolution(int width, int height) override;
-	virtual void clearScene() override;
 private:
-	void createProxy(std::shared_ptr<GameEntity> e);
-	void removeProxy(unsigned int entityID);
 	void geometryPass();
 	void lightPass();
 	void postProcess();
@@ -150,10 +145,7 @@ private:
 	std::shared_ptr<Window> m_Window;
 	std::vector<std::shared_ptr<GameEntity>> m_toAdd;
 	std::vector<unsigned int> m_toRemove;
-	std::vector<GFX_Proxy> m_Proxies;
-	std::vector<Light_Proxy> m_lights;
 	std::vector<SkyBox_Proxy> m_Skyboxes;
-	std::vector<EC_CameraProxy> m_cameras;
 	size_t m_ActiveCamera;
 	std::shared_ptr<Shader> m_LightPassShader;
 	std::vector<std::shared_ptr<Shader>> m_PostProcessShaders;

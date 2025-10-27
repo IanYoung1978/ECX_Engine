@@ -10,9 +10,6 @@ class Renderer
 public:
 	Renderer();
 	virtual void init(std::shared_ptr<Window> window) = 0;
-	virtual void addEntity(std::shared_ptr<GameEntity> e) = 0;
-	virtual void removeEntity(unsigned int entityID) = 0;
-	virtual void clearScene() = 0;
 	virtual void changeResolution(int width, int height) = 0;
 	virtual void renderScene() = 0;
 	virtual ~Renderer();

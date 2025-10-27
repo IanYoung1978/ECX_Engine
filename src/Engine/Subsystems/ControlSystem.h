@@ -31,9 +31,6 @@ public:
 	// Inherited via EC_System
 	virtual void init(ECXMessenger& messenger, EC_Game& game) override;
 	virtual void update(const float & deltaTimeS, EC_Game & game) override;
-	virtual void addEntity(std::shared_ptr<GameEntity>& e) override;
-	virtual void removeEntity(unsigned int entityID) override;
-	virtual void clearEntities() override;
 	void shutdown();
 	KeyState getKeyState(SDL_Scancode key);
 private:

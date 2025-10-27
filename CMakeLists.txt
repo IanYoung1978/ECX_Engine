@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.2.5)
 
+if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 # attach to vcpkg's cmake configuration for project dependencies
-set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+    set(CMAKE_TOOLCHAIN_FILE "C:/vcpkg/scripts/buildsystems/vcpkg.cmake")
+    message("Using vcpkg toolchain file: ${CMAKE_TOOLCHAIN_FILE}")
+    set(CMAKE_POLICY_DEFAULT_CMP0074 NEW)
+endif()
 
 project(ECX)
 
