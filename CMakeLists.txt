@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2.5)
+cmake_minimum_required(VERSION 4.0.0)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 # attach to vcpkg's cmake configuration for project dependencies
