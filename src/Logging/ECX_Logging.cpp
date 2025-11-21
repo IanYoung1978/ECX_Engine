@@ -61,7 +61,7 @@ namespace LOGGING
 				{
 					file << "<td>" << "" << "</td>";
 					columnsToLog--;
-					continue;
+					break;
 				}
 				file << "<td>" << c.second.front() <<"</td>";
 				c.second.pop_front();

@@ -33,7 +33,7 @@ function onMouseMove(entity, event)
     local mouseX = event:getMouseMotionX()
     local mouseY = event:getMouseMotionY()
     
-    local sensitivity = 0.01
+    local sensitivity = 0.02
     
     local orient = entity:getOrientation()
     
@@ -44,6 +44,15 @@ function onMouseMove(entity, event)
     
     entity:setOrientation(newPitch, newYaw, orient.z)
 end
+
+function onKeyDown(entity, event)
+    local key = event:getKey()
+	if key == "Escape" then
+    print("Escape key pressed, shutting down the game.")
+	    game:shutdown()
+	end
+end
+
 --[[
 -- Called when key is first pressed
 function onKeyDown(entity, event)
