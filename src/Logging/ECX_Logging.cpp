@@ -32,6 +32,7 @@ namespace LOGGING
 
 		ss << ": " << message << std::endl;;
 		log[std::this_thread::get_id()].push_back(ss.str());
+		printf("%s\n", ss.str().c_str());
 #endif // LOG_ENABLED
 	}
 	void ECX_Logger::printToFile()
@@ -60,7 +61,7 @@ namespace LOGGING
 				{
 					file << "<td>" << "" << "</td>";
 					columnsToLog--;
-					continue;
+					break;
 				}
 				file << "<td>" << c.second.front() <<"</td>";
 				c.second.pop_front();
