@@ -175,6 +175,19 @@ v.z = 15.0
 
 ---
 
+## game API Reference
+```lua
+-- Get entity by name
+local entity = game:getEntity("EntityName")
+-- shutdown the game
+game:shutdown()
+-- get key state
+    local isPressed = game:isKeyPressed("W")  -- true/false
+
+```
+---
+
+
 ## Complete Example Scripts
 
 ### Example 1: Player Controller
@@ -204,15 +217,19 @@ function onKeyDown(entity, event)
 end
 
 function onMouseMove(entity, event)
-    local dx = event:getMouseX()
-    local dy = event:getMouseY()
+    local mouseX = event:getMouseMotionX()
+    local mouseY = event:getMouseMotionY()
+    
+    local sensitivity = 0.02
+    
     local orient = entity:getOrientation()
     
-    orient.y = orient.y - dx * mouseSensitivity  -- Yaw
-    orient.x = orient.x - dy * mouseSensitivity  -- Pitch
-    orient.x = math.max(-1.5, math.min(1.5, orient.x))  -- Clamp pitch
+    local newYaw = orient.y - mouseX * sensitivity
+    local newPitch = orient.x - mouseY * sensitivity
     
-    entity:setOrientation(orient.x, orient.y, orient.z)
+    newPitch = math.max(-1.5, math.min(1.5, newPitch))
+    
+    entity:setOrientation(newPitch, newYaw, orient.z)
 end
 ```
 
