@@ -9,12 +9,7 @@
 			<Position>10.0,10.0,-20.0</Position>
 			<Orientation>0.0,0.0,0.0</Orientation>
 		</Spatial>
-		<Scripts>
-			<OnKeyDown>data/scripts/LUA/OnKeyDown.lua</OnKeyDown>
-			<OnKeyHeld>data/scripts/LUA/OnKeyHeld.lua</OnKeyHeld>
-			<OnKeyUp>data/scripts/LUA/OnKeyUp.lua</OnKeyUp>
-			<OnMouseMove>data/scripts/LUA/onMouseMove.lua</OnMouseMove>
-		</Scripts>
+		<ScriptComponent file="data/scripts/LUA/player.lua"/>
 	</Entity>
 	<Entity uid="1" name="directionalLight01">
 		<Light>

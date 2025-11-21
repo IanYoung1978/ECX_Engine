@@ -16,6 +16,7 @@ namespace LOGGING
 		INFORMATION,
 		TRIVIAL,
 		SEVERE,
+		WARNING,
 		CRITICAL
 	};
 

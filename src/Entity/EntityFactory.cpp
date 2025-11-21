@@ -9,14 +9,10 @@
 #include "Components/EC_CameraComponent.h"
 #include <sstream>
 #include "Components/EC_ScriptComponent.h"
-#include "Components/EC_OnCreateHandler.h"
-#include "Components/EC_OnKeyDownHandler.h"
-#include "Components/EC_OnKeyHeldHandler.h"
-#include "Components/EC_OnKeyUpHandler.h"
-#include "Components/EC_OnMouseMoveHandler.h"
 #include "Graphics/ADS_TextureSet.h"
 #include "Graphics/PBR_TextureSet.h"
 #include "EntityManager.h"
+#include "Logging/ECX_Logging.h"
 
 TextureManager EntityFactory::s_TexManager;
 MeshManager EntityFactory::s_MeshManager;
@@ -437,45 +433,19 @@ void  EntityFactory::constructEntity(TiXmlElement & descriptor)
 			}
 			e->addComponent(std::type_index(typeid(Light)), light);
 		}
-		else if (strcmp(elem->Value(), "Scripts") == 0)
+		else if (strcmp(elem->Value(), "ScriptComponent") == 0)
 		{
-			auto scripts = std::make_shared<EC_ScriptComponent>();
-			auto child = elem->FirstChildElement();
-			while (child != nullptr)
+			auto script = std::make_shared<EC_ScriptComponent>();
+			auto attr = elem->Attribute("file");
+			if (attr != nullptr)
 			{
-				if (strcmp(child->Value(), "OnKeyDown") == 0)
-				{
-					scripts->setBehaviour(EC_BehaviourType::key_down, std::make_shared<EC_OnKeyDownHandler>(child->GetText()));
-				}
-				else if (strcmp(child->Value(), "OnKeyUp") == 0)
-				{
-					scripts->setBehaviour(EC_BehaviourType::key_up, std::make_shared<EC_OnKeyUpHandler>(child->GetText()));
-				}
-				else if (strcmp(child->Value(), "OnKeyHeld") == 0)
-				{
-					scripts->setBehaviour(EC_BehaviourType::key_held, std::make_shared<EC_OnKeyHeldHandler>(child->GetText()));
-				}
-				// TODO: Re-implement update scripts
-				//else if (strcmp(child->Value(), "OnUpdate") == 0)
-				//{
-				//	scripts->setBehaviour(EC_BehaviourType::OnUpdate, std::make_shared<EC_Lua_Script>(child->GetText()));
-				//}
-				else if (strcmp(child->Value(), "OnCreate") == 0)
-				{
-					scripts->setBehaviour(EC_BehaviourType::EntityCreate, std::make_shared<EC_OnCreateHandler>(child->GetText()));
-				}
-				// TODO: Re-implement death scripts
-				//else if (strcmp(child->Value(), "OnDeath") == 0)
-				//{
-				//	scripts->setBehaviour(EC_BehaviourType::OnDeath, std::make_shared<EC_Lua_Script>(child->GetText()));
-				//}
-				else if (strcmp(child->Value(), "OnMouseMove") == 0)
-				{
-					scripts->setBehaviour(EC_BehaviourType::mouse_move, std::make_shared<EC_OnMouseMoveHandler>(child->GetText()));
-				}
-				child = child->NextSiblingElement();
+				script->setScriptFile(std::string(attr));
 			}
-			e->addComponent(std::type_index(typeid(EC_ScriptComponent)), scripts);
+			else
+			{
+				LOGGING::ECX_Logger::GetInstance()->LogMessage("ScriptComponent defined without a script file!", LOGGING::LogLevel::WARNING);
+			}
+			e->addComponent(std::type_index(typeid(EC_ScriptComponent)), script);
 		}
 		elem = elem->NextSiblingElement();
 	}
