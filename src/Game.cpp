@@ -5,7 +5,7 @@
 #include "Engine/Config.h"
 #include "Engine/GameMode.h"
 #include "Logging/ECX_Logging.h"
-#include "Entity/EntityManager.h"
+#include "Components/EC_DOD_Components.h"
 
 EC_Game::EC_Game() :m_Running(true)
 {
@@ -41,7 +41,7 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
 	//create a controller
 	m_Controls = std::make_shared<ControlSystem>();
 	m_Controls->init(m_Messenger,*this);
-	for (auto s : game_settings.GameModes)
+	for (auto &s : game_settings.GameModes)
 	{
 		//create game modes
 		auto mode = std::make_unique<EC_GameMode>();
@@ -95,17 +95,25 @@ void EC_Game::removeEntity(unsigned int gameEntityID)
 	std::scoped_lock<std::mutex> lock(m_lock);
 }
 
-std::shared_ptr<GameEntity> EC_Game::getEntityByName(const std::string & eName)
+EntityID EC_Game::getEntityByName(const std::string & eName)
 {
 	std::scoped_lock<std::mutex> lock(m_lock);
 	//find the first entity with specified name
-	
-	return EntityManager::getInstance().getEntity(eName);
+	auto entities = EC_DOD_EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(EC_DOD_EntityInfo)));
+	for (auto entity : entities)
+	{
+		auto& info = EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entity);
+		if (info.name == eName)
+		{
+			return entity;
+		}
+	}
+	return INVALID_ENTITY;
 }
 
 void EC_Game::clearEntities()
 {
-	EntityManager::getInstance().clearEntities();
+	//EntityManager::getInstance().clearEntities();
 }
 
 void EC_Game::shutDown()
