@@ -13,31 +13,36 @@ class EC_Game;
 namespace ScriptAPI
 {
     // Entity API for Lua scripts - now works with EntityID
-    struct EntityAPI {
+    struct EntityAPI 
+    {
         EntityID entityID;
 
         EntityAPI(EntityID id) : entityID(id) {}
 
         std::string getName() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return "";
             if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return "";
             return mgr.getComponent<EC_DOD_EntityInfo>(entityID).name;
         }
 
         unsigned int getUID() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return 0;
             if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return 0;
             return mgr.getComponent<EC_DOD_EntityInfo>(entityID).uid;
         }
 
         bool isActive() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return false;
             if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return false;
             return mgr.getComponent<EC_DOD_EntityInfo>(entityID).active;
         }
 
         void activate() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return;
             auto& info = mgr.getComponent<EC_DOD_EntityInfo>(entityID);
             info.active = true;
@@ -45,6 +50,7 @@ namespace ScriptAPI
 
         void deactivate() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return;
             auto& info = mgr.getComponent<EC_DOD_EntityInfo>(entityID);
             info.active = false;
@@ -53,12 +59,14 @@ namespace ScriptAPI
         // Spatial component access
         glm::vec3 getPosition() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(0);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(0);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).position;
         }
 
         void setPosition(float x, float y, float z) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.position = glm::vec3(x, y, z);
@@ -66,12 +74,14 @@ namespace ScriptAPI
 
         glm::vec3 getVelocity() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(0);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(0);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).velocity;
         }
 
         void setVelocity(float x, float y, float z) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.velocity = glm::vec3(x, y, z);
@@ -79,12 +89,14 @@ namespace ScriptAPI
 
         glm::vec3 getOrientation() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(0);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(0);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).orientation;
         }
 
         void setOrientation(float x, float y, float z) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.orientation = glm::vec3(x, y, z);
@@ -92,12 +104,14 @@ namespace ScriptAPI
 
         glm::vec3 getAngularVelocity() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(0);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(0);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).angVelocity;
         }
 
         void setAngularVelocity(float x, float y, float z) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.angVelocity = glm::vec3(x, y, z);
@@ -105,18 +119,21 @@ namespace ScriptAPI
 
         glm::vec3 getForward() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(0, 0, -1);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(0, 0, -1);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).direction;
         }
 
         glm::vec3 getUp() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(0, 1, 0);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(0, 1, 0);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).up;
         }
 
         glm::vec3 getRight() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec3(1, 0, 0);
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return glm::vec3(1, 0, 0);
             return mgr.getComponent<EC_DOD_Spatial>(entityID).right;
         }
@@ -124,6 +141,7 @@ namespace ScriptAPI
         // Convenience movement functions
         void moveForward(float amount) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.position += spatial.direction * amount;
@@ -135,6 +153,7 @@ namespace ScriptAPI
 
         void moveLeft(float amount) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.position -= spatial.right * amount;
@@ -146,6 +165,7 @@ namespace ScriptAPI
 
         void moveUp(float amount) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             spatial.position += spatial.up * amount;
@@ -157,6 +177,7 @@ namespace ScriptAPI
 
         void rotateAroundAxis(float angle, float x, float y, float z) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
             auto& spatial = mgr.getComponent<EC_DOD_Spatial>(entityID);
             glm::vec3 axis(x, y, z);
@@ -166,6 +187,7 @@ namespace ScriptAPI
         // Script variables (stored in EC_DOD_ScriptData)
         void setFloat(const std::string& name, float value) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_ScriptData>(entityID)) return;
             auto& script = mgr.getComponent<EC_DOD_ScriptData>(entityID);
             script.floatVars[name] = value;
@@ -173,6 +195,7 @@ namespace ScriptAPI
 
         float getFloat(const std::string& name, float defaultVal = 0.0f) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return defaultVal;
             if (!mgr.hasComponent<EC_DOD_ScriptData>(entityID)) return defaultVal;
             auto& script = mgr.getComponent<EC_DOD_ScriptData>(entityID);
             auto it = script.floatVars.find(name);
@@ -181,6 +204,7 @@ namespace ScriptAPI
 
         void setString(const std::string& name, const std::string& value) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
             if (!mgr.hasComponent<EC_DOD_ScriptData>(entityID)) return;
             auto& script = mgr.getComponent<EC_DOD_ScriptData>(entityID);
             script.stringVars[name] = value;
@@ -188,6 +212,7 @@ namespace ScriptAPI
 
         std::string getString(const std::string& name, const std::string& defaultVal = "") {
             auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return defaultVal;
             if (!mgr.hasComponent<EC_DOD_ScriptData>(entityID)) return defaultVal;
             auto& script = mgr.getComponent<EC_DOD_ScriptData>(entityID);
             auto it = script.stringVars.find(name);
@@ -195,15 +220,13 @@ namespace ScriptAPI
         }
     };
 
-    struct GameAPI {
+    struct GameAPI 
+    {
         EC_Game* game;
         GameAPI(EC_Game* g) : game(g) {}
 
-        // TODO: You'll need to add a method to EC_Game to get entity by name
-        // For now, returning invalid entity
         EntityAPI getEntity(const std::string& name) {
-            // You need to implement getEntityByName that returns EntityID in EC_Game
-            // For now:
+            // TODO: Implement getEntityByName that returns EntityID
             return EntityAPI(INVALID_ENTITY);
         }
 
@@ -221,8 +244,9 @@ namespace ScriptAPI
         }
     };
 
-    // Event API remains mostly the same
-    struct EventAPI {
+    // EventAPI remains the same as before...
+    struct EventAPI 
+    {
         ECXEvent& event;
         EC_Game* game;
 
@@ -435,4 +459,4 @@ namespace ScriptAPI
             return glm::vec3(0);
         }
     };
-}
+};

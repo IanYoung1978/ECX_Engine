@@ -4,31 +4,30 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
-#include <any>
+#include <mutex>
 #include "Messaging/ECXEvent.h"
-#include "Messaging/KeyEvent.h"
-#include "Messaging/MouseEvent.h"
-#include "Components/EC_ScriptComponent.h"
+#include "Components/EC_DOD_Components.h"
 #include "Engine/Subsystems/EC_System.h"
 #include "Messaging/IEventListener.h"
 #include "Game.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Logging/ECX_Logging.h"
-#include <fstream>
-#include <iostream>
 #include "Engine/Subsystems/Scripting/EC_ScriptAPI.h"
 
-class EC_LuaScriptSystem : public EC_System, public IEventListener{
+class EC_LuaScriptSystem : public EC_System, public IEventListener {
 public:
     EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr) {}
 
     ~EC_LuaScriptSystem() {
+        std::lock_guard<std::mutex> lock(m_LuaMutex);
         if (m_luaState) lua_close(m_luaState);
         delete m_game;
         m_game = nullptr;
     }
 
-    void init(ECXMessenger & messenger, EC_Game & game) override {
+    void init(ECXMessenger& messenger, EC_Game& game) override {
+        std::lock_guard<std::mutex> lock(m_LuaMutex);
+
         // Subscribe to ALL events
         std::vector<ECXEventType> allTypes{
             ECXEventType::EntityCreate,
@@ -68,7 +67,7 @@ public:
         );
     }
 
-    void update(const float& deltaTimeS, EC_Game & game) override {
+    void update(const float& deltaTimeS, EC_Game& game) override {
         auto& manager = EC_DOD_EntityManager::getInstance();
 
         auto entities = manager.getEntitiesWithComponent(
@@ -77,15 +76,18 @@ public:
 
         for (EntityID entity : entities) {
             if (!manager.isAlive(entity)) continue;
+            if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
 
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
 
+            // Lock for Lua access
+            std::lock_guard<std::mutex> lock(m_LuaMutex);
             callLuaFunction(script.scriptFile, "update", entity, deltaTimeS);
         }
     }
 
-    void receive(ECXEvent & event) override {
+    void receive(ECXEvent& event) override {
         auto& manager = EC_DOD_EntityManager::getInstance();
 
         auto entities = manager.getEntitiesWithComponent(
@@ -94,6 +96,7 @@ public:
 
         for (EntityID entity : entities) {
             if (!manager.isAlive(entity)) continue;
+            if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
 
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
@@ -101,15 +104,18 @@ public:
             // Route event to appropriate Lua function
             const char* funcName = getEventFunctionName(event.type);
             if (funcName) {
+                // Lock for Lua access
+                std::lock_guard<std::mutex> lock(m_LuaMutex);
                 callLuaEvent(script.scriptFile, funcName, entity, event);
             }
         }
     }
 
 private:
-    lua_State * m_luaState;
+    lua_State* m_luaState;
     ScriptAPI::GameAPI* m_game;
     std::unordered_map<std::string, bool> m_loadedScripts;
+    std::mutex m_LuaMutex;
 
     // Map event types to Lua function names
     const char* getEventFunctionName(ECXEventType type) {
@@ -140,6 +146,7 @@ private:
         }
     }
 
+    // NOTE: Caller must hold m_LuaMutex
     bool loadScript(const std::string& filename) {
         if (m_loadedScripts[filename]) return true;
 
@@ -169,8 +176,9 @@ private:
         return true;
     }
 
+    // NOTE: Caller must hold m_LuaMutex
     void callLuaFunction(const std::string& scriptFile, const char* funcName,
-                        EntityID entity, float deltaTime) {
+        EntityID entity, float deltaTime) {
         if (!loadScript(scriptFile)) return;
 
         try {
@@ -195,8 +203,9 @@ private:
         }
     }
 
+    // NOTE: Caller must hold m_LuaMutex
     void callLuaEvent(const std::string& scriptFile, const char* funcName,
-                     EntityID entity, ECXEvent& event) {
+        EntityID entity, ECXEvent& event) {
         if (!loadScript(scriptFile)) return;
 
         try {
