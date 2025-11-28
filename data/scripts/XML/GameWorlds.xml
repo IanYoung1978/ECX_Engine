@@ -24,7 +24,7 @@
 	<Entity uid="2" name="directionalLight02">
 		<Light>
 			<Type>Directional</Type>
-			<Direction>0.0,-1.0,0.0,0.0</Direction>
+			<Direction>-1.0,-1.0,0.0,0.0</Direction>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 			<Intensity>5.0</Intensity>
 			<CastsShadow>true</CastsShadow>

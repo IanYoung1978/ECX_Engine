@@ -1,5 +1,4 @@
 #include "EC_Engine.h"
-#include "Entity/GameEntity.h"
 #include "Subsystems/EC_SpatialSystem.h"
 #include "TaskManager/EC_PhysicsThreadTask.h"
 #include "Subsystems/EC_CameraSystem.h"

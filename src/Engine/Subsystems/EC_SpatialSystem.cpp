@@ -1,52 +1,46 @@
-#include "EC_SpatialSystem.h"
-#include "Components/Spatial.h"
-#include "Components/Transform.h"
-#include <glm\gtc\matrix_transform.hpp>
-#include "Common/EC_Subject.h"
-#include <glm\gtc\quaternion.hpp>
-#include <iostream>
-#include "Components/ProxyHelper.h"
-#include "Entity/EntityManager.h"
+#include "Engine/Subsystems/EC_SpatialSystem.h"
+#include "Entity/EC_DOD_EntityManager.h"
+#include "Components/EC_DOD_Components.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 
-EC_SpatialSystem::EC_SpatialSystem()
-{
+EC_SpatialSystem::EC_SpatialSystem() {
 }
 
-
-EC_SpatialSystem::~EC_SpatialSystem()
-{
+EC_SpatialSystem::~EC_SpatialSystem() {
 }
 
-void EC_SpatialSystem::init(ECXMessenger& messenger, EC_Game& game)
-{
-	// not used
+void EC_SpatialSystem::init(ECXMessenger& messenger, EC_Game& game) {
 }
 
-void EC_SpatialSystem::update(const float & deltaTimeS, EC_Game& game)
-{
-	auto entities = EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(Spatial)));
+void EC_SpatialSystem::update(const float& deltaTimeS, EC_Game& game) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    auto* spatialArray = manager.getComponentArray<EC_DOD_Spatial>();
 
-	for (size_t i = 0; i < entities.size(); i++)
-	{
-		auto spatial = entities[i]->getComponent<Spatial>();
-		//compute changes
-		auto position = spatial->getPosition();
-		auto orientation = spatial->getOrientation();
-		position += spatial->getVelocity()*deltaTimeS;
-		orientation += spatial->getAngVelocity()*deltaTimeS;
+    if (!spatialArray) {
+        return;
+    }
 
-		glm::vec3 Direction;
-		Direction.x = cos(orientation.x) * sin(orientation.y);
-		Direction.y = sin(orientation.x);
-		Direction.z = cos(orientation.x) * cos(orientation.y);
-		Direction = glm::normalize(Direction);
-		glm::vec3 Right = glm::normalize(glm::cross(Direction, glm::vec3(0.0f,1.0f,0.0f)));
-		glm::vec3 Up = glm::normalize(glm::cross(Right, Direction));
-		//update components
-		spatial->setOrientation(orientation);
-		spatial->setPosition(position);
-		spatial->setDirections(Direction, Up, Right);
+    std::shared_lock lock(spatialArray->getMutex());
+    auto& spatials = spatialArray->getData();
 
-	}
+    for (size_t i = 0; i < spatials.size(); i++) {
+        auto& spatial = spatials[i];
 
+        spatial.position += spatial.velocity * deltaTimeS;
+        spatial.orientation += spatial.angVelocity * deltaTimeS;
+
+        glm::vec3 direction;
+        direction.x = cos(spatial.orientation.x) * sin(spatial.orientation.y);
+        direction.y = sin(spatial.orientation.x);
+        direction.z = cos(spatial.orientation.x) * cos(spatial.orientation.y);
+        direction = glm::normalize(direction);
+
+        glm::vec3 right = glm::normalize(glm::cross(direction, glm::vec3(0.0f, 1.0f, 0.0f)));
+        glm::vec3 up = glm::normalize(glm::cross(right, direction));
+
+        spatial.direction = direction;
+        spatial.up = up;
+        spatial.right = right;
+    }
 }

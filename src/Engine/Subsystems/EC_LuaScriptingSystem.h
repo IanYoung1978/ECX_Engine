@@ -4,40 +4,30 @@
 #include <string>
 #include <memory>
 #include <unordered_map>
-#include <any>
-#include "Entity/GameEntity.h"
+#include <mutex>
 #include "Messaging/ECXEvent.h"
-#include "Messaging/KeyEvent.h"
-#include "Messaging/MouseEvent.h"
-#include "Components/EC_ScriptComponent.h"
+#include "Components/EC_DOD_Components.h"
 #include "Engine/Subsystems/EC_System.h"
 #include "Messaging/IEventListener.h"
 #include "Game.h"
-#include "Entity/EntityManager.h"
+#include "Entity/EC_DOD_EntityManager.h"
 #include "Logging/ECX_Logging.h"
-#include <fstream>
-#include <iostream>
 #include "Engine/Subsystems/Scripting/EC_ScriptAPI.h"
-
-struct ScriptComponent {
-    std::string scriptFile;
-    std::unordered_map<std::string, float> floatVars;
-    std::unordered_map<std::string, std::string> stringVars;
-    bool enabled = true;  // Can disable script without removing component
-};
-
-class GameAPI;
 
 class EC_LuaScriptSystem : public EC_System, public IEventListener {
 public:
     EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr) {}
 
     ~EC_LuaScriptSystem() {
+        std::lock_guard<std::mutex> lock(m_LuaMutex);
         if (m_luaState) lua_close(m_luaState);
-		m_game = nullptr;
+        delete m_game;
+        m_game = nullptr;
     }
 
     void init(ECXMessenger& messenger, EC_Game& game) override {
+        std::lock_guard<std::mutex> lock(m_LuaMutex);
+
         // Subscribe to ALL events
         std::vector<ECXEventType> allTypes{
             ECXEventType::EntityCreate,
@@ -71,36 +61,52 @@ public:
         m_luaState = luaL_newstate();
         luaL_openlibs(m_luaState);
         registerAPI();
-        LOGGING::ECX_Logger::GetInstance()->LogMessage("Scripting system initialised", LOGGING::LogLevel::INFORMATION);
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Scripting system initialised",
+            LOGGING::LogLevel::INFORMATION
+        );
     }
 
     void update(const float& deltaTimeS, EC_Game& game) override {
-        auto entities = EntityManager::getInstance()
-            .getEntitiesWithComponent(std::type_index(typeid(EC_ScriptComponent)));
-        for (auto& entity : entities) {
-            if (!entity->isActive()) continue;
+        auto& manager = EC_DOD_EntityManager::getInstance();
 
-            auto script = entity->getComponent<EC_ScriptComponent>();
-            if (!script->isEnabled()) continue;
+        auto entities = manager.getEntitiesWithComponent(
+            std::type_index(typeid(EC_DOD_ScriptData))
+        );
 
-            callLuaFunction(script->getScriptFile(), "update", entity, deltaTimeS);
+        for (EntityID entity : entities) {
+            if (!manager.isAlive(entity)) continue;
+            if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
+
+            const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+            if (!script.enabled) continue;
+
+            // Lock for Lua access
+            std::lock_guard<std::mutex> lock(m_LuaMutex);
+            callLuaFunction(script.scriptFile, "update", entity, deltaTimeS);
         }
     }
 
     void receive(ECXEvent& event) override {
-        auto entities = EntityManager::getInstance()
-            .getEntitiesWithComponent(std::type_index(typeid(EC_ScriptComponent)));
+        auto& manager = EC_DOD_EntityManager::getInstance();
 
-        for (auto& entity : entities) {
-            if (!entity->isActive()) continue;
+        auto entities = manager.getEntitiesWithComponent(
+            std::type_index(typeid(EC_DOD_ScriptData))
+        );
 
-            auto script = entity->getComponent<EC_ScriptComponent>();
-            if (!script->isEnabled()) continue;
+        for (EntityID entity : entities) {
+            if (!manager.isAlive(entity)) continue;
+            if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
+
+            const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+            if (!script.enabled) continue;
 
             // Route event to appropriate Lua function
             const char* funcName = getEventFunctionName(event.type);
             if (funcName) {
-                callLuaEvent(script->getScriptFile(), funcName, entity, event);
+                // Lock for Lua access
+                std::lock_guard<std::mutex> lock(m_LuaMutex);
+                callLuaEvent(script.scriptFile, funcName, entity, event);
             }
         }
     }
@@ -109,29 +115,23 @@ private:
     lua_State* m_luaState;
     ScriptAPI::GameAPI* m_game;
     std::unordered_map<std::string, bool> m_loadedScripts;
+    std::mutex m_LuaMutex;
 
     // Map event types to Lua function names
     const char* getEventFunctionName(ECXEventType type) {
         switch (type) {
-            // Entity lifecycle events
         case ECXEventType::EntityCreate:    return "onEntityCreate";
         case ECXEventType::EntityKill:      return "onEntityKill";
         case ECXEventType::EntityDestroy:   return "onEntityDestroy";
         case ECXEventType::entity_loaded:   return "onEntityLoaded";
-
-            // Entity state changes
         case ECXEventType::EntityStopRotation:           return "onStopRotation";
         case ECXEventType::EntityStopMotion:             return "onStopMotion";
         case ECXEventType::EntityChangePosition:         return "onPositionChanged";
         case ECXEventType::EntityChangeOrientation:      return "onOrientationChanged";
         case ECXEventType::EntityChangeAngularVelocity:  return "onAngularVelocityChanged";
         case ECXEventType::EntityChangeVelocity:         return "onVelocityChanged";
-
-            // Collision events
         case ECXEventType::CollisionBeginEvent: return "onCollisionBegin";
         case ECXEventType::CollisionEndEvent:   return "onCollisionEnd";
-
-            // Input events
         case ECXEventType::key_down:    return "onKeyDown";
         case ECXEventType::key_up:      return "onKeyUp";
         case ECXEventType::key_held:    return "onKeyHeld";
@@ -139,37 +139,46 @@ private:
         case ECXEventType::mouse_up:    return "onMouseUp";
         case ECXEventType::mouse_held:  return "onMouseHeld";
         case ECXEventType::mouse_move:  return "onMouseMove";
-
-            // System events
         case ECXEventType::world_loaded:    return "onWorldLoaded";
         case ECXEventType::config_loaded:   return "onConfigLoaded";
         case ECXEventType::system_update:   return "onSystemUpdate";
-
         default: return nullptr;
         }
     }
 
+    // NOTE: Caller must hold m_LuaMutex
     bool loadScript(const std::string& filename) {
         if (m_loadedScripts[filename]) return true;
 
-        LOGGING::ECX_Logger::GetInstance()->LogMessage("Attempting to load script: " + filename, LOGGING::LogLevel::INFORMATION);
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Attempting to load script: " + filename,
+            LOGGING::LogLevel::INFORMATION
+        );
 
         int result = luaL_dofile(m_luaState, filename.c_str());
         if (result != LUA_OK) {
             const char* error = lua_tostring(m_luaState, -1);
             std::string errorMsg = error ? error : "Unknown error";
-            LOGGING::ECX_Logger::GetInstance()->LogMessage("Lua error loading " + filename + ": " + errorMsg + " (error code: " + std::to_string(result) + ")", LOGGING::LogLevel::SEVERE);
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Lua error loading " + filename + ": " + errorMsg +
+                " (error code: " + std::to_string(result) + ")",
+                LOGGING::LogLevel::SEVERE
+            );
             lua_pop(m_luaState, 1);
             return false;
         }
 
         m_loadedScripts[filename] = true;
-        LOGGING::ECX_Logger::GetInstance()->LogMessage("Script loaded successfully: " + filename, LOGGING::LogLevel::INFORMATION);
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Script loaded successfully: " + filename,
+            LOGGING::LogLevel::INFORMATION
+        );
         return true;
     }
 
+    // NOTE: Caller must hold m_LuaMutex
     void callLuaFunction(const std::string& scriptFile, const char* funcName,
-        std::shared_ptr<GameEntity> entity, float deltaTime) {
+        EntityID entity, float deltaTime) {
         if (!loadScript(scriptFile)) return;
 
         try {
@@ -179,18 +188,24 @@ private:
                 auto result = func(entityAPI, deltaTime);
 
                 if (!result) {
-                    std::cerr << "Error in " << funcName << ": "
-                        << result.errorMessage() << std::endl;
+                    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                        "Error in " + std::string(funcName) + ": " + result.errorMessage(),
+                        LOGGING::LogLevel::WARNING
+                    );
                 }
             }
         }
         catch (std::exception& e) {
-            std::cerr << "Exception calling " << funcName << ": " << e.what() << std::endl;
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Exception calling " + std::string(funcName) + ": " + e.what(),
+                LOGGING::LogLevel::SEVERE
+            );
         }
     }
 
+    // NOTE: Caller must hold m_LuaMutex
     void callLuaEvent(const std::string& scriptFile, const char* funcName,
-        std::shared_ptr<GameEntity> entity, ECXEvent& event) {
+        EntityID entity, ECXEvent& event) {
         if (!loadScript(scriptFile)) return;
 
         try {
@@ -201,19 +216,20 @@ private:
                 auto result = func(entityAPI, eventAPI);
 
                 if (!result) {
-                    std::cerr << "Error in " << funcName << ": "
-                        << result.errorMessage() << std::endl;
+                    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                        "Error in " + std::string(funcName) + ": " + result.errorMessage(),
+                        LOGGING::LogLevel::WARNING
+                    );
                 }
             }
         }
         catch (std::exception& e) {
-            std::cerr << "Exception calling " << funcName << ": " << e.what() << std::endl;
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Exception calling " + std::string(funcName) + ": " + e.what(),
+                LOGGING::LogLevel::SEVERE
+            );
         }
     }
-
-    
-
-
 
     void registerAPI() {
         luabridge::getGlobalNamespace(m_luaState)
@@ -271,11 +287,13 @@ private:
             .addProperty("y", &glm::vec3::y)
             .addProperty("z", &glm::vec3::z)
             .endClass()
+
             .beginClass<ScriptAPI::GameAPI>("game")
             .addFunction("getEntity", &ScriptAPI::GameAPI::getEntity)
             .addFunction("getKeyState", &ScriptAPI::GameAPI::getKeyState)
             .addFunction("shutdown", &ScriptAPI::GameAPI::shutdown)
             .endClass();
+
         // Global game reference (as pointer)
         luabridge::push(m_luaState, m_game);
         lua_setglobal(m_luaState, "game");
