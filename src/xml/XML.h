@@ -1,0 +1,167 @@
+#pragma once
+
+#include "xml/tinyxml.h"
+#include "Window/WindowSettings.h"
+#include "Engine/Config.h"
+#include "Engine/GameModeSettings.h"
+#include <string>
+#include <map>
+#include <SDL.h>
+#include "Logging/ECX_Logging.h"
+
+namespace XML
+{
+	inline bool loadKeyMapping(const std::string& file, std::map<SDL_Scancode, std::string>& mappings)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto elem = doc.FirstChildElement();
+		if (!elem)
+			return false;
+
+		while (elem)
+		{
+			if (elem->ValueTStr() == "KeyMapping")
+			{
+				auto child = elem->FirstChildElement();
+				while (child)
+				{
+					auto att = child->FirstAttribute();
+					if (att && strcmp(att->Name(), "action") == 0)
+					{
+						std::string key(child->GetText());
+						SDL_Scancode code = SDL_GetScancodeFromName(key.c_str());
+						if (code != SDL_SCANCODE_UNKNOWN)
+						{
+							mappings.emplace(code, att->Value());
+						}
+						else
+						{
+							LOGGING::ECX_Logger::GetInstance()->LogMessage("unknown control mapping: ", LOGGING::LogLevel::SEVERE);
+						}
+					}
+					child = child->NextSiblingElement();
+				}
+			}
+			elem = elem->NextSiblingElement();
+		}
+		return true;
+	}
+	inline bool loadGameModeSettings(const std::string& file, GameModeSettings& settings)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto game = doc.FirstChildElement();
+		if (!game)
+			return false;
+		while (game)
+		{
+			auto child = game->FirstChildElement();
+			while (child)
+			{
+				if (strcmp(child->Value(), "EngineSettings") == 0)
+				{
+					settings.engine_settings = child->FirstAttribute()->Value();
+				}
+				else if (strcmp(child->Value(), "Controls") == 0)
+				{
+					//game controls data
+					settings.controls = child->FirstAttribute()->Value();
+				}
+				else if (strcmp(child->Value(), "GameWorlds") == 0)
+				{
+					//game world data
+					settings.game_world_data = child->FirstAttribute()->Value();
+				}
+				child = child->NextSiblingElement();
+			}
+			game = game->NextSiblingElement();
+		}
+		return true;
+	}
+
+	inline bool loadGameConfig(const std::string& file, GameSettings& settings)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto game = doc.FirstChildElement();
+		if (!game)
+			return false;
+		while (game)
+		{
+			auto child = game->FirstChildElement();
+			while (child)
+			{
+				if (strcmp(child->Value(), "Window") == 0)
+				{
+					settings.window_settings_file = child->FirstAttribute()->Value();
+				}
+				else
+				{
+					//game mode data
+					settings.GameModes.push_back(child->FirstAttribute()->Value());
+				}
+				child = child->NextSiblingElement();
+			}
+			game = game->NextSiblingElement();
+		}
+		return true;
+
+	}
+	inline bool createWindowSettings(const std::string& settingsFile, WindowSettings& settings)
+	{
+		TiXmlDocument doc(settingsFile.c_str());
+		if (!doc.LoadFile())
+			return false;
+
+		auto elem = doc.FirstChildElement();
+		if (!elem)
+			return false;
+		if (strcmp(elem->Value(), "Window") == 0)
+		{
+			auto child = elem->FirstChildElement();
+			while (child != NULL)
+			{
+				
+				if (strcmp(child->Value(), "width") == 0)
+				{
+					settings.width = std::stoi(child->GetText());
+				}
+				else if (strcmp(child->Value(), "height") == 0)
+				{
+					settings.height = std::stoi(child->GetText());
+				}
+				else if (strcmp(child->Value(), "fullscreen") == 0)
+				{
+					settings.fullscreen = (strcmp(child->GetText(), "true")==0) ? true : false;
+				}
+				else if (strcmp(child->Value(), "glMajor") == 0)
+				{
+					settings.OGLMajor = std::stoi(child->GetText());
+				}
+				else if (strcmp(child->Value(), "glMinor") == 0)
+				{
+					settings.OGLMinor = std::stoi(child->GetText());
+				}
+				else if (strcmp(child->Value(), "AA") == 0)
+				{
+					settings.MSAALevel = std::stoi(child->GetText());
+					settings.multisampling = true;
+				}
+				else if (strcmp(child->Value(), "WindowName") == 0)
+				{
+					settings.windowName = std::string(child->GetText());
+				}
+				else
+				{
+					return false; //malformed tag
+				}
+				child = child->NextSiblingElement();
+			}
+		}
+		return true;
+	}
+}

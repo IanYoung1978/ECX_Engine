@@ -1,0 +1,4 @@
+//Copyright (C) 2017 Ian Young
+//All Rights Reserved
+//All source code and information contained herein is the property of Ian Young.
+//Copying/Redistribution/Commercial use of any source code or information is strictly forbidden without express written permission of Ian Young.

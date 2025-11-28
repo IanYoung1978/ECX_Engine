@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+	<Entity name="cube2">
+		<Spatial>
+			<Position>9.0,3.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,180.0</Orientation>
+			<AngularVelocity>0.0,15.0,0.0</AngularVelocity>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Gfx>
+			<PBRMaterial>
+				<Albedo>data/assets/Images/Crate/Crate_D.png</Albedo>
+				<Normal>data/assets/Images/Crate/crate_normal.png</Normal>
+				<Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic>
+				<Height>data/assets/Images/Crate/crate_height.png</Height>
+				<Emissive>data/assets/Images/Crate/Crate_E.png</Emissive>
+				<AO>data/assets/Images/Crate/crate_ao.png</AO>
+				<Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness>
+			</PBRMaterial>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+		</Gfx>
+	</Entity>

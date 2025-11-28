@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+	<Entity name="wall1">
+		<Spatial>
+			<Position>0.0,5.0,5.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>-90.0,-90.0,0.0</Orientation>
+			<AngularVelocity>0.0,0.0,0.0</AngularVelocity>
+		</Spatial>
+		<Transform>
+			<Scale>5.0,5.0,5.0</Scale>
+		</Transform>
+		<Gfx>
+			<PBRMaterial>
+				<Albedo>data/assets/Images/alley-brick-wall/alley-brick-wall_albedo.png</Albedo>
+				<Normal>data/assets/Images/alley-brick-wall/alley-brick-wall_normal-dx.png</Normal>
+				<Smoothness>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</Smoothness>
+				<Height>data/assets/Images/alley-brick-wall/alley-brick-wall_height.png</Height>
+				<Metallic>data/assets/Images/alley-brick-wall/alley-brick-wall_metallic.png</Metallic>
+				<AO>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</AO>
+			</PBRMaterial>
+			<Model>data/assets/models/plane.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+		</Gfx>
+	</Entity>

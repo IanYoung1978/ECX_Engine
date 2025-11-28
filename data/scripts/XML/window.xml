@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<Window>
+	<width>1024</width>
+	<height>768</height>
+	<WindowName>Eclipsis Test</WindowName>
+	<fullscreen>false</fullscreen>
+	<glMajor>4</glMajor>
+	<glMinor>3</glMinor>
+	<AA>4</AA>
+</Window>

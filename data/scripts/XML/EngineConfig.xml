@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<EngineSettings>
+	<Spatial></Spatial>
+	<Collision>
+		<!-- brodphase algorithm: octree/SAP/hybrid-->
+		<BroadPhase algorithm="hybrid"></BroadPhase>
+		<!-- brodphase algorithm: octree/SAP/hybrid-->
+		<NarrowPhase algorithm="hybrid"></NarrowPhase>
+	</Collision>
+	<Physics>
+		<TimeStep seconds="0.016"></TimeStep>
+	</Physics>
+	
+</EngineSettings/>
