@@ -99,18 +99,20 @@ bool Shader::loadShader(char * vs, int vLength, char * fs, int fLength)
 	int compiled = 0;
 	glCompileShader(vert);
 	glGetShaderiv(vert, GL_COMPILE_STATUS, &compiled);
-	outputShaderError(vert);
+	
 	if (!compiled)
 	{
+		outputShaderError(vert);
 		//compilation error
-		LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to compile vertex shader", LOGGING::LogLevel::CRITICAL);
+		LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to compile vertex shader: ", LOGGING::LogLevel::CRITICAL);
 		return false;
 	}
 	glCompileShader(frag);
 	glGetShaderiv(frag, GL_COMPILE_STATUS, &compiled);
-	outputShaderError(frag);
+	
 	if (!compiled)
 	{
+		outputShaderError(frag);
 		//compilation error
 		LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to compile fragment shader", LOGGING::LogLevel::CRITICAL);
 		glDeleteShader(vert);
@@ -281,7 +283,7 @@ void Shader::bindAttributes()
 
 unsigned int Shader::searchUniform(const std::string & uniformName)
 {
-	for (auto uniform : m_BoundUniforms)
+	for (auto &uniform : m_BoundUniforms)
 	{
 		if (uniform.first == uniformName)
 		{

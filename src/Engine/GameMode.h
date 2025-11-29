@@ -7,7 +7,7 @@
 #include "EC_Engine.h"
 #include "GameModeSettings.h"
 #include <deque>
-#include "TaskManager/EC_File_IO_Task.h"
+#include "TaskManager/EC_DOD_LoadingWorker.h"
 #include "TaskManager/EC_ThreadManager.h"
 #include <mutex>
 #include "Messaging/ICommandListener.h"
@@ -47,7 +47,7 @@ private:
 	EC_Engine m_engine;
 	std::unique_ptr<Renderer> m_scene_renderer;
 	std::deque<std::shared_ptr<EC_Event>> m_events;
-	std::shared_ptr<EC_File_IO_Task> m_loader;
+	std::shared_ptr<EC_DOD_LoadingWorker> m_loader;
 	EC_ThreadManager m_ThreadManager;
 	std::mutex m_lock;
 

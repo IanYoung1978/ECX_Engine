@@ -3,7 +3,6 @@
 #include "Graphics/GL_Deferred_Renderer.h"
 #include "xml/XML.h"
 #include "Logging/ECX_Logging.h"
-#include "Entity/EntityManager.h"
 
 EC_GameMode::EC_GameMode()
 {
@@ -21,23 +20,32 @@ void EC_GameMode::init(EC_Game & game,std::string& config, ECXMessenger& messeng
 	messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
 	m_scene_renderer = std::make_unique<GL_Deferred_Renderer>();
 	m_scene_renderer->init(game.getWindow());
-	m_loader = std::make_shared<EC_File_IO_Task>();
+	m_loader = std::make_shared<EC_DOD_LoadingWorker>();
 	m_ThreadManager.addTask(m_loader);
 	m_ThreadManager.executeTasks();
-	m_loader->ScheduleloadScene(m_settings.game_world_data);
+	m_loader->scheduleScene(m_settings.game_world_data);
 
-	m_loader->start(this);
+	m_loader->start();
 }
 
 
-void EC_GameMode::update(float deltaTimeS, EC_Game & game)
+void EC_GameMode::update(float deltaTimeS, EC_Game& game)
 {
+	// Check if loading worker needs finalization on main thread
+	if (m_loader->needsFinalization())
+	{
+		m_loader->finalizeOnMainThread();
+		LOGGING::ECX_Logger::GetInstance()->LogMessage(
+			"Load complete!",
+			LOGGING::LogLevel::INFORMATION
+		);
+	}
+
+	// Optional: Display loading progress
 	if (m_loader->isLoading())
 	{
-		if (m_loader->hasLoaded())
-		{
-			LOGGING::ECX_Logger::GetInstance()->LogMessage("load complete ", LOGGING::LogLevel::INFORMATION);
-		}
+		float progress = m_loader->getProgress();
+		// You can render a loading bar here: renderLoadingBar(progress);
 	}
 
 	m_scene_renderer->renderScene();
@@ -57,7 +65,7 @@ void EC_GameMode::receive(ECXCommand& command)
 	if (command.type == ECXCommandType::SystemShutdown)
 	{
 		m_engine.pause();
-		EntityManager::getInstance().clearEntities();
+		//EC_DOD_EntityManager::getInstance();
 		m_engine.stop();
 		m_loader->shutdown();
 	}

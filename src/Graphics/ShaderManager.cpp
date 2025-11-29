@@ -16,11 +16,14 @@ void ShaderManager::loadShader(const std::string & vert, const std::string & fra
 	if (dat.flength == 0 || dat.vlength == 0)
 	{
 		char* vs = loadFile(vert, dat.vlength);
-		if (dat.vlength == 0)
+		if (dat.vlength == 0) {
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to load vertex shader file: " + vert, LOGGING::LogLevel::CRITICAL);
 			return;
+		}
 		char* fs = loadFile(frag, dat.flength);
-		if (dat.vlength == 0)
+		if (dat.flength == 0)
 		{
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to load fragment shader file: " + frag, LOGGING::LogLevel::CRITICAL);
 			delete vs;
 			return;
 		}
@@ -42,7 +45,8 @@ std::shared_ptr<Shader> ShaderManager::getShader(const std::string & vert, const
 
 void ShaderManager::finaliseShaders()
 {
-	for (auto s : m_ShaderData)
+	LOGGING::ECX_Logger::GetInstance()->LogMessage("Finalising shaders...", LOGGING::LogLevel::INFORMATION);
+	for (auto &s : m_ShaderData)
 	{
 		if (getShader(s.second.vs, s.second.fs) == nullptr)
 		{
@@ -69,6 +73,7 @@ void ShaderManager::finaliseShaders()
 			}
 		}
 	}
+	LOGGING::ECX_Logger::GetInstance()->LogMessage("Finalised shaders...", LOGGING::LogLevel::INFORMATION);
 }
 
 std::shared_ptr<Shader> ShaderManager::finaliseShader(const std::string& vert, const std::string& frag)

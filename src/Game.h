@@ -6,7 +6,6 @@
 #include "Engine/Timer.h"
 #include "Engine/Controller.h"
 #include "Engine/Subsystems/ControlSystem.h"
-#include "Entity/GameEntity.h"
 #include "Engine/EC_Engine.h"
 #include "Messaging/ECXMessenger.h"
 #include <mutex>
@@ -29,7 +28,7 @@ public:
 	Game_Error run();
 	void addEntity(std::shared_ptr<GameEntity> e);
 	void removeEntity(unsigned int gameEntityID);
-	std::shared_ptr<GameEntity> getEntityByName(const std::string& eName);
+	EntityID  getEntityByName(const std::string& eName);
 	void clearEntities();
 	void shutDown();
 	void update(const float& deltaTimeS);
