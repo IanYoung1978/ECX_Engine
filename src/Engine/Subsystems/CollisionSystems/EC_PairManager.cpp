@@ -13,7 +13,7 @@ EC_PairManager::~EC_PairManager()
 {
 }
 
-void EC_PairManager::addPair(unsigned int id_a, unsigned int id_b)
+void EC_PairManager::addPair(uint32_t id_a, uint32_t id_b)
 {
 	auto pred = [&](EC_CollisionPair& pair)
 	{ 

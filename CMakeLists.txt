@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 4.0.0)
+cmake_minimum_required(VERSION 3.5)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 # attach to vcpkg's cmake configuration for project dependencies
@@ -7,7 +7,7 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_POLICY_DEFAULT_CMP0074 NEW)
 endif()
 
-project(ECX)
+project(ECX LANGUAGES CXX)
 
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
@@ -19,7 +19,7 @@ message("searching ${SOURCE_DIR} for source files")
 
 file(GLOB_RECURSE ECX_SOURCE ${SOURCE_DIR}/*.*)
 
-add_executable(ECX ${ECX_SOURCE})
+add_executable(ECX ${ECX_SOURCE} "src/Engine/Subsystems/CollisionSystems/EC_CollisionShapes.h")
 
 set_property(TARGET ECX PROPERTY CXX_STANDARD 17)
 

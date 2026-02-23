@@ -6,5 +6,7 @@ enum class EC_EventType
 	UpdateEvent,
 	CreateEvent,
 	DestroyEvent,
+	CollisionBegin,
+	CollisionEnd,
 	NumTypes
 };

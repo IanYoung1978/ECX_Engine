@@ -11,6 +11,38 @@
 class Shader;
 class ObjModel;
 
+struct ContactPoint {
+    glm::vec3 position;        // World space contact position
+    glm::vec3 normal;          // Contact normal (points from A to B)
+    float penetration;         // Penetration depth
+};
+
+struct EC_DOD_Collider {
+    enum class Type : uint8_t {
+        Sphere,
+        AABB,
+        OBB,
+        Capsule,
+        Cylinder,
+		Frustum,
+        Plane,
+        None
+    };
+
+    Type type = Type::OBB;
+
+    // Shape parameters
+    glm::vec3 center{ 0.0f };        // Local offset from entity position
+    glm::vec3 extents{ 1.0f };       // Half-extents for box/AABB
+    float radius = 1.0f;              // For sphere/capsule/cylinder
+    float height = 2.0f;              // For capsule/cylinder
+
+    // Collision filtering
+    uint32_t collisionLayer = 1;     // What layer is this on?
+    uint32_t collisionMask = 0xFFFFFFFF;  // What layers can it collide with?
+};
+
+
 struct EC_DOD_Spatial {
     glm::vec3 position{ 0.0f };
     glm::vec3 velocity{ 0.0f };
