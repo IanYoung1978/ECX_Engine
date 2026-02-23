@@ -1,6 +1,6 @@
 #include "EC_CollisionSystem.h"
 #include "Messaging/ECXMessenger.h"
-EC_CollisionSystem::EC_CollisionSystem()
+EC_CollisionSystem::EC_CollisionSystem() :m_Messenger(nullptr)
 {
 }
 EC_CollisionSystem::~EC_CollisionSystem()

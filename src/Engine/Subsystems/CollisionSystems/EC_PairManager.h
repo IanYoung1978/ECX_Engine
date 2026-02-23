@@ -2,7 +2,7 @@
 #include <vector>
 #include <glm\glm.hpp>
 #include <memory>
-
+#include <cstddef>
 
 struct EC_CollisionPair
 {
@@ -23,6 +23,6 @@ public:
 	EC_CollisionPair& getNextPair();
 private:
 	static std::vector<EC_CollisionPair> s_Pairs;
-	static std::vector<EC_CollisionPair>::iterator s_CurrentPair;
+	static size_t s_CurrentPairIndex;
 };
 

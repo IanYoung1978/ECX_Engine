@@ -6,7 +6,7 @@
 #include "Messaging/ECXEvent.h"
 #include "Messaging/ECXMessenger.h"
 #include <functional>
-
+#include "Logging/ECX_Logging.h"
 void EC_NarrowPhase::init(ECXMessenger& messenger)
 {
     m_Messenger = &messenger;

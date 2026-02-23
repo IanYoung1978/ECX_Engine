@@ -9,7 +9,7 @@
 class EC_Game;
 
 class EC_CollisionSystem
-	:EC_System
+	: public EC_System
 {
 	public:
 	EC_CollisionSystem();

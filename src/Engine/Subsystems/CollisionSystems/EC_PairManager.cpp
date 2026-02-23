@@ -1,8 +1,9 @@
 #include "EC_PairManager.h"
 #include <algorithm>
+#include <stdexcept>
 
 std::vector<EC_CollisionPair> EC_PairManager::s_Pairs;
-std::vector<EC_CollisionPair>::iterator EC_PairManager::s_CurrentPair;
+size_t EC_PairManager::s_CurrentPairIndex = 0;
 
 EC_PairManager::EC_PairManager()
 {
@@ -33,35 +34,35 @@ void EC_PairManager::addPair(uint32_t id_a, uint32_t id_b)
 
 void EC_PairManager::update()
 {
-	// Updating the stored pairs is simple:
-	// All pairs that are not colliding are pushed to the back of the vector
-	auto sort = [](const EC_CollisionPair& pair, const EC_CollisionPair& other) { return pair.m_Colliding == false; };
-	std::sort(s_Pairs.begin(), s_Pairs.end(), sort);
-	size_t num_Valid = 0;
-	//then we count up the number of valid colliding pairs
-	for (auto & pair : s_Pairs)
-	{
-		if (pair.m_Colliding)
-			num_Valid++;
-		else
-			break;
-	}
-	//and resize the vector to that number. Obselete pairs are destroyed
-	s_Pairs.resize(num_Valid);
-	//then reset the iterator for the next frame
-	s_CurrentPair = s_Pairs.begin();
+	// Remove all non-colliding pairs and keep only actively colliding pairs.
+	auto endIt = std::remove_if(
+		s_Pairs.begin(),
+		s_Pairs.end(),
+		[](const EC_CollisionPair& pair)
+		{
+			return !pair.m_Colliding;
+		});
+
+	s_Pairs.erase(endIt, s_Pairs.end());
+
+	// Reset traversal cursor for next frame.
+	s_CurrentPairIndex = 0;
+
 }
 
 bool EC_PairManager::hasPairs()
 {
-	return (s_CurrentPair != s_Pairs.end());
+	return s_CurrentPairIndex < s_Pairs.size();
 }
+
 
 EC_CollisionPair& EC_PairManager::getNextPair()
 {
-	//dereference the iterator,
-	//return reference
-	//increment iterator
-	//operator precedence trick.
-	return *s_CurrentPair++;
+	if (!hasPairs())
+	{
+		throw std::out_of_range("No collision pairs available");
+	}
+
+	return s_Pairs[s_CurrentPairIndex++];
 }
+

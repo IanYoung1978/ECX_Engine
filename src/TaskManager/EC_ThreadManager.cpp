@@ -107,10 +107,15 @@ void EC_ThreadManager::stop()
 {
 	s_running = false;
 	s_Flag.notify_all();
+
 	for (size_t i = 0; i < s_Workers.size(); i++)
 	{
-		s_Workers[i].join();
+		if (s_Workers[i].joinable()) {  // Add this check
+			s_Workers[i].join();
+		}
 	}
+
+	s_Workers.clear();  // Clear the vector after joining
 }
 
 EC_ThreadManager::~EC_ThreadManager()
