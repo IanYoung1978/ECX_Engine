@@ -32,6 +32,13 @@ namespace ScriptAPI
             if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return 0;
             return mgr.getComponent<EC_DOD_EntityInfo>(entityID).uid;
         }
+        unsigned int getID() {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return 0;
+            if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return 0;
+            return entityID;
+        }
+
 
         bool isActive() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
@@ -183,6 +190,20 @@ namespace ScriptAPI
             glm::vec3 axis(x, y, z);
             spatial.orientation += axis * angle;
         }
+        glm::vec4 getColour() {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return glm::vec4(1.0f);
+            if (!mgr.hasComponent<EC_DOD_GraphicsData>(entityID)) return glm::vec4(1.0f);
+            return mgr.getComponent<EC_DOD_GraphicsData>(entityID).colour;
+        }
+
+        void setColour(float r, float g, float b, float a = 1.0f) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
+            if (!mgr.hasComponent<EC_DOD_GraphicsData>(entityID)) return;
+            auto& gfx = mgr.getComponent<EC_DOD_GraphicsData>(entityID);
+            gfx.colour = glm::vec4(r, g, b, a);
+        }
 
         // Script variables (stored in EC_DOD_ScriptData)
         void setFloat(const std::string& name, float value) {
@@ -249,8 +270,10 @@ namespace ScriptAPI
     {
         ECXEvent& event;
         EC_Game* game;
-
-        EventAPI(ECXEvent& e, EC_Game* g) : event(e), game(g) {}
+        EntityID currentEntityID;
+        EventAPI(ECXEvent& e, EC_Game* g, EntityID currentEntity)
+            : event(e), game(g), currentEntityID(currentEntity) {
+        }
 
         std::string getKey() {
             if (event.type == ECXEventType::key_down ||
@@ -398,18 +421,6 @@ namespace ScriptAPI
             return false;
         }
 
-        unsigned int getOtherEntityUID() {
-            if (event.type == ECXEventType::CollisionBeginEvent ||
-                event.type == ECXEventType::CollisionEndEvent) {
-                try {
-                    return std::any_cast<unsigned int>(event.args[0]);
-                }
-                catch (const std::bad_any_cast&) {
-                    return 0;
-                }
-            }
-            return 0;
-        }
 
         glm::vec3 getNewPosition() {
             if (event.type == ECXEventType::EntityChangePosition) {
@@ -457,6 +468,74 @@ namespace ScriptAPI
                 }
             }
             return glm::vec3(0);
+        }
+
+
+        unsigned int entityIdToUID(unsigned int entityID) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return 0;
+            if (!mgr.hasComponent<EC_DOD_EntityInfo>(entityID)) return 0;
+            return mgr.getComponent<EC_DOD_EntityInfo>(entityID).uid;
+        }
+
+
+        unsigned int getCollisionEntityA() {
+            if (event.type == ECXEventType::CollisionBeginEvent) {
+                try {
+                    return std::any_cast<unsigned int>(event.args[1]);  // Begin: args[1]
+                }
+                catch (const std::bad_any_cast&) {
+                    return 0;
+                }
+            }
+            if (event.type == ECXEventType::CollisionEndEvent) {
+                try {
+                    return std::any_cast<unsigned int>(event.args[0]);  // End: args[0]
+                }
+                catch (const std::bad_any_cast&) {
+                    return 0;
+                }
+            }
+            return 0;
+        }
+
+        unsigned int getCollisionEntityB() {
+            if (event.type == ECXEventType::CollisionBeginEvent) {
+                try {
+                    return std::any_cast<unsigned int>(event.args[2]);  // Begin: args[2]
+                }
+                catch (const std::bad_any_cast&) {
+                    return 0;
+                }
+            }
+            if (event.type == ECXEventType::CollisionEndEvent) {
+                try {
+                    return std::any_cast<unsigned int>(event.args[1]);  // End: args[1]
+                }
+                catch (const std::bad_any_cast&) {
+                    return 0;
+                }
+            }
+            return 0;
+        }
+
+        unsigned int getOtherEntityID() {  // Rename from getOtherEntityUID
+            if (event.type == ECXEventType::CollisionBeginEvent ||
+                event.type == ECXEventType::CollisionEndEvent) {
+                try {
+                    const unsigned int entityA = std::any_cast<unsigned int>(event.args[1]);
+                    const unsigned int entityB = std::any_cast<unsigned int>(event.args[2]);
+
+                    if (currentEntityID == entityA) return entityB;  // Return EntityID directly
+                    if (currentEntityID == entityB) return entityA;
+
+                    return 0;
+                }
+                catch (const std::bad_any_cast&) {
+                    return 0;
+                }
+            }
+            return 0;
         }
     };
 };

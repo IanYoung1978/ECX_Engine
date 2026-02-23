@@ -19,10 +19,22 @@ public:
     EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr) {}
 
     ~EC_LuaScriptSystem() {
+        // First, prevent any new script calls
+        m_shuttingDown = true;
+
+        // Wait a moment for any in-flight calls to complete
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        // Now safely destroy Lua
         std::lock_guard<std::mutex> lock(m_LuaMutex);
-        if (m_luaState) lua_close(m_luaState);
-        delete m_game;
-        m_game = nullptr;
+        if (m_luaState) {
+            lua_close(m_luaState);
+            m_luaState = nullptr;
+        }
+        if (m_game) {
+            delete m_game;
+            m_game = nullptr;
+        }
     }
 
     void init(ECXMessenger& messenger, EC_Game& game) override {
@@ -68,6 +80,7 @@ public:
     }
 
     void update(const float& deltaTimeS, EC_Game& game) override {
+        if (m_shuttingDown) return;
         auto& manager = EC_DOD_EntityManager::getInstance();
 
         auto entities = manager.getEntitiesWithComponent(
@@ -88,8 +101,96 @@ public:
     }
 
     void receive(ECXEvent& event) override {
+        if (m_shuttingDown) return;
         auto& manager = EC_DOD_EntityManager::getInstance();
 
+        // Special handling for collision events - only notify participants
+        if (event.type == ECXEventType::CollisionBeginEvent) {
+            try {
+                uint32_t entityA = std::any_cast<uint32_t>(event.args[1]);
+                uint32_t entityB = std::any_cast<uint32_t>(event.args[2]);
+                LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                    "Collision Begin between Entity " + std::to_string(entityA) +
+                    " and Entity " + std::to_string(entityB),
+                    LOGGING::LogLevel::INFORMATION
+                );
+                std::vector<EntityID> participants = { entityA, entityB };
+                for (EntityID entity : participants) {
+                    if (!manager.isAlive(entity)) continue;
+                    if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
+
+                    const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+                    if (!script.enabled) continue;
+
+                    const char* funcName = getEventFunctionName(event.type);
+                    if (funcName) {
+                        std::lock_guard<std::mutex> lock(m_LuaMutex);
+                        callLuaEvent(script.scriptFile, funcName, entity, event);
+                    }
+                }
+            }
+            catch (const std::bad_any_cast&) {}
+            return;
+        }
+        if (event.type == ECXEventType::CollisionEndEvent) {
+            try {
+                uint32_t entityA = std::any_cast<uint32_t>(event.args[0]);
+                uint32_t entityB = std::any_cast<uint32_t>(event.args[1]);
+                LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                    "Collision End between Entity " + std::to_string(entityA) +
+                    " and Entity " + std::to_string(entityB),
+                    LOGGING::LogLevel::INFORMATION
+                );
+                std::vector<EntityID> participants = { entityA, entityB };
+                for (EntityID entity : participants) {
+                    if (!manager.isAlive(entity)) continue;
+                    if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
+
+                    const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+                    if (!script.enabled) continue;
+
+                    const char* funcName = getEventFunctionName(event.type);
+                    if (funcName) {
+                        std::lock_guard<std::mutex> lock(m_LuaMutex);
+                        callLuaEvent(script.scriptFile, funcName, entity, event);
+                    }
+                }
+            }
+            catch (const std::bad_any_cast&) {}
+            return;
+
+        }
+
+        if (event.type == ECXEventType::key_down ||
+            event.type == ECXEventType::key_up ||
+            event.type == ECXEventType::key_held ||
+            event.type == ECXEventType::mouse_down ||
+            event.type == ECXEventType::mouse_up ||
+            event.type == ECXEventType::mouse_held ||
+            event.type == ECXEventType::mouse_move) {
+
+            auto entities = manager.getEntitiesWithComponents({
+                std::type_index(typeid(EC_DOD_ScriptData)),
+                std::type_index(typeid(EC_DOD_Camera))
+                });
+
+            for (EntityID entity : entities) {
+                if (!manager.isAlive(entity)) continue;
+                if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
+
+                const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+                if (!script.enabled) continue;
+
+                const char* funcName = getEventFunctionName(event.type);
+                if (funcName) {
+                    std::lock_guard<std::mutex> lock(m_LuaMutex);
+                    callLuaEvent(script.scriptFile, funcName, entity, event);
+                }
+            }
+            return;
+        }
+
+        // For all other events, broadcast to all scripted entities
         auto entities = manager.getEntitiesWithComponent(
             std::type_index(typeid(EC_DOD_ScriptData))
         );
@@ -101,10 +202,8 @@ public:
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
 
-            // Route event to appropriate Lua function
             const char* funcName = getEventFunctionName(event.type);
             if (funcName) {
-                // Lock for Lua access
                 std::lock_guard<std::mutex> lock(m_LuaMutex);
                 callLuaEvent(script.scriptFile, funcName, entity, event);
             }
@@ -112,6 +211,7 @@ public:
     }
 
 private:
+    std::atomic<bool> m_shuttingDown{ false };
     lua_State* m_luaState;
     ScriptAPI::GameAPI* m_game;
     std::unordered_map<std::string, bool> m_loadedScripts;
@@ -212,7 +312,7 @@ private:
             luabridge::LuaRef func = luabridge::getGlobal(m_luaState, funcName);
             if (func.isFunction()) {
                 ScriptAPI::EntityAPI entityAPI(entity);
-                ScriptAPI::EventAPI eventAPI(event, m_game->game);
+                ScriptAPI::EventAPI eventAPI(event, m_game->game, entity);
                 auto result = func(entityAPI, eventAPI);
 
                 if (!result) {
@@ -236,6 +336,7 @@ private:
             .beginClass<ScriptAPI::EntityAPI>("Entity")
             .addFunction("getName", &ScriptAPI::EntityAPI::getName)
             .addFunction("getUID", &ScriptAPI::EntityAPI::getUID)
+            .addFunction("getID", &ScriptAPI::EntityAPI::getID)
             .addFunction("isActive", &ScriptAPI::EntityAPI::isActive)
             .addFunction("activate", &ScriptAPI::EntityAPI::activate)
             .addFunction("deactivate", &ScriptAPI::EntityAPI::deactivate)
@@ -261,6 +362,9 @@ private:
             .addFunction("getFloat", &ScriptAPI::EntityAPI::getFloat)
             .addFunction("setString", &ScriptAPI::EntityAPI::setString)
             .addFunction("getString", &ScriptAPI::EntityAPI::getString)
+            .addFunction("getColour", &ScriptAPI::EntityAPI::getColour)
+            .addFunction("setColour", &ScriptAPI::EntityAPI::setColour)
+
             .endClass()
 
             .beginClass<ScriptAPI::EventAPI>("Event")
@@ -274,11 +378,12 @@ private:
             .addFunction("mouseButtonPressed", &ScriptAPI::EventAPI::mouseButtonPressed)
             .addFunction("mouseButtonHeld", &ScriptAPI::EventAPI::mouseButtonHeld)
             .addFunction("mouseButtonReleased", &ScriptAPI::EventAPI::mouseButtonReleased)
-            .addFunction("getOtherEntityUID", &ScriptAPI::EventAPI::getOtherEntityUID)
             .addFunction("getNewPosition", &ScriptAPI::EventAPI::getNewPosition)
             .addFunction("getNewOrientation", &ScriptAPI::EventAPI::getNewOrientation)
             .addFunction("getNewVelocity", &ScriptAPI::EventAPI::getNewVelocity)
             .addFunction("getNewAngularVelocity", &ScriptAPI::EventAPI::getNewAngularVelocity)
+            .addFunction("getCollisionEntityA", &ScriptAPI::EventAPI::getCollisionEntityA)
+            .addFunction("getCollisionEntityB", &ScriptAPI::EventAPI::getCollisionEntityB)
             .endClass()
 
             .beginClass<glm::vec3>("vec3")
@@ -287,6 +392,15 @@ private:
             .addProperty("y", &glm::vec3::y)
             .addProperty("z", &glm::vec3::z)
             .endClass()
+
+            .beginClass<glm::vec4>("vec4")
+            .addConstructor<void(*)(float, float, float, float)>()
+            .addProperty("x", &glm::vec4::x)
+            .addProperty("y", &glm::vec4::y)
+            .addProperty("z", &glm::vec4::z)
+            .addProperty("w", &glm::vec4::w)
+            .endClass()
+
 
             .beginClass<ScriptAPI::GameAPI>("game")
             .addFunction("getEntity", &ScriptAPI::GameAPI::getEntity)

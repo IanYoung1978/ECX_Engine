@@ -37,7 +37,7 @@ private:
     void parseTransform(TiXmlElement* elem, EntityID entity);
     void parseLight(TiXmlElement* elem, EntityID entity);
     void parseScript(TiXmlElement* elem, EntityID entity);
-
+    void parseCollider(TiXmlElement* elem, EntityID entity);
     static std::vector<EntityID> s_Cameras;
     static std::vector<EntityID> s_Entities;
     static std::vector<EntityID> s_Lights;

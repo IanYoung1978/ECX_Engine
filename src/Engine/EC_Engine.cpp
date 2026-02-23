@@ -4,6 +4,7 @@
 #include "Subsystems/EC_CameraSystem.h"
 #include "Subsystems/EC_TransformSystem.h"
 #include "Subsystems/EC_LuaScriptingSystem.h"
+#include "Subsystems/CollisionSystems/EC_CollisionSystem.h"
 #include "TaskManager/EC_ScriptingTask.h"
 
 EC_Engine::EC_Engine()
@@ -18,7 +19,9 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	m_Systems[(size_t)EC_SystemType::Spatial] = std::make_shared<EC_SpatialSystem>();
 	m_Systems[(size_t)EC_SystemType::Transform] = std::make_shared<EC_TransformSystem>();
 	m_Systems[(size_t)EC_SystemType::Camera] = std::make_shared<EC_CameraSystem>();
+	m_Systems[(size_t)EC_SystemType::Collision] = std::make_shared<EC_CollisionSystem>();
 	m_Systems[(size_t)EC_SystemType::Scripting] = std::make_shared<EC_LuaScriptSystem>();
+
 	
 	for (auto s : m_Systems)
 	{
@@ -33,6 +36,7 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Transform]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Camera]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Scripting]);
+	task->addSystem(m_Systems[(size_t)EC_SystemType::Collision]);
 	// add additional systems (collision, physics)
 	task->setTimeStep(1.0f / 60);
 	m_tasks.push_back(task);

@@ -71,7 +71,15 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
         else if (strcmp(elem->Value(), "ScriptComponent") == 0) {
             parseScript(elem, entity);
         }
-
+        else if (strcmp(elem->Value(), "Collider") == 0) {
+            parseCollider(elem, entity);
+        }
+        else {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Unknown component type: " + std::string(elem->Value()),
+                LOGGING::LogLevel::WARNING
+			);
+        }
         elem = elem->NextSiblingElement();
     }
 
@@ -333,6 +341,17 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                 child1 = child1->NextSiblingElement();
             }
         }
+        else if (strcmp(child->Value(), "Colour") == 0 || strcmp(child->Value(), "Color") == 0) {
+            std::string color = child->GetText();
+            sscanf(color.c_str(), "%f,%f,%f,%f",
+                &gfx.colour.r, &gfx.colour.g, &gfx.colour.b, &gfx.colour.a);
+        }
+        else {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Unknown graphics property: " + std::string(child->Value()),
+                LOGGING::LogLevel::WARNING
+			);
+        }
 
         child = child->NextSiblingElement();
     }
@@ -430,4 +449,64 @@ void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
     }
 
     manager.addComponent(entity, light);
+}
+
+void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    EC_DOD_Collider collider;
+
+    // Parse collider type
+    auto typeElem = elem->FirstChildElement("Type");
+    if (typeElem && typeElem->GetText()) {
+        std::string type = typeElem->GetText();
+        if (type == "Sphere") collider.type = EC_DOD_Collider::Type::Sphere;
+        else if (type == "AABB") collider.type = EC_DOD_Collider::Type::AABB;
+        else if (type == "OBB") collider.type = EC_DOD_Collider::Type::OBB;
+        else if (type == "Capsule") collider.type = EC_DOD_Collider::Type::Capsule;
+        else if (type == "Cylinder") collider.type = EC_DOD_Collider::Type::Cylinder;
+        else if (type == "Frustum") collider.type = EC_DOD_Collider::Type::Frustum;
+        else if (type == "Plane") collider.type = EC_DOD_Collider::Type::Plane;
+    }
+
+    // Parse radius (for Sphere, Capsule, Cylinder)
+    auto radiusElem = elem->FirstChildElement("Radius");
+    if (radiusElem && radiusElem->GetText()) {
+        collider.radius = static_cast<float>(atof(radiusElem->GetText()));
+    }
+
+    // Parse extents (for AABB, OBB)
+    auto extentsElem = elem->FirstChildElement("Extents");
+    if (extentsElem && extentsElem->GetText()) {
+        std::string extents = extentsElem->GetText();
+        sscanf(extents.c_str(), "%f,%f,%f",
+            &collider.extents.x, &collider.extents.y, &collider.extents.z);
+    }
+
+    // Parse height (for Capsule, Cylinder)
+    auto heightElem = elem->FirstChildElement("Height");
+    if (heightElem && heightElem->GetText()) {
+        collider.height = static_cast<float>(atof(heightElem->GetText()));
+    }
+
+    // Parse center offset
+    auto centerElem = elem->FirstChildElement("Center");
+    if (centerElem && centerElem->GetText()) {
+        std::string center = centerElem->GetText();
+        sscanf(center.c_str(), "%f,%f,%f",
+            &collider.center.x, &collider.center.y, &collider.center.z);
+    }
+
+    // Parse collision layer
+    auto layerElem = elem->FirstChildElement("Layer");
+    if (layerElem && layerElem->GetText()) {
+        collider.collisionLayer = static_cast<uint32_t>(atoi(layerElem->GetText()));
+    }
+
+    // Parse collision mask
+    auto maskElem = elem->FirstChildElement("Mask");
+    if (maskElem && maskElem->GetText()) {
+        collider.collisionMask = static_cast<uint32_t>(strtoul(maskElem->GetText(), nullptr, 0));
+    }
+
+    manager.addComponent(entity, collider);
 }
