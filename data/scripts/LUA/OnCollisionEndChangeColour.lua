@@ -4,22 +4,26 @@ local function isParticipant(entity, event)
     local uid = entity:getID()
     local a = event:getCollisionEntityA()
     local b = event:getCollisionEntityB()
-    print("Checking if entity " .. uid .. " is part of the collision between " .. a .. " and " .. b)
     return uid == a or uid == b
 end
 
 function onCollisionEnd(entity, event)
-    print("Collision ended for entity " .. entity:getID())
     if not isParticipant(entity, event) then
-        print("Entity " .. entity:getID() .. " was not part of the collision, ignoring.")
         return
     end
     
-
-    local r = entity:getFloat("orig_r", 1.0)
-    local g = entity:getFloat("orig_g", 1.0)
-    local b = entity:getFloat("orig_b", 1.0)
-    local a = entity:getFloat("orig_a", 1.0)
-
-    entity:setColour(r, g, b, a)
+    -- Decrement collision count
+    local collisionCount = entity:getFloat("collision_count", 0.0)
+    collisionCount = collisionCount - 1.0
+    entity:setFloat("collision_count", collisionCount)
+    
+    -- Only restore color when ALL collisions have ended
+    if collisionCount <= 0.0 then
+        local r = entity:getFloat("orig_r", 1.0)
+        local g = entity:getFloat("orig_g", 1.0)
+        local b = entity:getFloat("orig_b", 1.0)
+        local a = entity:getFloat("orig_a", 1.0)
+        entity:setColour(r, g, b, a)
+        entity:setFloat("collision_count", 0.0)  -- Clamp to zero
+    end
 end

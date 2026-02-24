@@ -24,7 +24,7 @@
 			<Type>Directional</Type>
 			<Direction>1.0,-1.0,0.0,0.0</Direction>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
-			<Intensity>5.0</Intensity>
+			<Intensity>10.0</Intensity>
 			<CastsShadow>true</CastsShadow>
 			<Dynamic>false</Dynamic>
 		</Light>
@@ -47,7 +47,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/icosphere.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>1.0,0.0,0.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -56,9 +56,9 @@
 		</ScriptComponent>
 	</Entity>
 
-	<Entity uid="101" name="sphere_green">
+	<Entity uid="101" name="sphere_yellow">
 		<Spatial>
-			<Position>-5.0,2.0,0.0</Position>
+			<Position>15.0,2.0,0.0</Position>
 			<Velocity>-1.0,0.0,0.0</Velocity>
 			<Orientation>0.0,0.0,0.0</Orientation>
 		</Spatial>
@@ -71,11 +71,10 @@
 			<Layer>1</Layer>
 			<Mask>0xFFFFFFFF</Mask>
 		</Collider>
-		<!--<ScriptComponent file="data/scripts/LUA/CollisionColour.lua"/>-->
 		<Gfx>
 			<Model>data/assets/models/icosphere.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
-			<Colour>0.0,1.0,0.0,1.0</Colour>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,1.0,0.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
 			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
@@ -101,7 +100,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>0.0,1.0,1.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -128,7 +127,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>1.0,1.0,0.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -155,7 +154,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/icosphere.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>0.0,0.0,1.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -181,7 +180,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>1.0,0.0,1.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -191,7 +190,7 @@
 	</Entity>
 
 	<!-- Test 4: OBB vs OBB (rotated boxes) -->
-	<Entity uid="106" name="obb_orange">
+	<Entity uid="106" name="obb_green">
 		<Spatial>
 			<Position>9.0,2.0,0.0</Position>
 			<Velocity>0.0,0.0,0.0</Velocity>
@@ -202,14 +201,14 @@
 		</Transform>
 		<Collider>
 			<Type>OBB</Type>
-			<Extents>1.5,0.5,1.0</Extents>
+			<Extents>1.0,1.0,1.0</Extents>
 			<Layer>1</Layer>
 			<Mask>0xFFFFFFFF</Mask>
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
-			<Colour>1.0,0.5,0.0,1.0</Colour>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,1.0,0.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
 			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
@@ -219,7 +218,7 @@
 
 	<Entity uid="107" name="obb_purple">
 		<Spatial>
-			<Position>12,2.0,0.0</Position>
+			<Position>11.8,2.0,0.0</Position>
 			<Velocity>0.0,0.0,0.0</Velocity>
 			<Orientation>0.0,-45.0,0.0</Orientation>
 			<AngularVelocity>0.0,60.0,0.0</AngularVelocity>
@@ -235,7 +234,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>0.5,0.0,1.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -262,7 +261,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/icosphere.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
@@ -282,14 +281,14 @@
 		</Transform>
 		<Collider>
 			<Type>OBB</Type>
-			<Extents>2.0,0.5,2.0</Extents>
+			<Extents>1.0,1.0,1.0</Extents>
 			<Layer>1</Layer>
 			<Mask>0xFFFFFFFF</Mask>
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
-			<Colour>0.0,0.0,1.0,1.0</Colour>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,1.0,0.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>
 			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
@@ -314,7 +313,7 @@
 		</Collider>
 		<Gfx>
 			<Model>data/assets/models/crate.obj</Model>
-			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 		</Gfx>
 		<ScriptComponent>

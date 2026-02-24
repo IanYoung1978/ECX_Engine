@@ -106,10 +106,10 @@ void main()
 	outColour+=(diffCol+specCol)*dirLight.intensity;
 	//outColour+=gcolour.rgb;
 		
-	colour = vec4(outColour,1);
-	//colour = vec4(dcolour.rgb*outColour.rgb,1.0);
+	//colour = vec4(outColour,1);
+	colour = vec4(dcolour.rgb*outColour.rgb,1.0);
 	//colour = dcolour+pcolour+ncolour+scolour+gcolour;
 	//colour = vec4(indata.VSTexCoord,0.0,1.0);
-	//colour = dcolour;
+	//colour = pcolour;
 	//colour = ncolour;
 }
