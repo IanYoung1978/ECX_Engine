@@ -1,8 +1,7 @@
-function onKeyDown(event,entity,game)
-		if event:key() == "Escape" then
-			game:shutdown()
-			return 0
-		end
-		
-		return 0
+function onKeyDown(entity, event)
+    local key = event:getKey()
+	if key == "Escape" then
+    print("Escape key pressed, shutting down the game.")
+	    game:shutdown()
+	end
 end

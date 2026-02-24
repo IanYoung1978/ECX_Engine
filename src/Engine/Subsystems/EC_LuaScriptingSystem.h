@@ -94,106 +94,45 @@ public:
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
 
-            // Lock for Lua access
+            // Check if this entity has an update handler
+            auto it = script.handlers.find(ECXEventType::system_update);
+            if (it == script.handlers.end()) continue;
+
+            // Call update handler
             std::lock_guard<std::mutex> lock(m_LuaMutex);
-            callLuaFunction(script.scriptFile, "update", entity, deltaTimeS);
+            callLuaFunction(it->second, "update", entity, deltaTimeS);
         }
     }
 
     void receive(ECXEvent& event) override {
         if (m_shuttingDown) return;
+
         auto& manager = EC_DOD_EntityManager::getInstance();
-
-        // Special handling for collision events - only notify participants
-        if (event.type == ECXEventType::CollisionBeginEvent) {
-            try {
-                uint32_t entityA = std::any_cast<uint32_t>(event.args[1]);
-                uint32_t entityB = std::any_cast<uint32_t>(event.args[2]);
-                LOGGING::ECX_Logger::GetInstance()->LogMessage(
-                    "Collision Begin between Entity " + std::to_string(entityA) +
-                    " and Entity " + std::to_string(entityB),
-                    LOGGING::LogLevel::INFORMATION
-                );
-                std::vector<EntityID> participants = { entityA, entityB };
-                for (EntityID entity : participants) {
-                    if (!manager.isAlive(entity)) continue;
-                    if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
-
-                    const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
-                    if (!script.enabled) continue;
-
-                    const char* funcName = getEventFunctionName(event.type);
-                    if (funcName) {
-                        std::lock_guard<std::mutex> lock(m_LuaMutex);
-                        callLuaEvent(script.scriptFile, funcName, entity, event);
-                    }
-                }
-            }
-            catch (const std::bad_any_cast&) {}
-            return;
-        }
-        if (event.type == ECXEventType::CollisionEndEvent) {
-            try {
-                uint32_t entityA = std::any_cast<uint32_t>(event.args[0]);
-                uint32_t entityB = std::any_cast<uint32_t>(event.args[1]);
-                LOGGING::ECX_Logger::GetInstance()->LogMessage(
-                    "Collision End between Entity " + std::to_string(entityA) +
-                    " and Entity " + std::to_string(entityB),
-                    LOGGING::LogLevel::INFORMATION
-                );
-                std::vector<EntityID> participants = { entityA, entityB };
-                for (EntityID entity : participants) {
-                    if (!manager.isAlive(entity)) continue;
-                    if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
-
-                    const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
-                    if (!script.enabled) continue;
-
-                    const char* funcName = getEventFunctionName(event.type);
-                    if (funcName) {
-                        std::lock_guard<std::mutex> lock(m_LuaMutex);
-                        callLuaEvent(script.scriptFile, funcName, entity, event);
-                    }
-                }
-            }
-            catch (const std::bad_any_cast&) {}
-            return;
-
-        }
-
-        if (event.type == ECXEventType::key_down ||
-            event.type == ECXEventType::key_up ||
-            event.type == ECXEventType::key_held ||
-            event.type == ECXEventType::mouse_down ||
-            event.type == ECXEventType::mouse_up ||
-            event.type == ECXEventType::mouse_held ||
-            event.type == ECXEventType::mouse_move) {
-
-            auto entities = manager.getEntitiesWithComponents({
-                std::type_index(typeid(EC_DOD_ScriptData)),
-                std::type_index(typeid(EC_DOD_Camera))
-                });
-
-            for (EntityID entity : entities) {
-                if (!manager.isAlive(entity)) continue;
-                if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
-
-                const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
-                if (!script.enabled) continue;
-
-                const char* funcName = getEventFunctionName(event.type);
-                if (funcName) {
-                    std::lock_guard<std::mutex> lock(m_LuaMutex);
-                    callLuaEvent(script.scriptFile, funcName, entity, event);
-                }
-            }
-            return;
-        }
-
-        // For all other events, broadcast to all scripted entities
         auto entities = manager.getEntitiesWithComponent(
             std::type_index(typeid(EC_DOD_ScriptData))
         );
+
+        // For collision events, extract participant IDs
+        EntityID participantA = INVALID_ENTITY;
+        EntityID participantB = INVALID_ENTITY;
+        bool isCollision = false;
+
+        if (event.type == ECXEventType::CollisionBeginEvent) {
+            try {
+                participantA = std::any_cast<uint32_t>(event.args[1]);
+                participantB = std::any_cast<uint32_t>(event.args[2]);
+                isCollision = true;
+            }
+            catch (const std::bad_any_cast&) {}
+        }
+        else if (event.type == ECXEventType::CollisionEndEvent) {
+            try {
+                participantA = std::any_cast<uint32_t>(event.args[0]);
+                participantB = std::any_cast<uint32_t>(event.args[1]);
+                isCollision = true;
+            }
+            catch (const std::bad_any_cast&) {}
+        }
 
         for (EntityID entity : entities) {
             if (!manager.isAlive(entity)) continue;
@@ -202,10 +141,20 @@ public:
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
 
+            // Check if this entity has a handler for this event type
+            auto it = script.handlers.find(event.type);
+            if (it == script.handlers.end()) continue;
+
+            // For collision events, only call if entity is a participant
+            if (isCollision && entity != participantA && entity != participantB) {
+                continue;
+            }
+
+            // Call handler
             const char* funcName = getEventFunctionName(event.type);
             if (funcName) {
                 std::lock_guard<std::mutex> lock(m_LuaMutex);
-                callLuaEvent(script.scriptFile, funcName, entity, event);
+                callLuaEvent(it->second, funcName, entity, event);
             }
         }
     }

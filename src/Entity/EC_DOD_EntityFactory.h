@@ -8,6 +8,7 @@
 #include <string>
 #include <cstdint>
 #include "EC_DOD_Types.h"
+#include "Messaging/ECXEventType.h"
 
 class EC_DOD_EntityFactory {
 public:
@@ -38,6 +39,7 @@ private:
     void parseLight(TiXmlElement* elem, EntityID entity);
     void parseScript(TiXmlElement* elem, EntityID entity);
     void parseCollider(TiXmlElement* elem, EntityID entity);
+    ECXEventType getEventTypeFromHandlerName(const std::string& name);
     static std::vector<EntityID> s_Cameras;
     static std::vector<EntityID> s_Entities;
     static std::vector<EntityID> s_Lights;

@@ -1,11 +1,15 @@
-function onMouseMove(event,entity,game)
-
-	local orientation = entity.orientation
-	
-	local deltaYaw = event:x() / 50.0
-	local deltaPitch = event:y() / 50.0
-	orientation.x = orientation.x - deltaPitch
-	orientation.y = orientation.y - deltaYaw
-	entity.orientation = orientation
-	return 0
+function onMouseMove(entity, event)
+    local mouseX = event:getMouseMotionX()
+    local mouseY = event:getMouseMotionY()
+    
+    local sensitivity = 0.02
+    
+    local orient = entity:getOrientation()
+    
+    local newYaw = orient.y - mouseX * sensitivity
+    local newPitch = orient.x - mouseY * sensitivity
+    
+    newPitch = math.max(-1.5, math.min(1.5, newPitch))
+    
+    entity:setOrientation(newPitch, newYaw, orient.z)
 end

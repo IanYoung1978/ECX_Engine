@@ -6,7 +6,7 @@
 #include "Graphics/TextureSet.h"
 #include "Graphics/ObjModel.h"
 #include "Graphics/Shader.h"
-
+#include "Messaging/ECXEventType.h"
 
 class Shader;
 class ObjModel;
@@ -120,10 +120,12 @@ struct EC_DOD_EntityInfo {
 };
 
 struct EC_DOD_ScriptData {
-    std::string scriptFile;
     bool enabled = true;
-    // Per-entity persistent variables (accessible from Lua)
-    // These survive between frames - perfect for entity state
+
+    // Map of event type -> script file
+    std::unordered_map<ECXEventType, std::string> handlers;
+
+    // Per-entity persistent variables
     std::unordered_map<std::string, float> floatVars;
     std::unordered_map<std::string, std::string> stringVars;
 };

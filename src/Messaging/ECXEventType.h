@@ -24,5 +24,6 @@ enum class ECXEventType
 	entity_loaded,
 	config_loaded,
 	system_update,
+	None,
 	ALL
 };
