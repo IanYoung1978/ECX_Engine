@@ -10,7 +10,12 @@
 			<Position>0.0,5.0,20.0</Position>
 			<Orientation>0.0,180.0,0.0</Orientation>
 		</Spatial>
-		<ScriptComponent file="data/scripts/LUA/player.lua"/>
+		<ScriptComponent>
+			<OnKeyDown filename="data/scripts/LUA/OnKeyDown.lua"/>
+			<OnKeyUp filename="data/scripts/LUA/OnKeyUp.lua"/>
+			<OnKeyHeld filename="data/scripts/LUA/OnKeyHeld.lua"/>
+			<OnMouseMove filename="data/scripts/LUA/onMouseMove.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<!-- Lighting -->
@@ -45,6 +50,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>1.0,0.0,0.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<Entity uid="101" name="sphere_green">
@@ -68,6 +77,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>0.0,1.0,0.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<!-- Test 2: AABB vs AABB -->
@@ -91,6 +104,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>0.0,1.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<Entity uid="103" name="box_yellow">
@@ -114,7 +131,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>1.0,1.0,0.0,1.0</Colour>
 		</Gfx>
-		<ScriptComponent file="data/scripts/LUA/CollisionColour.lua"/>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<!-- Test 3: Sphere vs AABB -->
@@ -138,6 +158,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>0.0,0.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<Entity uid="105" name="box_magenta">
@@ -160,6 +184,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>1.0,0.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<!-- Test 4: OBB vs OBB (rotated boxes) -->
@@ -183,11 +211,15 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>1.0,0.5,0.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<Entity uid="107" name="obb_purple">
 		<Spatial>
-			<Position>11.0,2.0,0.0</Position>
+			<Position>12,2.0,0.0</Position>
 			<Velocity>0.0,0.0,0.0</Velocity>
 			<Orientation>0.0,-45.0,0.0</Orientation>
 			<AngularVelocity>0.0,60.0,0.0</AngularVelocity>
@@ -206,6 +238,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>0.5,0.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<!-- Test 5: Sphere vs OBB -->
@@ -229,6 +265,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<Entity uid="109" name="obb_green">
@@ -251,6 +291,10 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>0.0,0.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 
 	<!-- Ground plane -->
@@ -273,5 +317,9 @@
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/basic.frag"></Shader>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
 	</Entity>
 </Scene>

@@ -9,6 +9,7 @@
 #include "Graphics/PBR_TextureSet.h"
 #include "Components/EC_ScriptComponent.h"
 
+
 TextureManager EC_DOD_EntityFactory::s_TexManager;
 MeshManager EC_DOD_EntityFactory::s_MeshManager;
 ShaderManager EC_DOD_EntityFactory::s_ShaderManager;
@@ -385,20 +386,49 @@ void EC_DOD_EntityFactory::parseTransform(TiXmlElement* elem, EntityID entity) {
 void EC_DOD_EntityFactory::parseScript(TiXmlElement* elem, EntityID entity) {
     auto& manager = EC_DOD_EntityManager::getInstance();
     EC_DOD_ScriptData script;
-    script.enabled = true;
 
-    auto attr = elem->Attribute("file");
-    if (attr != nullptr) {
-        script.scriptFile = std::string(attr);
-    }
-    else {
-        LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "ScriptComponent defined without a script file!",
-            LOGGING::LogLevel::WARNING
-        );
+    // Parse each child element as a handler
+    auto child = elem->FirstChildElement();
+    while (child != nullptr) {
+        std::string handlerName = child->Value();
+
+        // Map handler name to event type
+        ECXEventType eventType = getEventTypeFromHandlerName(handlerName);
+
+        if (eventType != ECXEventType::None) {  // Valid handler
+            auto filenameAttr = child->Attribute("filename");
+            if (filenameAttr) {
+                script.handlers[eventType] = filenameAttr;
+            }
+        }
+
+        child = child->NextSiblingElement();
     }
 
     manager.addComponent(entity, script);
+}
+
+// Helper function to map XML handler names to event types
+ECXEventType EC_DOD_EntityFactory::getEventTypeFromHandlerName(const std::string& name) {
+    static const std::unordered_map<std::string, ECXEventType> handlerMap = {
+        {"OnCollisionBegin", ECXEventType::CollisionBeginEvent},
+        {"OnCollisionEnd", ECXEventType::CollisionEndEvent},
+        {"OnKeyDown", ECXEventType::key_down},
+        {"OnKeyUp", ECXEventType::key_up},
+        {"OnKeyHeld", ECXEventType::key_held},
+        {"OnMouseDown", ECXEventType::mouse_down},
+        {"OnMouseUp", ECXEventType::mouse_up},
+        {"OnMouseHeld", ECXEventType::mouse_held},
+        {"OnMouseMove", ECXEventType::mouse_move},
+        {"OnEntityCreate", ECXEventType::EntityCreate},
+        {"OnEntityDestroy", ECXEventType::EntityDestroy},
+        {"OnWorldLoaded", ECXEventType::world_loaded},
+        {"OnUpdate", ECXEventType::system_update},
+        // Add more as needed
+    };
+
+    auto it = handlerMap.find(name);
+    return (it != handlerMap.end()) ? it->second : ECXEventType::None;
 }
 
 void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
