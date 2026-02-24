@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
+#include <iostream>
 
 namespace {
     constexpr float kEpsilon = 1e-6f;
@@ -97,24 +98,175 @@ bool EC_CollisionChecks::AABBVsAABB(const AABB& aabbA, const glm::vec3& posA, co
     return true;
 
 }
-
-bool EC_CollisionChecks::OBBVsOBB(const OBB& obbA, const glm::vec3& posA, const OBB& obbB, const glm::vec3& posB, CollisionManifold& manifold)
+bool EC_CollisionChecks::OBBVsOBB(const OBB& obbA, const glm::vec3& posA,
+    const OBB& obbB, const glm::vec3& posB,
+    CollisionManifold& manifold)
 {
-    // Approximation: project OBBs to world AABBs and reuse AABB test.
-    const glm::vec3 absAxisAx = glm::abs(obbA.orientation[0]);
-    const glm::vec3 absAxisAy = glm::abs(obbA.orientation[1]);
-    const glm::vec3 absAxisAz = glm::abs(obbA.orientation[2]);
-    const glm::vec3 extentA = absAxisAx * obbA.halfExtents.x + absAxisAy * obbA.halfExtents.y + absAxisAz * obbA.halfExtents.z;
+    glm::vec3 centerA = posA + obbA.center;
+    glm::vec3 centerB = posB + obbB.center;
 
-    const glm::vec3 absAxisBx = glm::abs(obbB.orientation[0]);
-    const glm::vec3 absAxisBy = glm::abs(obbB.orientation[1]);
-    const glm::vec3 absAxisBz = glm::abs(obbB.orientation[2]);
-    const glm::vec3 extentB = absAxisBx * obbB.halfExtents.x + absAxisBy * obbB.halfExtents.y + absAxisBz * obbB.halfExtents.z;
+    std::cout << "=== OBB vs OBB Test ===" << std::endl;
+    std::cout << "OBB A Center: (" << centerA.x << ", " << centerA.y << ", " << centerA.z << ")" << std::endl;
+    std::cout << "OBB A Extents: (" << obbA.halfExtents.x << ", " << obbA.halfExtents.y << ", " << obbA.halfExtents.z << ")" << std::endl;
+    std::cout << "OBB A Orientation[0]: (" << obbA.orientation[0].x << ", " << obbA.orientation[0].y << ", " << obbA.orientation[0].z << ")" << std::endl;
+    std::cout << "OBB A Orientation[1]: (" << obbA.orientation[1].x << ", " << obbA.orientation[1].y << ", " << obbA.orientation[1].z << ")" << std::endl;
+    std::cout << "OBB A Orientation[2]: (" << obbA.orientation[2].x << ", " << obbA.orientation[2].y << ", " << obbA.orientation[2].z << ")" << std::endl;
+    std::cout << "OBB B Center: (" << centerB.x << ", " << centerB.y << ", " << centerB.z << ")" << std::endl;
+    std::cout << "OBB B Extents: (" << obbB.halfExtents.x << ", " << obbB.halfExtents.y << ", " << obbB.halfExtents.z << ")" << std::endl;
+    std::cout << "OBB B Orientation[0]: (" << obbB.orientation[0].x << ", " << obbB.orientation[0].y << ", " << obbB.orientation[0].z << ")" << std::endl;
+    std::cout << "OBB B Orientation[1]: (" << obbB.orientation[1].x << ", " << obbB.orientation[1].y << ", " << obbB.orientation[1].z << ")" << std::endl;
+    std::cout << "OBB B Orientation[2]: (" << obbB.orientation[2].x << ", " << obbB.orientation[2].y << ", " << obbB.orientation[2].z << ")" << std::endl;
+    std::cout << "Distance between centers: " << glm::length(centerB - centerA) << std::endl;
 
-    const AABB aabbA{ obbA.center - extentA, obbA.center + extentA };
-    const AABB aabbB{ obbB.center - extentB, obbB.center + extentB };
-    return AABBVsAABB(aabbA, posA, aabbB, posB, manifold);
+    // Get the 3 axes of each OBB
+    glm::vec3 axisA[3] = {
+        obbA.orientation[0],
+        obbA.orientation[1],
+        obbA.orientation[2]
+    };
 
+    glm::vec3 axisB[3] = {
+        obbB.orientation[0],
+        obbB.orientation[1],
+        obbB.orientation[2]
+    };
+
+    // Vector between centers
+    glm::vec3 T = centerB - centerA;
+
+    float ra, rb;
+    glm::mat3 R, absR;
+
+    // Compute rotation matrix expressing B in A's coordinate frame
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            R[i][j] = glm::dot(axisA[i], axisB[j]);
+        }
+    }
+
+    // Compute translation vector T in A's frame
+    glm::vec3 t(glm::dot(T, axisA[0]), glm::dot(T, axisA[1]), glm::dot(T, axisA[2]));
+
+    // Compute absolute values with epsilon for numerical stability
+    const float epsilon = 0.00001f;
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            absR[i][j] = glm::abs(R[i][j]) + epsilon;
+        }
+    }
+
+    // Test axes L = A0, A1, A2
+    for (int i = 0; i < 3; i++) {
+        ra = obbA.halfExtents[i];
+        rb = obbB.halfExtents[0] * absR[i][0] + obbB.halfExtents[1] * absR[i][1] + obbB.halfExtents[2] * absR[i][2];
+        if (glm::abs(t[i]) > ra + rb) {
+            std::cout << "Result: NO COLLISION (failed on A axis " << i << ")" << std::endl;
+            std::cout << "=======================\n" << std::endl;
+            return false;
+        }
+    }
+
+    // Test axes L = B0, B1, B2
+    for (int i = 0; i < 3; i++) {
+        ra = obbA.halfExtents[0] * absR[0][i] + obbA.halfExtents[1] * absR[1][i] + obbA.halfExtents[2] * absR[2][i];
+        rb = obbB.halfExtents[i];
+        if (glm::abs(t[0] * R[0][i] + t[1] * R[1][i] + t[2] * R[2][i]) > ra + rb) {
+            std::cout << "Result: NO COLLISION (failed on B axis " << i << ")" << std::endl;
+            std::cout << "=======================\n" << std::endl;
+            return false;
+        }
+    }
+
+    // Test axis L = A0 x B0
+    ra = obbA.halfExtents[1] * absR[2][0] + obbA.halfExtents[2] * absR[1][0];
+    rb = obbB.halfExtents[1] * absR[0][2] + obbB.halfExtents[2] * absR[0][1];
+    if (glm::abs(t[2] * R[1][0] - t[1] * R[2][0]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A0 x B0)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A0 x B1
+    ra = obbA.halfExtents[1] * absR[2][1] + obbA.halfExtents[2] * absR[1][1];
+    rb = obbB.halfExtents[0] * absR[0][2] + obbB.halfExtents[2] * absR[0][0];
+    if (glm::abs(t[2] * R[1][1] - t[1] * R[2][1]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A0 x B1)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A0 x B2
+    ra = obbA.halfExtents[1] * absR[2][2] + obbA.halfExtents[2] * absR[1][2];
+    rb = obbB.halfExtents[0] * absR[0][1] + obbB.halfExtents[1] * absR[0][0];
+    if (glm::abs(t[2] * R[1][2] - t[1] * R[2][2]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A0 x B2)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A1 x B0
+    ra = obbA.halfExtents[0] * absR[2][0] + obbA.halfExtents[2] * absR[0][0];
+    rb = obbB.halfExtents[1] * absR[1][2] + obbB.halfExtents[2] * absR[1][1];
+    if (glm::abs(t[0] * R[2][0] - t[2] * R[0][0]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A1 x B0)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A1 x B1
+    ra = obbA.halfExtents[0] * absR[2][1] + obbA.halfExtents[2] * absR[0][1];
+    rb = obbB.halfExtents[0] * absR[1][2] + obbB.halfExtents[2] * absR[1][0];
+    if (glm::abs(t[0] * R[2][1] - t[2] * R[0][1]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A1 x B1)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A1 x B2
+    ra = obbA.halfExtents[0] * absR[2][2] + obbA.halfExtents[2] * absR[0][2];
+    rb = obbB.halfExtents[0] * absR[1][1] + obbB.halfExtents[1] * absR[1][0];
+    if (glm::abs(t[0] * R[2][2] - t[2] * R[0][2]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A1 x B2)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A2 x B0
+    ra = obbA.halfExtents[0] * absR[1][0] + obbA.halfExtents[1] * absR[0][0];
+    rb = obbB.halfExtents[1] * absR[2][2] + obbB.halfExtents[2] * absR[2][1];
+    if (glm::abs(t[1] * R[0][0] - t[0] * R[1][0]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A2 x B0)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A2 x B1
+    ra = obbA.halfExtents[0] * absR[1][1] + obbA.halfExtents[1] * absR[0][1];
+    rb = obbB.halfExtents[0] * absR[2][2] + obbB.halfExtents[2] * absR[2][0];
+    if (glm::abs(t[1] * R[0][1] - t[0] * R[1][1]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A2 x B1)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // Test axis L = A2 x B2
+    ra = obbA.halfExtents[0] * absR[1][2] + obbA.halfExtents[1] * absR[0][2];
+    rb = obbB.halfExtents[0] * absR[2][1] + obbB.halfExtents[1] * absR[2][0];
+    if (glm::abs(t[1] * R[0][2] - t[0] * R[1][2]) > ra + rb) {
+        std::cout << "Result: NO COLLISION (failed on A2 x B2)" << std::endl;
+        std::cout << "=======================\n" << std::endl;
+        return false;
+    }
+
+    // No separating axis found - OBBs are colliding
+    std::cout << "Result: COLLISION (all 15 tests passed)" << std::endl;
+    std::cout << "=======================\n" << std::endl;
+
+    manifold.contactNormal = axisA[0];
+    manifold.contactPoints.push_back((centerA + centerB) * 0.5f);
+    manifold.penetrationDepth = 0.1f;
+
+    return true;
 }
 
 bool EC_CollisionChecks::SphereVsAABB(const Sphere& sphere, const glm::vec3& spherePos, const AABB& aabb, const glm::vec3& aabbPos, CollisionManifold& manifold)
