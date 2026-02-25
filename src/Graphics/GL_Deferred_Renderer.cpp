@@ -174,7 +174,7 @@ void GL_Deferred_Renderer::geometryPass() {
             gfx.shader->setUniform("camPos", spatial.position);
             gfx.shader->setUniform("ViewTransform", view);
             gfx.shader->setUniform("ProjTransform", projection);
-            gfx.shader->setUniform("ModelTransform", transform.worldTransform);
+            gfx.shader->setUniform("ModelTransform", transform.matrix);
 
             if (gfx.hasTextures && gfx.textureSet) {
                 gfx.shader->setUniform("hasMaterial", 1);
@@ -354,7 +354,7 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
         m_ShadowShader.activate();
         m_ShadowShader.setUniform("ViewTransform", view);
         m_ShadowShader.setUniform("ProjTransform", projection);
-        m_ShadowShader.setUniform("ModelTransform", transform.worldTransform);
+        m_ShadowShader.setUniform("ModelTransform", transform.matrix);
 
         glBindVertexArray(gfx.getMeshHandle());
         glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
@@ -411,7 +411,7 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
         m_ShadowShader.activate();
         m_ShadowShader.setUniform("ViewTransform", view);
         m_ShadowShader.setUniform("ProjTransform", projection);
-        m_ShadowShader.setUniform("ModelTransform", transform.worldTransform);
+        m_ShadowShader.setUniform("ModelTransform", transform.matrix);
 
         glBindVertexArray(gfx.getMeshHandle());
         glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);

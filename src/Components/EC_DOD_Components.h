@@ -12,9 +12,15 @@ class Shader;
 class ObjModel;
 
 struct ContactPoint {
-    glm::vec3 position;        // World space contact position
-    glm::vec3 normal;          // Contact normal (points from A to B)
-    float penetration;         // Penetration depth
+    glm::vec3 position;
+    glm::vec3 normal;
+    float penetration;
+};
+
+struct EC_DOD_Hierarchy {
+    EntityID parent = INVALID_ENTITY;
+    std::vector<EntityID> children;
+    uint32_t depth = 0;
 };
 
 struct EC_DOD_Collider {
@@ -24,63 +30,45 @@ struct EC_DOD_Collider {
         OBB,
         Capsule,
         Cylinder,
-		Frustum,
+        Frustum,
         Plane,
         None
     };
-
     Type type = Type::OBB;
-
-    // Shape parameters
-    glm::vec3 center{ 0.0f };        // Local offset from entity position
-    glm::vec3 extents{ 1.0f };       // Half-extents for box/AABB
-    float radius = 1.0f;              // For sphere/capsule/cylinder
-    float height = 2.0f;              // For capsule/cylinder
-
-    // Collision filtering
-    uint32_t collisionLayer = 1;     // What layer is this on?
-    uint32_t collisionMask = 0xFFFFFFFF;  // What layers can it collide with?
+    glm::vec3 center{ 0.0f };
+    glm::vec3 extents{ 1.0f };
+    float radius = 1.0f;
+    float height = 2.0f;
+    uint32_t collisionLayer = 1;
+    uint32_t collisionMask = 0xFFFFFFFF;
 };
-
 
 struct EC_DOD_Spatial {
     glm::vec3 position{ 0.0f };
     glm::vec3 velocity{ 0.0f };
     glm::vec3 orientation{ 0.0f };
     glm::vec3 angVelocity{ 0.0f };
-
     glm::vec3 direction{ 0.0f, 0.0f, -1.0f };
     glm::vec3 up{ 0.0f, 1.0f, 0.0f };
     glm::vec3 right{ 1.0f, 0.0f, 0.0f };
 };
 
 struct EC_DOD_Transform {
-    glm::mat4 localTransform{ 1.0f };
-    glm::mat4 worldTransform{ 1.0f };
+    glm::mat4 matrix{ 1.0f };
+    glm::vec3 scale{ 1.0f };
     bool dirty = true;
 };
 
-struct EC_DOD_Hierarchy {
-    EntityID parent = INVALID_ENTITY;
-    std::vector<EntityID> children;
-};
-
 struct EC_DOD_GraphicsData {
-    // Store names for post-load resolution
     std::string modelName;
     std::string vertShader;
     std::string fragShader;
-
-    // Actual resources (set in performPostLoadActions)
     std::shared_ptr<TextureSet> textureSet;
     std::shared_ptr<ObjModel> model;
     std::shared_ptr<Shader> shader;
-
     glm::vec4 colour{ 1.0f };
     bool hasTextures = false;
     bool visible = true;
-
-    // Helper methods
     uint32_t getMeshHandle() const { return model ? model->getHandle() : 0; }
     uint32_t getVertexCount() const { return model ? model->getVertCount() : 0; }
 };
@@ -100,7 +88,6 @@ struct EC_DOD_Light {
         Point,
         Spot
     };
-
     Type type;
     glm::vec3 position;
     glm::vec3 direction;
@@ -121,11 +108,7 @@ struct EC_DOD_EntityInfo {
 
 struct EC_DOD_ScriptData {
     bool enabled = true;
-
-    // Map of event type -> script file
     std::unordered_map<ECXEventType, std::string> handlers;
-
-    // Per-entity persistent variables
     std::unordered_map<std::string, float> floatVars;
     std::unordered_map<std::string, std::string> stringVars;
 };
