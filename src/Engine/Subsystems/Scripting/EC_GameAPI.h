@@ -26,6 +26,7 @@ namespace ScriptAPI
             return game->getEntityByUID(static_cast<uint32_t>(uid));
         }
         void toggleDebug() {
+			LOGGING::ECX_Logger::GetInstance()->LogMessage("Toggling debug mode", LOGGING::LogLevel::INFORMATION);
             if (game) game->toggleDebug();
         }
         void shutdown() {
