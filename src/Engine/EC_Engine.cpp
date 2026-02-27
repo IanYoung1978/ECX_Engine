@@ -1,5 +1,4 @@
 #include "EC_Engine.h"
-#include "Engine/Subsystems/EntityHeirarchy/EC_HeirarchySystem.h"
 #include "Engine/Subsystems/EC_SpatialSystem.h"
 #include "Engine/Subsystems/EC_TransformSystem.h"
 #include "Engine/Subsystems/EC_CameraSystem.h"
@@ -18,7 +17,6 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 {
 	m_game = &game;
 
-	m_Systems[(size_t)EC_SystemType::Hierarchy] = std::make_shared<EC_HierarchySystem>();
 	m_Systems[(size_t)EC_SystemType::Spatial] = std::make_shared<EC_SpatialSystem>();
 	m_Systems[(size_t)EC_SystemType::Transform] = std::make_shared<EC_TransformSystem>();
 	m_Systems[(size_t)EC_SystemType::Camera] = std::make_shared<EC_CameraSystem>();
@@ -35,7 +33,6 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 
 	auto task = std::make_shared<EC_PhysicsThreadTask>();
 	task->addGameRef(*m_game);
-	task->addSystem(m_Systems[(size_t)EC_SystemType::Hierarchy]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Spatial]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Transform]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Camera]);

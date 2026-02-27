@@ -43,6 +43,4 @@ enum class ECXCommandType
 	EntityStopRotation,
 	EntityStopMotion,
 	EntityStop,
-	EntitySetParent,
-	EntityClearParent,
 };

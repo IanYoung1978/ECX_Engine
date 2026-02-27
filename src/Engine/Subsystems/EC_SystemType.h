@@ -1,7 +1,6 @@
 #pragma once
 enum class EC_SystemType
 {
-	Hierarchy,
 	Spatial,
 	Transform,
 	Camera,

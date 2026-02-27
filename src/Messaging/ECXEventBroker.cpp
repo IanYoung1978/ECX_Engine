@@ -19,6 +19,7 @@ void ECXEventBroker::publish(ECXEvent& Event)
 
 void ECXEventBroker::flush()
 {
+	dequeSelector = (dequeSelector == 0) ? 1 : 0;
 	while (!queues[!dequeSelector].empty())
 	{
 		auto& listenerSet = listeners[queues[!dequeSelector].front().type];
@@ -33,7 +34,6 @@ void ECXEventBroker::flush()
 		}
 		
 	}
-	dequeSelector = (dequeSelector == 0) ? 1 : 0;
 }
 
 void ECXEventBroker::clear()

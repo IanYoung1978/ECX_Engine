@@ -13,7 +13,6 @@ enum class ECXEventType
 	EntityChangeVelocity,
 	CollisionBeginEvent,
 	CollisionEndEvent,
-	HeirarchyChanged,
 	key_up,
 	key_down,
 	key_held,

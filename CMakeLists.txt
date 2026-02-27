@@ -117,3 +117,9 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data
                 ${CMAKE_CURRENT_BINARY_DIR}/data)
+add_custom_command(
+        TARGET ECX PRE_LINK
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data
+                ${CMAKE_CURRENT_BINARY_DIR}/data
+        COMMENT "Copying data files...")
