@@ -1,31 +1,9 @@
-function onKeyUp(event,entity,game)
-
-		--local velocity = vec3(0.0,0.0,0.0)
-		--Query the game to find which keys are still held
-		--local keystate = game:getKeyState("W")
-		--if keystate == "Held" then
-		--	velocity = velocity + entity:forward()
-		--end
-		--keystate = game:getKeyState("S")
-		--if keystate == 2 then
-		--	velocity = velocity - entity:forward()
-		--end
-		--keystate = game:getKeyState("D")
-		--if keystate == 2 then
-		--	velocity = velocity + entity:right()
-		--end
-		--keystate = game:getKeyState("A")
-		--if keystate == 2 then
-		--	velocity = velocity - entity:right()
-		--end
-		--keystate = game:getKeyState("SPACE")
-		--if game:getKeyState("SPACE") == 2 then
-		--	velocity = velocity + entity:up()
-		--end
-		--keystate = game:getKeyState("C")
-		--if game:getKeyState("C") == 2 then
-		--	velocity = velocity - entity:up()
-		--end
-		--velocity = vec3.normalize(velocity * 5.0)
-		--entity.velocity = velocity
+function onKeyUp(entity, event)
+    local key = event:getKey()
+    print("Key released: " .. key)
+    if key == "P" then
+        local sphereID = game:getEntityIDByUID(101)
+        game:clearParent(sphereID)
+        print("Sphere EntityID: " .. sphereID)
+    end
 end

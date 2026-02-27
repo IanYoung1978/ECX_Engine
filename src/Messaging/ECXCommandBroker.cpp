@@ -21,19 +21,17 @@ void ECXCommandBroker::publish(ECXCommand& Command)
 
 void ECXCommandBroker::flush()
 {
-	while (!queues[!dequeSelector].empty())
-	{
-		auto& listenerSet = listeners[queues[!dequeSelector].front().type];
-		if (listenerSet.size() > 0)
-		{
-			auto Command = queues[!dequeSelector].front();
-			queues[!dequeSelector].pop_front();
-			for (auto listener : listenerSet)
-			{
-				listener->receive(Command);
-			}
-		}
+    dequeSelector = (dequeSelector == 0) ? 1 : 0;
 
-	}
-	dequeSelector = (dequeSelector == 0) ? 1 : 0;
+    while (!queues[!dequeSelector].empty())
+    {
+        auto Command = queues[!dequeSelector].front();
+        queues[!dequeSelector].pop_front();
+
+        auto& listenerSet = listeners[Command.type];
+        for (auto listener : listenerSet)
+        {
+            listener->receive(Command);
+        }
+    }
 }

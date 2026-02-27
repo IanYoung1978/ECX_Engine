@@ -40,4 +40,5 @@ private:
     static std::vector<EntityID> s_Cameras;
     static std::vector<EntityID> s_Entities;
     static std::vector<EntityID> s_Lights;
+
 };
