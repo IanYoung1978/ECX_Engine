@@ -24,7 +24,7 @@ GL_Deferred_Renderer::~GL_Deferred_Renderer() {
 
 void GL_Deferred_Renderer::init(std::shared_ptr<Window> window) {
     m_Window = window;
-
+    m_DebugRenderer.init(window);
     glm::vec3 verts[] = {
         glm::vec3(-1.0f,-1.0f,0.0f),
         glm::vec3(1.0f,-1.0f,0.0f),
@@ -115,6 +115,7 @@ void GL_Deferred_Renderer::renderScene() {
 	glowPass();
     lightPass();
     finalPass();
+    debugPass();
 }
 
 void GL_Deferred_Renderer::changeResolution(int width, int height) {
@@ -541,4 +542,33 @@ void GL_Deferred_Renderer::renderQuad() {
     glBindVertexArray(m_FS_QuadHandle);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+void GL_Deferred_Renderer::debugPass()
+{
+    if (!m_DebugRenderer.isEnabled()) return;
+
+    auto& manager = EC_DOD_EntityManager::getInstance();
+
+    auto cameras = manager.getEntitiesWithComponents({
+        std::type_index(typeid(EC_DOD_Spatial)),
+        std::type_index(typeid(EC_DOD_Camera))
+        });
+
+    for (EntityID cameraID : cameras) {
+        if (!manager.isAlive(cameraID)) continue;
+
+        const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
+        if (!camera.isActive) continue;
+
+        glm::mat4 projection = glm::perspective(
+            glm::radians(camera.fov),
+            (float)m_Window->getWidth() / m_Window->getHeight(),
+            camera.nearPlane,
+            camera.farPlane
+        );
+
+        m_DebugRenderer.render(camera.viewMatrix, projection);
+        break;
+    }
 }

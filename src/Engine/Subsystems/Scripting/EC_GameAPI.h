@@ -25,7 +25,9 @@ namespace ScriptAPI
             if (!game) return INVALID_ENTITY;
             return game->getEntityByUID(static_cast<uint32_t>(uid));
         }
-
+        void toggleDebug() {
+            if (game) game->toggleDebug();
+        }
         void shutdown() {
             if (game) game->shutDown();
         }

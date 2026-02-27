@@ -124,13 +124,13 @@ void FrameBufferSet::FinalPass()
 {
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 	if (m_SwapBuffers)
-	{
 		m_FrameBuffer2.setForReading();
-	}
 	else
 		m_FrameBuffer1.setForReading();
-	glBlitFramebuffer(0, 0, m_Width, m_Height,// Copy an area from original to screen size (full screen area)
-		0, 0, m_Width, m_Height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+	glBlitFramebuffer(0, 0, m_Width, m_Height,
+		0, 0, m_Width, m_Height,
+		GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
 }
 
 

@@ -341,6 +341,7 @@ private:
             .addFunction("shutdown", &ScriptAPI::GameAPI::shutdown)
             .addFunction("setParent", &ScriptAPI::GameAPI::setParent)
             .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
+            .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
             .endClass();
 
         luabridge::push(m_luaState, m_game);

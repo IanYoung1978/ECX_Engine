@@ -42,7 +42,7 @@ public:
     EntityID getEntityByName(const std::string& name) const;
 
     void receive(ECXCommand& command) override;
-
+    void toggleDebug();
 private:
     void buildEntityMaps();
 

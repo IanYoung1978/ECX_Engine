@@ -88,6 +88,11 @@ EntityID EC_Game::getEntityByName(const std::string& name) const
     return m_Modes[m_CurrentMode]->getEntityByName(name);
 }
 
+void EC_Game::toggleDebug()
+{
+	m_Modes[m_CurrentMode]->toggleDebug();
+}
+
 void EC_Game::shutDown()
 {
     ECXCommand command;

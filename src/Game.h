@@ -32,6 +32,7 @@ public:
     KeyState getKeyState(SDL_Scancode key);
     EntityID getEntityByUID(uint32_t uid) const;
     EntityID getEntityByName(const std::string& name) const;
+	void toggleDebug();
     ~EC_Game();
 
 private:

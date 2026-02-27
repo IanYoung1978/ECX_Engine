@@ -48,7 +48,9 @@ void EC_GameMode::update(float deltaTimeS, EC_Game& game)
 
     m_scene_renderer->renderScene();
 }
-
+void EC_GameMode::toggleDebug() {
+    m_scene_renderer->toggleDebug();
+}
 void EC_GameMode::buildEntityMaps()
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
