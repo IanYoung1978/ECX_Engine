@@ -12,6 +12,8 @@
 #include <vector>
 #include <mutex>
 #include <glm/glm.hpp>
+#include "GL_SkyboxRenderer.h"
+
 
 enum class PostProcess {
     MSAA,
@@ -42,7 +44,8 @@ private:
     void shadowSpotPass(ShadowBuffer& target, SpotLightData& light);
     void shadowPointPass(ShadowBuffer& target, LightData& light);
     void shadowLightingPass();
-
+    void skyboxPass();
+    void hdrPass();
     std::mutex m_Lock;
     LightUniformBuffer m_LightBuffer;
     FrameBufferSet m_FrameBuffer;
@@ -65,6 +68,9 @@ private:
     Shader m_ShadowPointLightShader;
     Shader m_BloomVShader;
     Shader m_BloomHShader;
+    GL_SkyboxRenderer m_SkyboxRenderer;
+    Shader m_HDRTonemapShader;
+    float m_Exposure = 0.75f;
     ShadowBuffer m_ShadowBuffer;
     glm::mat4 m_ShadowDirMatrix;
     glm::mat4 m_ShadowSpotMatrix;

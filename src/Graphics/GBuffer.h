@@ -12,6 +12,7 @@ public:
 	void setForWriting();
 	void setForReading();
 	unsigned int getGBufferTexture(FrameBufferType type);
+	unsigned int getBufferHandle() { return m_BufferHandle; }
 	~GBuffer();
 private:
 	static const int TOTAL_BUFFERS = 5;

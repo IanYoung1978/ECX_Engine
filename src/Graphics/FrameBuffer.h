@@ -15,6 +15,7 @@ public:
 	void setForReading();
 	void bindTextures();
 	unsigned int getBufferTexture();
+	unsigned int getBufferHandle() { return m_BufferHandle; }
 	~FrameBuffer();
 
 private:

@@ -14,6 +14,7 @@
 TextureManager EC_DOD_EntityFactory::s_TexManager;
 MeshManager EC_DOD_EntityFactory::s_MeshManager;
 ShaderManager EC_DOD_EntityFactory::s_ShaderManager;
+CubemapManager EC_DOD_EntityFactory::s_CubemapManager;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Cameras;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Entities;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Lights;
@@ -79,6 +80,9 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
         else if (strcmp(elem->Value(), "Hierarchy") == 0) {
             parseHierarchy(elem, entity);
         }
+        else if (strcmp(elem->Value(), "Skybox") == 0) {
+            parseSkybox(elem, entity);
+        }
         else {
             LOGGING::ECX_Logger::GetInstance()->LogMessage(
                 "Unknown component type: " + std::string(elem->Value()),
@@ -126,6 +130,15 @@ EntityID EC_DOD_EntityFactory::constructCamera(TiXmlElement& descriptor) {
 void EC_DOD_EntityFactory::performPostLoadActions() {
     s_TexManager.finalizeTextures();
     s_MeshManager.finaliseModels();
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Starting cubemap finalization...",
+        LOGGING::LogLevel::INFORMATION
+    );
+	s_CubemapManager.finalizeAll();
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Cubemap finalization complete",
+        LOGGING::LogLevel::INFORMATION
+    );
     s_ShaderManager.finaliseShaders();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
@@ -552,4 +565,19 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
         collider.collisionMask = static_cast<uint32_t>(strtoul(maskElem->GetText(), nullptr, 0));
 
     manager.addComponent(entity, collider);
+}
+void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    EC_DOD_Skybox skybox;
+
+    auto child = elem->FirstChildElement();
+    while (child) {
+        if (strcmp(child->Value(), "HDR") == 0 && child->GetText()) {
+            skybox.hdrPath = child->GetText();
+            s_CubemapManager.loadHDR(skybox.hdrPath); // phase 1: load pixels only
+        }
+        child = child->NextSiblingElement();
+    }
+
+    manager.addComponent(entity, skybox);
 }

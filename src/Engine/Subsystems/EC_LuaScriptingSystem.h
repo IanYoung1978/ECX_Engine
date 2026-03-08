@@ -298,6 +298,8 @@ private:
             .addFunction("hasParent", &ScriptAPI::EntityAPI::hasParent)
             .addFunction("getParentID", &ScriptAPI::EntityAPI::getParentID)
             .addFunction("getDepth", &ScriptAPI::EntityAPI::getDepth)
+            .addFunction("getBlendFactor", &ScriptAPI::EntityAPI::getBlendFactor)
+            .addFunction("setBlendFactor", &ScriptAPI::EntityAPI::setBlendFactor)
             .endClass()
 
             .beginClass<ScriptAPI::EventAPI>("Event")

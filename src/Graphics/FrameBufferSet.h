@@ -13,6 +13,7 @@ public:
 	void GeometryPass();
 	void LightingPass(Shader& shader);
 	void GlowPass(Shader& shader, bool first, bool last);
+	void SkyboxPass();
 	void PostProcessPass();
 	void UIPass();
 	void FinalPass();

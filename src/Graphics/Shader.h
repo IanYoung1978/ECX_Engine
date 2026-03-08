@@ -23,6 +23,7 @@ public:
 	void setSpotLight(const std::string& uniformName, const SpotLightData& data);
 	void bindTexture(int texTarget, unsigned int texHandle);
 	void bindTexture(const std::string& uniformName, int texTarget, unsigned int texHandle);
+	void bindCubemap(const std::string& uniformName, int texUnit, unsigned int texHandle);
 	bool bindAttribute(BufferType attribType, const std::string& attribName);
 	void activate();
 	int getShaderHandle();

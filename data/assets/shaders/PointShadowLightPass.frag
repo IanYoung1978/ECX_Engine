@@ -74,6 +74,7 @@ vec3 computeLightFragment(vec3 eyeVec, vec3 lightVec, vec3 normal, vec3 colour, 
 void main()
 {
 	vec4 pcolour = texture(positionMap, indata.VSTexCoord).rgba;
+	if (pcolour.a == 0.0) discard;
 	vec4 ncolour = texture(normalMap, indata.VSTexCoord).rgba;
 	vec4 dcolour = texture(colourMap, indata.VSTexCoord).rgba;
 	vec4 scolour = texture(specularMap, indata.VSTexCoord).rgba;

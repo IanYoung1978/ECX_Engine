@@ -143,6 +143,7 @@ float computeOcclusion(vec4 shadowCoords)
 void main()
 {
 	vec4 pcolour 		= texture(positionMap, indata.VSTexCoord).rgba;
+	if (pcolour.a == 0.0) discard;
 	vec4 ncolour 		= texture(normalMap, indata.VSTexCoord).rgba;
 	vec4 albedo 		= texture(AlbedoMap, indata.VSTexCoord).rgba;
 	vec3 pbr 			= texture(PBRMap, indata.VSTexCoord).rgb;

@@ -112,3 +112,11 @@ struct EC_DOD_ScriptData {
     std::unordered_map<std::string, float> floatVars;
     std::unordered_map<std::string, std::string> stringVars;
 };
+
+struct EC_DOD_Skybox {
+    std::string hdrPath;
+    std::string targetHdrPath;
+    unsigned int cubemapHandle = 0;
+    unsigned int targetCubemapHandle = 0;
+    float blendFactor = 1.0f;
+};

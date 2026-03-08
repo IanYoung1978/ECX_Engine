@@ -19,57 +19,49 @@ GBuffer::GBuffer()
 
 bool GBuffer::init(int width, int height)
 {
-	//crate fbo
-	glGenFramebuffers(1, &m_BufferHandle);
-	glBindFramebuffer(GL_FRAMEBUFFER, m_BufferHandle);
+    glGenFramebuffers(1, &m_BufferHandle);
+    glBindFramebuffer(GL_FRAMEBUFFER, m_BufferHandle);
+    glGenTextures(TOTAL_BUFFERS, &m_Buffers[0]);
 
-	glGenTextures(TOTAL_BUFFERS, &m_Buffers[0]);
+    for (int i = 0; i < TOTAL_BUFFERS; i++)
+    {
+        glBindTexture(GL_TEXTURE_2D, m_Buffers[i]);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER,
+            m_DrawBuffers[i],
+            GL_TEXTURE_2D,
+            m_Buffers[i],
+            0);
+    }
 
-	for (int i = 0; i < TOTAL_BUFFERS; i++)
-	{
-		glBindTexture(GL_TEXTURE_2D, m_Buffers[i]);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glFramebufferTexture2D(	GL_DRAW_FRAMEBUFFER, 
-								m_DrawBuffers[i], 
-								GL_TEXTURE_2D, 
-								m_Buffers[i], 
-								0);
-	}
-	glGenTextures(1, &m_DepthBuffer);
-	glBindTexture(GL_TEXTURE_2D, m_DepthBuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
-	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_R_TO_TEXTURE);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_DepthBuffer, 0);
-	////bind it for setting parameters
-	//glBindRenderbuffer(GL_RENDERBUFFER, m_DepthBuffer);
-	////prepare render buffer memory space
-	//glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT32F, width, height);
-	//// attach depth buffer to fbo
-	//glFramebufferRenderbuffer(	GL_DRAW_FRAMEBUFFER,
-	//							GL_DEPTH_ATTACHMENT, 
-	//							GL_RENDERBUFFER, 
-	//							m_DepthBuffer);
-	glDrawBuffer(GL_NONE);
-	glReadBuffer(GL_NONE);
-	GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
-	if (Status != GL_FRAMEBUFFER_COMPLETE) {
-		printf("FB error, status: 0x%x\n", Status);
-		LOGGING::ECX_Logger::GetInstance()->LogMessage("framebuffer error ", LOGGING::LogLevel::CRITICAL);
-		return false;
-	}
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	m_Width = width;
-	m_Height = height;
-	return true;
+    glGenTextures(1, &m_DepthBuffer);
+    glBindTexture(GL_TEXTURE_2D, m_DepthBuffer);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, m_DepthBuffer, 0);
+
+    glDrawBuffer(GL_NONE);
+    glReadBuffer(GL_NONE);
+
+    GLenum Status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (Status != GL_FRAMEBUFFER_COMPLETE) {
+        printf("FB error, status: 0x%x\n", Status);
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("framebuffer error ", LOGGING::LogLevel::CRITICAL);
+        return false;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_Width = width;
+    m_Height = height;
+    return true;
 }
 
 void GBuffer::resize(int width, int height)

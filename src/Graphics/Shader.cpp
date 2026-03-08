@@ -126,7 +126,12 @@ bool Shader::loadShader(char * vs, int vLength, char * fs, int fLength)
 
 	return true;
 }
-
+void Shader::bindCubemap(const std::string& uniformName, int texUnit, unsigned int texHandle)
+{
+	setUniform(uniformName, texUnit);
+	glActiveTexture(GL_TEXTURE0 + texUnit);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, texHandle);
+}
 void Shader::setUniform(const std::string & uniformName, const glm::mat4 & matrix)
 {
 	int uniform = searchUniform(uniformName);
