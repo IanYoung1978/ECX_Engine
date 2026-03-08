@@ -12,6 +12,19 @@ namespace ScriptAPI
 
         EntityAPI(EntityID id) : entityID(id) {}
 
+        float getBlendFactor() {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return 1.0f;
+            if (!mgr.hasComponent<EC_DOD_Skybox>(entityID)) return 1.0f;
+            return mgr.getComponent<EC_DOD_Skybox>(entityID).blendFactor;
+        }
+
+        void setBlendFactor(float factor) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            if (!mgr.isAlive(entityID)) return;
+            if (!mgr.hasComponent<EC_DOD_Skybox>(entityID)) return;
+            mgr.getComponent<EC_DOD_Skybox>(entityID).blendFactor = glm::clamp(factor, 0.0f, 1.0f);
+        }
         std::string getName() {
             auto& mgr = EC_DOD_EntityManager::getInstance();
             if (!mgr.isAlive(entityID)) return "";

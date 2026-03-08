@@ -4,6 +4,7 @@
 #include "Graphics/TextureManager.h"
 #include "Graphics/ShaderManager.h"
 #include "Graphics/MeshManager.h"
+#include "Graphics/CubemapManager.h"
 #include <vector>
 #include <string>
 #include <cstdint>
@@ -23,6 +24,7 @@ public:
     const std::vector<EntityID>& getLights() const;
     static TextureManager s_TexManager;
     static ShaderManager s_ShaderManager;
+    static CubemapManager s_CubemapManager;
     static MeshManager s_MeshManager;
 private:
     glm::vec3 parseVec3(const std::string& text);
@@ -35,6 +37,7 @@ private:
     void parseScript(TiXmlElement* elem, EntityID entity);
     void parseCollider(TiXmlElement* elem, EntityID entity);
     void parseHierarchy(TiXmlElement* elem, EntityID entity);
+    void parseSkybox(TiXmlElement* elem, EntityID entity);
     void resolveHierarchyReferences();
     ECXEventType getEventTypeFromHandlerName(const std::string& name);
     static std::vector<EntityID> s_Cameras;

@@ -7,6 +7,7 @@
 #include "Window/Window.h"
 #include "Graphics/ObjModel.h"
 #include "Graphics/TextureSet.h"
+#include <chrono>
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
     : m_MSAA(false)
@@ -25,6 +26,7 @@ GL_Deferred_Renderer::~GL_Deferred_Renderer() {
 void GL_Deferred_Renderer::init(std::shared_ptr<Window> window) {
     m_Window = window;
     m_DebugRenderer.init(window);
+	m_SkyboxRenderer.init(window);
     glm::vec3 verts[] = {
         glm::vec3(-1.0f,-1.0f,0.0f),
         glm::vec3(1.0f,-1.0f,0.0f),
@@ -95,7 +97,20 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window) {
         !m_BloomVShader.loadShader(std::string("data/assets/shaders/final.vert"), std::string("data/assets/shaders/bloomV.frag"))) {
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load bloom shader", LOGGING::LogLevel::CRITICAL);
     }
-
+    if (!m_HDRTonemapShader.loadShader(
+        "data/assets/shaders/hdr_tonemap.vert",
+        "data/assets/shaders/hdr_tonemap.frag"))
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Failed to load HDR tonemap shader", LOGGING::LogLevel::CRITICAL);
+    }
+    else
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "HDR tonemap shader loaded, handle=" +
+            std::to_string(m_HDRTonemapShader.getShaderHandle()),
+            LOGGING::LogLevel::INFORMATION);
+    }
     m_FrameBuffer.init(window->getWidth(), window->getHeight());
     m_LightBuffer.init((*m_LightPassShader));
     m_ShadowBuffer.init(2048, 2048);
@@ -112,12 +127,45 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window) {
 void GL_Deferred_Renderer::renderScene() {
     m_FrameBuffer.initFrame();
     geometryPass();
-	glowPass();
+    glowPass();
     lightPass();
+    hdrPass();      // add here, before finalPass
     finalPass();
+    skyboxPass();
     debugPass();
 }
+void GL_Deferred_Renderer::hdrPass()
+{
+    m_HDRTonemapShader.activate();
+    m_FrameBuffer.PostProcessPass();
+    m_HDRTonemapShader.setUniform("exposure", m_Exposure);
+    renderQuad();
+}
+void GL_Deferred_Renderer::skyboxPass()
+{
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    auto cameras = manager.getEntitiesWithComponents({
+        std::type_index(typeid(EC_DOD_Spatial)),
+        std::type_index(typeid(EC_DOD_Camera))
+        });
 
+    for (EntityID cameraID : cameras) {
+        if (!manager.isAlive(cameraID)) continue;
+        const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
+        if (!camera.isActive) continue;
+
+        glm::mat4 projection = glm::perspective(
+            glm::radians(camera.fov),
+            (float)m_Window->getWidth() / m_Window->getHeight(),
+            camera.nearPlane,
+            camera.farPlane
+        );
+
+        m_FrameBuffer.SkyboxPass();
+        m_SkyboxRenderer.render(camera.viewMatrix, projection);
+        break;
+    }
+}
 void GL_Deferred_Renderer::changeResolution(int width, int height) {
     m_FrameBuffer.resize(width, height);
 }

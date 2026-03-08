@@ -42,7 +42,6 @@ void FrameBufferSet::GeometryPass()
 
 void FrameBufferSet::LightingPass(Shader& shader)
 {
-	m_FrameBuffer1.initFrame();
 	m_GBuffer.setForReading();
 	m_FrameBuffer1.setForWriting();
 	shader.bindTexture(("positionMap"), 0, m_GBuffer.getGBufferTexture(FrameBufferType::Position));
@@ -122,18 +121,27 @@ void FrameBufferSet::UIPass()
 
 void FrameBufferSet::FinalPass()
 {
+	// Blit colour to backbuffer
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_SwapBuffers ?
+		m_FrameBuffer2.getBufferHandle() : m_FrameBuffer1.getBufferHandle());
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	if (m_SwapBuffers)
-		m_FrameBuffer2.setForReading();
-	else
-		m_FrameBuffer1.setForReading();
-
 	glBlitFramebuffer(0, 0, m_Width, m_Height,
 		0, 0, m_Width, m_Height,
-		GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
-}
+		GL_COLOR_BUFFER_BIT, GL_NEAREST);
 
+	// Blit GBuffer depth to backbuffer for skybox depth testing
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_GBuffer.getBufferHandle());
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glBlitFramebuffer(0, 0, m_Width, m_Height,
+		0, 0, m_Width, m_Height,
+		GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+}
 
 FrameBufferSet::~FrameBufferSet()
 {
+}
+void FrameBufferSet::SkyboxPass()
+{
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glViewport(0, 0, m_Width, m_Height);
 }
