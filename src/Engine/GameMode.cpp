@@ -21,7 +21,7 @@ void EC_GameMode::init(EC_Game& game, std::string& config, ECXMessenger& messeng
     messenger.Subscribe(*this, ECXCommandType::SystemStart);
     messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
     m_scene_renderer = std::make_unique<GL_Deferred_Renderer>();
-    m_scene_renderer->init(game.getWindow());
+    m_scene_renderer->init(game.getWindow(), messenger);
     m_loader = std::make_shared<EC_DOD_LoadingWorker>();
     m_ThreadManager.addTask(m_loader);
     m_ThreadManager.executeTasks();

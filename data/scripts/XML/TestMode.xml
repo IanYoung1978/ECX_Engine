@@ -5,5 +5,5 @@
 	<GameWorlds filename="data/scripts/XML/GameWorlds.xml"></GameWorlds>
 	<!--<GameWorlds filename="data/scripts/XML/HeirarchyTest.xml"></GameWorlds>-->
 	<!--<GameWorlds filename="data/scripts/XML/CollisionTest.xml"></GameWorlds>-->
-	<!--<GraphicsSettings filename="data/scripts/XML/TestModeRenderer.xml></GraphicsSettings>-->
+	<GraphicsSettings filename="data/scripts/XML/GraphicsSettings.xml"/>
 </GameMode>

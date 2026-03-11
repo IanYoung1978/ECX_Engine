@@ -5,7 +5,7 @@
 #include "Engine/Subsystems/Scripting/EC_EntityAPI.h"
 #include <string>
 #include <algorithm>
-
+#include "Messaging/ECXMessenger.h"
 class EC_Game;
 
 namespace ScriptAPI
@@ -14,7 +14,8 @@ namespace ScriptAPI
     {
         EC_Game* game;
 
-        GameAPI(EC_Game* g) : game(g) {}
+        ECXMessenger* messenger;
+        GameAPI(EC_Game* g, ECXMessenger& m) : game(g), messenger(&m) {}
 
         EntityAPI getEntityByName(const std::string& name) {
             if (!game) return EntityAPI(INVALID_ENTITY);
@@ -24,10 +25,6 @@ namespace ScriptAPI
         unsigned int getEntityIDByUID(unsigned int uid) {
             if (!game) return INVALID_ENTITY;
             return game->getEntityByUID(static_cast<uint32_t>(uid));
-        }
-        void toggleDebug() {
-			LOGGING::ECX_Logger::GetInstance()->LogMessage("Toggling debug mode", LOGGING::LogLevel::INFORMATION);
-            if (game) game->toggleDebug();
         }
         void shutdown() {
             if (game) game->shutDown();
@@ -101,7 +98,19 @@ namespace ScriptAPI
             if (mgr.hasComponent<EC_DOD_Transform>(child))
                 mgr.getComponent<EC_DOD_Transform>(child).dirty = true;
         }
-
+        void setExposure(float exposure) {
+            if (!messenger) return;
+            ECXCommand cmd;
+            cmd.type = ECXCommandType::GraphicsChangeHDRExposure;
+            cmd.args[0] = exposure;
+            messenger->publish(cmd);
+        }
+        void toggleDebug() {
+            if (!messenger) return;
+            ECXCommand cmd;
+            cmd.type = ECXCommandType::GraphicsToggleDebug;
+            messenger->publish(cmd);
+		}
     private:
         void updateDepth(EntityID entity, uint32_t depth) {
             auto& mgr = EC_DOD_EntityManager::getInstance();

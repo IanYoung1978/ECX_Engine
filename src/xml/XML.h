@@ -75,6 +75,10 @@ namespace XML
 					//game world data
 					settings.game_world_data = child->FirstAttribute()->Value();
 				}
+				else if (strcmp(child->Value(), "GraphicsSettings") == 0)
+				{
+					settings.graphics_settings = child->FirstAttribute()->Value();
+				}
 				child = child->NextSiblingElement();
 			}
 			game = game->NextSiblingElement();
@@ -161,6 +165,23 @@ namespace XML
 				}
 				child = child->NextSiblingElement();
 			}
+		}
+		return true;
+	}
+	inline bool loadGraphicsSettings(const std::string& file, float& exposure)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+		auto child = root->FirstChildElement();
+		while (child)
+		{
+			if (strcmp(child->Value(), "Exposure") == 0 && child->GetText())
+				exposure = std::stof(child->GetText());
+			child = child->NextSiblingElement();
 		}
 		return true;
 	}

@@ -12,6 +12,8 @@ PBR_TextureSet::PBR_TextureSet()
 	m_Parallax = 0;
 	m_Metallic = 0;
 	m_AO = 0;
+	m_ParallaxBias = 0.001f;
+	m_ParallaxScale = 0.02f;
 }
 
 PBR_TextureSet::~PBR_TextureSet()
@@ -87,10 +89,12 @@ void PBR_TextureSet::bindTextures(std::shared_ptr<Shader>& shader)
 {
 	shader->setUniform("hasMaterial", 1);
 	shader->bindTexture("colourMap", 0, m_Albedo);
-	shader->bindTexture("normalMap",1, m_Normal);
-	shader->bindTexture("heightMap",2, m_Parallax);
-	shader->bindTexture("glowMap",3, m_Glow);
-	shader->bindTexture("smoothnessMap",4, m_Smoothness);
-	shader->bindTexture("metalMap",5, m_Metallic);
-	shader->bindTexture("AOMap",6, m_AO);
+	shader->bindTexture("normalMap", 1, m_Normal);
+	shader->bindTexture("heightMap", 2, m_Parallax);
+	shader->bindTexture("glowMap", 3, m_Glow);
+	shader->bindTexture("smoothnessMap", 4, m_Smoothness);
+	shader->bindTexture("metalMap", 5, m_Metallic);
+	shader->bindTexture("AOMap", 6, m_AO);
+	shader->setUniform("parallaxScale", m_ParallaxScale);
+	shader->setUniform("parallaxBias", m_ParallaxBias);
 }

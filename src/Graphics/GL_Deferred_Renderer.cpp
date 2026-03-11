@@ -8,6 +8,7 @@
 #include "Graphics/ObjModel.h"
 #include "Graphics/TextureSet.h"
 #include <chrono>
+#include "Messaging/ECXMessenger.h"
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
     : m_MSAA(false)
@@ -22,8 +23,19 @@ GL_Deferred_Renderer::GL_Deferred_Renderer()
 
 GL_Deferred_Renderer::~GL_Deferred_Renderer() {
 }
+void GL_Deferred_Renderer::receive(ECXCommand& command)
+{
+    if (command.type == ECXCommandType::GraphicsChangeHDRExposure)
+        m_Exposure = std::any_cast<float>(command.args[0]);
+    else if (command.type == ECXCommandType::GraphicsToggleDebug)
+        m_DebugRenderer.toggle();
+}
 
-void GL_Deferred_Renderer::init(std::shared_ptr<Window> window) {
+ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger & messenger) 
+ {
+    messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
+    messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
+
     m_Window = window;
     m_DebugRenderer.init(window);
 	m_SkyboxRenderer.init(window);

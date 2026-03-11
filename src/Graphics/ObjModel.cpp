@@ -30,8 +30,12 @@ bool ObjModel::loadModel(const std::string& filename)
 {
 	Assimp::Importer v_assimpImporter;	// Handle for importing the model
 
-	const aiScene* v_assimpScene = v_assimpImporter.ReadFile(filename,				// Load the model from file
-		aiProcess_CalcTangentSpace | aiProcess_Triangulate | aiProcess_SortByPType);	// and set post-processing flags
+	const aiScene* v_assimpScene = v_assimpImporter.ReadFile(filename,
+		aiProcess_CalcTangentSpace |
+		aiProcess_Triangulate |
+		aiProcess_SortByPType |
+		aiProcess_JoinIdenticalVertices |
+		aiProcess_GenSmoothNormals);
 
 	if (!v_assimpScene)	// Check if loading was successful
 		return false;

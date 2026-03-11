@@ -11,6 +11,8 @@ public:
 	virtual void setTexture(TextureID id, std::string& name);
 	virtual MaterialType getMaterialType() override;
 	virtual void bindTextures(std::shared_ptr<Shader>& shader) override;
+	void setParallaxScale(float scale) { m_ParallaxScale = scale; }
+	void setParallaxBias(float bias) { m_ParallaxBias = bias; }
 private:
 	unsigned int m_Albedo;
 	unsigned int m_Smoothness;
@@ -20,6 +22,8 @@ private:
 	unsigned int m_AO;
 	unsigned int m_Metallic;
 	bool m_Reflection;
+	float m_ParallaxScale;
+	float m_ParallaxBias;
 	std::string m_AlbedoName;
 	std::string m_SmoothnessName;
 	std::string m_GlowName;

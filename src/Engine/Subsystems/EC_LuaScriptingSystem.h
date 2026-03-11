@@ -62,7 +62,7 @@ public:
         };
         messenger.Subscribe(*this, allTypes);
 
-        m_game = new ScriptAPI::GameAPI(&game);
+        m_game = new ScriptAPI::GameAPI(&game, messenger);
 
         m_luaState = luaL_newstate();
         luaL_openlibs(m_luaState);
@@ -344,6 +344,7 @@ private:
             .addFunction("setParent", &ScriptAPI::GameAPI::setParent)
             .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
             .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
+            .addFunction("setExposure", &ScriptAPI::GameAPI::setExposure)
             .endClass();
 
         luabridge::push(m_luaState, m_game);

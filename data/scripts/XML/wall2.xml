@@ -12,11 +12,13 @@
 		<Gfx>
 			<PBRMaterial>
 				<Albedo>data/assets/Images/bricks/bricks_diffuseOriginal.png</Albedo>
-				<Normal>data/assets/Images/bricks/bricks_normal.png</Normal>
-				<Smoothness>data/assets/Images/bricks/bricks_normal.png</Smoothness>
+				<Normal>data/assets/Images/bricks/bricks_normal-ogl.png</Normal>
+				<Smoothness>data/assets/Images/bricks/bricks_normal-ogl.png</Smoothness>
 				<Height>data/assets/Images/bricks/bricks_height.png</Height>
 				<Metallic>data/assets/Images/bricks/bricks_metallic.png</Metallic>
 				<AO>data/assets/Images/bricks/bricks_ao.png</AO>
+				<ParallaxScale>0.01</ParallaxScale>
+				<ParallaxBias>0.002</ParallaxBias>
 			</PBRMaterial>
 			<Model>data/assets/models/plane.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>

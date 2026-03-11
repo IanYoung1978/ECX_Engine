@@ -13,7 +13,7 @@
 #include <mutex>
 #include <glm/glm.hpp>
 #include "GL_SkyboxRenderer.h"
-
+#include "Messaging/ICommandListener.h"
 
 enum class PostProcess {
     MSAA,
@@ -22,15 +22,16 @@ enum class PostProcess {
     NumProcesses
 };
 
-class GL_Deferred_Renderer : public Renderer {
+class GL_Deferred_Renderer : public Renderer, public ICommandListener {
 public:
     GL_Deferred_Renderer();
     virtual ~GL_Deferred_Renderer();
-    virtual void init(std::shared_ptr<Window> window) override;
+    virtual void init(std::shared_ptr<Window> window, ECXMessenger& messenger);
+    virtual void receive(ECXCommand& command) override;
     virtual void renderScene() override;
     virtual void changeResolution(int width, int height) override;
-    virtual void toggleDebug() override { m_DebugRenderer.toggle(); }
-
+    void setExposure(float exposure) { m_Exposure = exposure; }
+    float getExposure() const { return m_Exposure; }
 private:
     void geometryPass();
     void lightPass();

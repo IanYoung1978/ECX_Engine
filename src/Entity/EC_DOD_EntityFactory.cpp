@@ -312,29 +312,53 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
             }
         }
         else if (strcmp(child->Value(), "PBRMaterial") == 0) {
-            gfx.textureSet = std::make_shared<PBR_TextureSet>();
+            auto pbrSet = std::make_shared<PBR_TextureSet>();
+            gfx.textureSet = pbrSet;
             gfx.hasTextures = true;
 
             auto child1 = child->FirstChildElement();
             while (child1 != nullptr) {
-                std::string texName = child1->GetText();
-                s_TexManager.loadTexture(texName);
-
-                if (strcmp(child1->Value(), "Albedo") == 0)
+                if (strcmp(child1->Value(), "Albedo") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::Albedo, texName);
-                else if (strcmp(child1->Value(), "Normal") == 0)
+                }
+                else if (strcmp(child1->Value(), "Normal") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::Normal, texName);
-                else if (strcmp(child1->Value(), "Smoothness") == 0)
+                }
+                else if (strcmp(child1->Value(), "Smoothness") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::Smoothness, texName);
-                else if (strcmp(child1->Value(), "Height") == 0)
+                }
+                else if (strcmp(child1->Value(), "Height") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::Parallax, texName);
-                else if (strcmp(child1->Value(), "Emissive") == 0)
+                }
+                else if (strcmp(child1->Value(), "Emissive") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::Glow, texName);
-                else if (strcmp(child1->Value(), "Metallic") == 0)
+                }
+                else if (strcmp(child1->Value(), "Metallic") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::Metallic, texName);
-                else if (strcmp(child1->Value(), "AO") == 0)
+                }
+                else if (strcmp(child1->Value(), "AO") == 0) {
+                    std::string texName = child1->GetText();
+                    s_TexManager.loadTexture(texName);
                     gfx.textureSet->setTexture(TextureID::AO, texName);
-
+                }
+                else if (strcmp(child1->Value(), "ParallaxScale") == 0 && child1->GetText()) {
+                    pbrSet->setParallaxScale(std::stof(child1->GetText()));
+                }
+                else if (strcmp(child1->Value(), "ParallaxBias") == 0 && child1->GetText()) {
+                    pbrSet->setParallaxBias(std::stof(child1->GetText()));
+                }
                 child1 = child1->NextSiblingElement();
             }
         }

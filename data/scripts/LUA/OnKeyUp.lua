@@ -8,4 +8,10 @@ function onKeyUp(entity, event)
     if key == "F1" then
         game:toggleDebug()
     end
+    if key == "F2" then
+        game:setExposure(0.5)
+    end
+    if key == "F3" then
+        game:setExposure(1.0)
+    end
 end

@@ -14,6 +14,8 @@ layout (location = 2) out vec4 albedo;
 layout (location = 3) out vec4 PBR;
 layout (location = 4) out vec4 glow;
 uniform int hasMaterial;
+uniform float parallaxScale;
+uniform float parallaxBias;
 in xferBlock
 {
     vec3 TSViewPos; 
@@ -34,13 +36,13 @@ vec2 parallaxMapping(vec2 texCoords, vec3 viewDir)
     float currentLayerDepth = 0.0;
 
     // Fixed: clamp division, scale only (no bias on displacement)
-    vec2 P = clamp(viewDir.xy / max(viewDir.z, 0.001), -2.0, 2.0) * 0.05;
+    vec2 P = clamp(viewDir.xy / max(viewDir.z, 0.001), -2.0, 2.0) * parallaxScale;
     P.y *= -1.0;
     vec2 deltaTexCoords = P / numLayers;
 
     vec2 currentTexCoords = texCoords;
     // Fixed: bias applied to depth comparison only
-    float currentDepthMapValue = 1.0 - texture(heightMap, currentTexCoords).r + 0.001;
+    float currentDepthMapValue = 1.0 - texture(heightMap, currentTexCoords).r + parallaxBias;
 
     // Fixed: capped for loop instead of while
     for (int i = 0; i < int(maxLayers); i++)
@@ -53,7 +55,7 @@ vec2 parallaxMapping(vec2 texCoords, vec3 viewDir)
 
     vec2 prevTexCoords = currentTexCoords + deltaTexCoords;
     float afterDepth  = currentDepthMapValue - currentLayerDepth;
-    float beforeDepth = 1.0 - texture(heightMap, prevTexCoords).r + 0.001 - currentLayerDepth + layerDepth;
+    float beforeDepth = 1.0 - texture(heightMap, prevTexCoords).r + parallaxBias - currentLayerDepth + layerDepth;
 
     float weight = afterDepth / (afterDepth - beforeDepth);
     return prevTexCoords * weight + currentTexCoords * (1.0 - weight);
