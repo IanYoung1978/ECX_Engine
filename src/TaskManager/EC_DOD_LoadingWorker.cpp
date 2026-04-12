@@ -214,15 +214,13 @@ bool EC_DOD_LoadingWorker::loadEntityFile(const std::string& filename) {
 
 bool EC_DOD_LoadingWorker::loadSceneFile(const std::string& filename) {
     TiXmlDocument doc(filename.c_str());
-
-    if (!doc.LoadFile()) {
-        return false;
-    }
-
+    if (!doc.LoadFile()) return false;
     TiXmlElement* root = doc.FirstChildElement();
-    if (!root || strcmp(root->Value(), "Scene") != 0) {
-        return false;
-    }
+    if (!root || strcmp(root->Value(), "Scene") != 0) return false;
+
+    TiXmlElement* manifest = root->FirstChildElement("Manifest");
+    if (manifest)
+        EC_DOD_EntityFactory::parseManifest(manifest);
 
     parseSceneEntities(root);
     return true;

@@ -22,11 +22,17 @@ public:
     const std::vector<EntityID>& getCameras() const;
     const std::vector<EntityID>& getEntities() const;
     const std::vector<EntityID>& getLights() const;
+
+    static void parseManifest(TiXmlElement* manifestElem);
+
     static TextureManager s_TexManager;
     static ShaderManager s_ShaderManager;
     static CubemapManager s_CubemapManager;
     static MeshManager s_MeshManager;
+
 private:
+    struct ShaderPaths { std::string vert; std::string frag; };
+
     glm::vec3 parseVec3(const std::string& text);
     glm::vec4 parseVec4(const std::string& text);
     void parseSpatial(TiXmlElement* elem, EntityID entity);
@@ -40,8 +46,15 @@ private:
     void parseSkybox(TiXmlElement* elem, EntityID entity);
     void resolveHierarchyReferences();
     ECXEventType getEventTypeFromHandlerName(const std::string& name);
+
     static std::vector<EntityID> s_Cameras;
     static std::vector<EntityID> s_Entities;
     static std::vector<EntityID> s_Lights;
 
+    static std::unordered_map<std::string, std::string> s_HDRAliases;
+    static std::unordered_map<std::string, std::string> s_MeshAliases;
+    static std::unordered_map<std::string, ShaderPaths> s_ShaderAliases;
+    static std::unordered_map<std::string, std::string> s_ScriptAliases;
+    static std::unordered_map<std::string, TiXmlElement*> s_MaterialElements;
+    static TiXmlDocument s_ManifestDoc;
 };
