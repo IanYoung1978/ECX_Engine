@@ -204,6 +204,10 @@ void EC_DOD_EntityFactory::performPostLoadActions() {
                     LOGGING::ECX_Logger::GetInstance()->LogMessage(
                         "Failed to get model: " + gfx.modelName,
                         LOGGING::LogLevel::SEVERE);
+                else
+                    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                        "Got model: " + gfx.modelName,
+                        LOGGING::LogLevel::INFORMATION);
             }
 
             if (!gfx.vertShader.empty() && !gfx.fragShader.empty()) {

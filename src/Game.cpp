@@ -3,11 +3,10 @@
 #include "xml/XML.h"
 #include "Engine/Keyboard.h"
 #include "Engine/Config.h"
-#include "Engine/GameMode.h"
 #include "Logging/ECX_Logging.h"
 #include "Components/EC_DOD_Components.h"
 
-EC_Game::EC_Game() : m_Running(true), m_CurrentMode(0) {}
+EC_Game::EC_Game() : m_Running(true) {}
 
 Game_Error EC_Game::init(const std::string& configurationFilename)
 {
@@ -37,17 +36,12 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
     m_Controls->init(m_Messenger, *this);
 
     for (auto& s : game_settings.GameModes)
-    {
-        auto mode = std::make_unique<EC_GameMode>();
-        m_Modes.push_back(std::move(mode));
-        m_Modes.back()->init(*this, s, m_Messenger);
-    }
+        m_SceneManager.init(*this, s, m_Messenger);
 
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
     m_Running = true;
     m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
-
     LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
     return Game_Error::NO_ERROR;
 }
@@ -55,8 +49,6 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
 Game_Error EC_Game::run()
 {
     SDL_Event e;
-    m_CurrentMode = 0;
-
     ECXCommand command;
     command.type = ECXCommandType::SystemStart;
     m_Messenger.publish(command);
@@ -80,17 +72,17 @@ Game_Error EC_Game::run()
 
 EntityID EC_Game::getEntityByUID(uint32_t uid) const
 {
-    return m_Modes[m_CurrentMode]->getEntityByUID(uid);
+    return m_SceneManager.getEntityByUID(uid);
 }
 
 EntityID EC_Game::getEntityByName(const std::string& name) const
 {
-    return m_Modes[m_CurrentMode]->getEntityByName(name);
+    return m_SceneManager.getEntityByName(name);
 }
 
 void EC_Game::toggleDebug()
 {
-	m_Modes[m_CurrentMode]->toggleDebug();
+    m_SceneManager.toggleDebug();
 }
 
 void EC_Game::shutDown()
@@ -105,15 +97,10 @@ void EC_Game::update(const float& deltaTimeS)
     if (m_Running)
     {
         m_Messenger.flush();
-        m_Modes[m_CurrentMode]->update(deltaTimeS, *this);
+        m_SceneManager.update(deltaTimeS, *this);
         m_Controls->update(deltaTimeS, *this);
         m_Window->present();
     }
-}
-
-void EC_Game::changeMode(Game_Mode mode)
-{
-    m_CurrentMode = (size_t)mode;
 }
 
 KeyState EC_Game::getKeyState(SDL_Scancode key)
