@@ -21,31 +21,31 @@ enum class PostProcess {
     DOF,
     NumProcesses
 };
-
+class EC_GameScene;
 class GL_Deferred_Renderer : public Renderer, public ICommandListener {
 public:
     GL_Deferred_Renderer();
     virtual ~GL_Deferred_Renderer();
     virtual void init(std::shared_ptr<Window> window, ECXMessenger& messenger);
     virtual void receive(ECXCommand& command) override;
-    virtual void renderScene() override;
+    virtual void renderScene(EC_GameScene& scene) override;
     virtual void changeResolution(int width, int height) override;
     void setExposure(float exposure) { m_Exposure = exposure; }
     float getExposure() const { return m_Exposure; }
 private:
-    void geometryPass();
-    void lightPass();
+    void geometryPass(EC_GameScene& scene);
+    void lightPass(EC_GameScene& scene);
+    void updateLights(EC_GameScene& scene);
+    void shadowDirPass(ShadowBuffer& target, DirLightData& light, EC_GameScene& scene);
+    void shadowSpotPass(ShadowBuffer& target, SpotLightData& light, EC_GameScene& scene);
+    void shadowPointPass(ShadowBuffer& target, LightData& light);
+    void shadowLightingPass(EC_GameScene& scene);
+    void skyboxPass(EC_GameScene& scene);
+    void debugPass(EC_GameScene& scene);
     void postProcess();
     void glowPass();
     void renderQuad();
     void finalPass();
-    void debugPass();
-    void updateLights();
-    void shadowDirPass(ShadowBuffer& target, DirLightData& light);
-    void shadowSpotPass(ShadowBuffer& target, SpotLightData& light);
-    void shadowPointPass(ShadowBuffer& target, LightData& light);
-    void shadowLightingPass();
-    void skyboxPass();
     void hdrPass();
     std::mutex m_Lock;
     LightUniformBuffer m_LightBuffer;

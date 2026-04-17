@@ -1,12 +1,11 @@
 #pragma once
 #include <memory>
 #include <vector>
-#include "Engine/GameMode.h"
+#include "SceneManager/EC_SceneManager.h"
 #include "Window/Window.h"
 #include "Engine/Timer.h"
 #include "Engine/Controller.h"
 #include "Engine/Subsystems/ControlSystem.h"
-#include "Engine/EC_Engine.h"
 #include "Messaging/ECXMessenger.h"
 #include <mutex>
 #include "TaskManager/EC_ThreadManager.h"
@@ -28,20 +27,17 @@ public:
     Game_Error run();
     void shutDown();
     void update(const float& deltaTimeS);
-    void changeMode(Game_Mode mode);
     KeyState getKeyState(SDL_Scancode key);
     EntityID getEntityByUID(uint32_t uid) const;
     EntityID getEntityByName(const std::string& name) const;
-	void toggleDebug();
+    void toggleDebug();
+    std::shared_ptr<Window> getWindow();
     ~EC_Game();
 
 private:
-    friend class EC_GameMode;
     ECXMessenger m_Messenger;
-    std::shared_ptr<Window> getWindow();
     std::shared_ptr<ControlSystem> getControls();
-    size_t m_CurrentMode;
-    std::vector<std::unique_ptr<EC_GameMode>> m_Modes;
+    EC_SceneManager m_SceneManager;
     std::shared_ptr<Window> m_Window;
     std::unique_ptr<Timer> m_Timer;
     std::shared_ptr<ControlSystem> m_Controls;

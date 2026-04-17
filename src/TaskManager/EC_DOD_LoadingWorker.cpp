@@ -1,5 +1,7 @@
 #include "EC_DOD_LoadingWorker.h"
 #include "Entity/EC_DOD_EntityFactory.h"
+#include "SceneManager/EC_GameScene.h"
+#include "Components/EC_DOD_Components.h"
 #include "xml/tinyxml.h"
 #include "Logging/ECX_Logging.h"
 
@@ -17,32 +19,27 @@ EC_DOD_LoadingWorker::~EC_DOD_LoadingWorker() {
     shutdown();
 }
 
-void EC_DOD_LoadingWorker::scheduleEntity(const std::string& filename) {
+void EC_DOD_LoadingWorker::scheduleEntity(const std::string& filename, EC_GameScene* scene) {
     {
         std::lock_guard<std::mutex> queueLock(m_QueueMutex);
         std::lock_guard<std::mutex> progressLock(m_ProgressMutex);
-
-        m_LoadQueue.push_back({ LoadTask::Type::Entity, filename });
-
-        // Increment total tasks if we're currently loading
-        if (m_Loading) {
+        m_LoadQueue.push_back({ LoadTask::Type::Entity, filename, scene });
+        if (m_Loading)
             m_TotalTasks++;
-        }
     }
     m_QueueCV.notify_one();
 }
 
-void EC_DOD_LoadingWorker::scheduleScene(const std::string& filename) {
+void EC_DOD_LoadingWorker::scheduleScene(const std::string& filename, EC_GameScene& scene) {
     {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Scheduling scene: " + filename,
+            LOGGING::LogLevel::INFORMATION);
         std::lock_guard<std::mutex> queueLock(m_QueueMutex);
         std::lock_guard<std::mutex> progressLock(m_ProgressMutex);
-
-        m_LoadQueue.push_back({ LoadTask::Type::Scene, filename });
-
-        // Increment total tasks if we're currently loading
-        if (m_Loading) {
+        m_LoadQueue.push_back({ LoadTask::Type::Scene, filename, &scene });
+        if (m_Loading)
             m_TotalTasks++;
-        }
     }
     m_QueueCV.notify_one();
 }
@@ -51,24 +48,20 @@ void EC_DOD_LoadingWorker::start() {
     {
         std::lock_guard<std::mutex> queueLock(m_QueueMutex);
         std::lock_guard<std::mutex> progressLock(m_ProgressMutex);
-
         m_TotalTasks = m_LoadQueue.size();
         m_CompletedTasks = 0;
         m_Loading = (m_TotalTasks > 0);
         m_ReadyToFinalize = false;
         m_Finalized = false;
     }
-
-    if (m_Loading) {
+    if (m_Loading)
         m_QueueCV.notify_one();
-    }
 }
 
 void EC_DOD_LoadingWorker::abort() {
     {
         std::lock_guard<std::mutex> queueLock(m_QueueMutex);
         std::lock_guard<std::mutex> progressLock(m_ProgressMutex);
-
         m_LoadQueue.clear();
         m_Loading = false;
         m_CompletedTasks = 0;
@@ -85,7 +78,7 @@ void EC_DOD_LoadingWorker::shutdown() {
     {
         std::lock_guard<std::mutex> queueLock(m_QueueMutex);
         m_LoadQueue.clear();
-	}
+    }
     m_QueueCV.notify_one();
 }
 
@@ -104,22 +97,20 @@ bool EC_DOD_LoadingWorker::needsFinalization() const {
 }
 
 void EC_DOD_LoadingWorker::finalizeOnMainThread() {
-    if (!m_ReadyToFinalize.load() || m_Finalized.load()) {
-        return;  // Already finalized or not ready yet
-    }
+    if (!m_ReadyToFinalize.load() || m_Finalized.load())
+        return;
 
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
         "Finalizing resources on main thread...",
-        LOGGING::LogLevel::INFORMATION
-    );
-	m_Factory.performPostLoadActions();
+        LOGGING::LogLevel::INFORMATION);
+
+    m_Factory.performPostLoadActions();
     m_Finalized = true;
     m_ReadyToFinalize = false;
 
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
         "Finalization complete",
-        LOGGING::LogLevel::INFORMATION
-    );
+        LOGGING::LogLevel::INFORMATION);
 }
 
 void EC_DOD_LoadingWorker::execute() {
@@ -127,18 +118,13 @@ void EC_DOD_LoadingWorker::execute() {
         LoadTask task;
         bool hasTask = false;
 
-        // Wait for work or shutdown
         {
             std::unique_lock<std::mutex> lock(m_QueueMutex);
-
-            // Wait until we have work or need to shutdown
             m_QueueCV.wait(lock, [this] {
                 return !m_Running || (!m_LoadQueue.empty() && m_Loading);
                 });
 
-            if (!m_Running) {
-                break;
-            }
+            if (!m_Running) break;
 
             if (!m_LoadQueue.empty() && m_Loading) {
                 task = m_LoadQueue.front();
@@ -147,108 +133,94 @@ void EC_DOD_LoadingWorker::execute() {
             }
         }
 
-        if (!hasTask) {
-            continue;
-        }
+        if (!hasTask) continue;
 
         bool success = false;
 
-        if (task.type == LoadTask::Type::Entity) {
-            success = loadEntityFile(task.filename);
-        }
-        else if (task.type == LoadTask::Type::Scene) {
-            success = loadSceneFile(task.filename);
-        }
+        if (task.type == LoadTask::Type::Entity && task.scene)
+            success = loadEntityFile(task.filename, task.scene);
+        else if (task.type == LoadTask::Type::Scene && task.scene)
+            success = loadSceneFile(task.filename, *task.scene);
 
-        // Update progress
         {
             std::lock_guard<std::mutex> progressLock(m_ProgressMutex);
             m_CompletedTasks++;
 
-            if (success) {
+            if (success)
                 LOGGING::ECX_Logger::GetInstance()->LogMessage(
                     "Loaded: " + task.filename + " (" +
                     std::to_string(m_CompletedTasks) + "/" +
                     std::to_string(m_TotalTasks) + ")",
-                    LOGGING::LogLevel::INFORMATION
-                );
-            }
-            else {
+                    LOGGING::LogLevel::INFORMATION);
+            else
                 LOGGING::ECX_Logger::GetInstance()->LogMessage(
                     "Failed to load: " + task.filename,
-                    LOGGING::LogLevel::SEVERE
-                );
-            }
+                    LOGGING::LogLevel::SEVERE);
 
-            // Check if we're done - also check the queue
             std::lock_guard<std::mutex> queueLock(m_QueueMutex);
             if (m_CompletedTasks >= m_TotalTasks && m_LoadQueue.empty()) {
                 m_Loading = false;
-                m_ReadyToFinalize = true;  // Signal main thread
-
+                m_ReadyToFinalize = true;
                 LOGGING::ECX_Logger::GetInstance()->LogMessage(
                     "Loading complete: " + std::to_string(m_CompletedTasks) +
                     " tasks completed. Ready for finalization.",
-                    LOGGING::LogLevel::INFORMATION
-                );
+                    LOGGING::LogLevel::INFORMATION);
             }
         }
     }
 }
 
-bool EC_DOD_LoadingWorker::loadEntityFile(const std::string& filename) {
+bool EC_DOD_LoadingWorker::loadEntityFile(const std::string& filename, EC_GameScene* scene) {
     TiXmlDocument doc(filename.c_str());
-
-    if (!doc.LoadFile()) {
-        return false;
-    }
-
+    if (!doc.LoadFile()) return false;
     TiXmlElement* root = doc.FirstChildElement();
-    if (!root) {
-        return false;
-    }
-
-    EntityID entity = parseEntity(root);
-    return (entity != INVALID_ENTITY);
-}
-
-bool EC_DOD_LoadingWorker::loadSceneFile(const std::string& filename) {
-    TiXmlDocument doc(filename.c_str());
-
-    if (!doc.LoadFile()) {
-        return false;
-    }
-
-    TiXmlElement* root = doc.FirstChildElement();
-    if (!root || strcmp(root->Value(), "Scene") != 0) {
-        return false;
-    }
-
-    parseSceneEntities(root);
+    if (!root) return false;
+    parseEntity(root, *scene);
     return true;
 }
 
-EntityID EC_DOD_LoadingWorker::parseEntity(TiXmlElement* element) {
-    return m_Factory.constructEntity(*element);
+bool EC_DOD_LoadingWorker::loadSceneFile(const std::string& filename, EC_GameScene& scene) {
+    TiXmlDocument doc(filename.c_str());
+    if (!doc.LoadFile()) return false;
+    TiXmlElement* root = doc.FirstChildElement();
+    if (!root || strcmp(root->Value(), "Scene") != 0) return false;
+
+    TiXmlElement* manifest = root->FirstChildElement("Manifest");
+    if (manifest)
+        EC_DOD_EntityFactory::parseManifest(manifest);
+
+    parseSceneEntities(root, scene);
+    scene.setLoaded(true);
+    return true;
 }
 
-void EC_DOD_LoadingWorker::parseSceneEntities(TiXmlElement* sceneRoot) {
-    TiXmlElement* elem = sceneRoot->FirstChildElement();
+EntityID EC_DOD_LoadingWorker::parseEntity(TiXmlElement* element, EC_GameScene& scene) {
+    EntityID entity = m_Factory.constructEntity(*element);
+    if (entity != INVALID_ENTITY) {
+        scene.addEntity(entity);
+        auto& manager = EC_DOD_EntityManager::getInstance();
+        if (manager.hasComponent<EC_DOD_Camera>(entity))
+            scene.addCamera(entity);
+        if (manager.hasComponent<EC_DOD_Light>(entity))
+            scene.addLight(entity);
+    }
+    return entity;
+}
 
+void EC_DOD_LoadingWorker::parseSceneEntities(TiXmlElement* sceneRoot, EC_GameScene& scene) {
+    TiXmlElement* elem = sceneRoot->FirstChildElement();
     while (elem) {
         if (strcmp(elem->Value(), "Entity") == 0) {
             TiXmlElement* child = elem->FirstChildElement();
-
-            if (child && strcmp(child->Value(), "Filename") == 0) {
-                // This schedules a new task and increments m_TotalTasks
-                scheduleEntity(child->GetText());
-            }
-            else {
-                // Inline entity - parse directly
-                parseEntity(elem);
-            }
+            if (child && strcmp(child->Value(), "Filename") == 0)
+                loadEntityFile(child->GetText(), &scene);
+            else
+                parseEntity(elem, scene);
         }
-
+        else if (strcmp(elem->Value(), "Manifest") == 0)
+        {
+            // ignored - already parsed
+        }
         elem = elem->NextSiblingElement();
     }
 }

@@ -2,8 +2,6 @@
 <GameMode>
 	<EngineSettings filename="data/scripts/XML/EngineConfig.xml"></EngineSettings>
 	<Controls filename="data/scripts/XML/KeyMapping.xml"></Controls>
-	<GameWorlds filename="data/scripts/XML/GameWorlds.xml"></GameWorlds>
-	<!--<GameWorlds filename="data/scripts/XML/HeirarchyTest.xml"></GameWorlds>-->
-	<!--<GameWorlds filename="data/scripts/XML/CollisionTest.xml"></GameWorlds>-->
+	<Scenes filename="data/scripts/XML/Scenes.xml"></Scenes>
 	<GraphicsSettings filename="data/scripts/XML/GraphicsSettings.xml"/>
 </GameMode>

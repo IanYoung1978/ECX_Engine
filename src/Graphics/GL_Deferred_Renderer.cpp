@@ -9,6 +9,7 @@
 #include "Graphics/TextureSet.h"
 #include <chrono>
 #include "Messaging/ECXMessenger.h"
+#include "SceneManager/EC_GameScene.h"
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
     : m_MSAA(false)
@@ -23,6 +24,7 @@ GL_Deferred_Renderer::GL_Deferred_Renderer()
 
 GL_Deferred_Renderer::~GL_Deferred_Renderer() {
 }
+
 void GL_Deferred_Renderer::receive(ECXCommand& command)
 {
     if (command.type == ECXCommandType::GraphicsChangeHDRExposure)
@@ -31,38 +33,27 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
         m_DebugRenderer.toggle();
 }
 
- void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger & messenger) 
- {
+void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger)
+{
     messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
 
     m_Window = window;
     m_DebugRenderer.init(window);
-	m_SkyboxRenderer.init(window);
+    m_SkyboxRenderer.init(window);
+
     glm::vec3 verts[] = {
         glm::vec3(-1.0f,-1.0f,0.0f),
         glm::vec3(1.0f,-1.0f,0.0f),
         glm::vec3(1.0f, 1.0f,0.0f),
         glm::vec3(-1.0f, 1.0f,0.0f)
     };
-
     glm::vec2 texCoords[] = {
         glm::vec2(0.0f,0.0f),
         glm::vec2(1.0f,0.0f),
         glm::vec2(1.0f,1.0f),
         glm::vec2(0.0f,1.0f)
     };
-    //////////////////////////////////////////////////////////////////////
-//				uv(0,0)								uv(1,0)										
-//					-------------------------------------
-//			v(-1,1)	| i(3)						   i(2) |	v(1,1)
-//					|									|
-//					|									|
-//					|									|
-//			v(-1,-1)| i(0)						   i(1) |	v(1,-1)
-//					-------------------------------------
-//				uv(0,1)								uv(1,1)
-///////////////////////////////////////////////////////////////////////
     unsigned int indices[] = { 0,1,2,0,2,3 };
 
     glGenVertexArrays(1, &m_FS_QuadHandle);
@@ -73,13 +64,11 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
     glVertexAttribPointer((GLuint)BufferType::Vertex, 3, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray((GLuint)BufferType::Vertex);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
-
     glGenBuffers(1, &m_FS_QuadTex);
     glBindBuffer(GL_ARRAY_BUFFER, m_FS_QuadTex);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec2) * 4, texCoords, GL_STATIC_DRAW);
     glVertexAttribPointer((GLuint)BufferType::TextureCoordinate, 2, GL_FLOAT, GL_FALSE, 0, 0);
     glEnableVertexAttribArray((GLuint)BufferType::TextureCoordinate);
-
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     glGenBuffers(1, &m_FS_QuadIndices);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_FS_QuadIndices);
@@ -88,41 +77,24 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
     m_LightPassShader = std::make_shared<Shader>();
-
-    if (!m_LightPassShader->loadShader(std::string("data/assets/shaders/lightpass.vert"), std::string("data/assets/shaders/lightpass.frag"))) {
+    if (!m_LightPassShader->loadShader("data/assets/shaders/lightpass.vert", "data/assets/shaders/lightpass.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load light pass shader", LOGGING::LogLevel::CRITICAL);
-    }
-
-    if (!m_ShadowShader.loadShader(std::string("data/assets/shaders/shadow.vert"), std::string("data/assets/shaders/shadow.frag"))) {
+    if (!m_ShadowShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/shadow.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load point shadow pass shader", LOGGING::LogLevel::CRITICAL);
-    }
-
-    if (!m_ShadowDirLightShader.loadShader(std::string("data/assets/shaders/ShadowLightPass.vert"), std::string("data/assets/shaders/DirLightShadowPBR.frag"))) {
+    if (!m_ShadowDirLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/DirLightShadowPBR.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load directional shadow pass shader", LOGGING::LogLevel::CRITICAL);
-    }
-
-    if (!m_ShadowSpotLightShader.loadShader(std::string("data/assets/shaders/ShadowLightPass.vert"), std::string("data/assets/shaders/SpotlightShadowPBR.frag"))) {
+    if (!m_ShadowSpotLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/SpotlightShadowPBR.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load spot shadow pass shader", LOGGING::LogLevel::CRITICAL);
-    }
-
-    if (!m_BloomHShader.loadShader(std::string("data/assets/shaders/final.vert"), std::string("data/assets/shaders/bloomH.frag")) ||
-        !m_BloomVShader.loadShader(std::string("data/assets/shaders/final.vert"), std::string("data/assets/shaders/bloomV.frag"))) {
+    if (!m_BloomHShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomH.frag") ||
+        !m_BloomVShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomV.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load bloom shader", LOGGING::LogLevel::CRITICAL);
-    }
-    if (!m_HDRTonemapShader.loadShader(
-        "data/assets/shaders/hdr_tonemap.vert",
-        "data/assets/shaders/hdr_tonemap.frag"))
-    {
-        LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "Failed to load HDR tonemap shader", LOGGING::LogLevel::CRITICAL);
-    }
+    if (!m_HDRTonemapShader.loadShader("data/assets/shaders/hdr_tonemap.vert", "data/assets/shaders/hdr_tonemap.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to load HDR tonemap shader", LOGGING::LogLevel::CRITICAL);
     else
-    {
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "HDR tonemap shader loaded, handle=" +
-            std::to_string(m_HDRTonemapShader.getShaderHandle()),
+            "HDR tonemap shader loaded, handle=" + std::to_string(m_HDRTonemapShader.getShaderHandle()),
             LOGGING::LogLevel::INFORMATION);
-    }
+
     m_FrameBuffer.init(window->getWidth(), window->getHeight());
     m_LightBuffer.init((*m_LightPassShader));
     m_ShadowBuffer.init(2048, 2048);
@@ -136,16 +108,18 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 }
 
-void GL_Deferred_Renderer::renderScene() {
+void GL_Deferred_Renderer::renderScene(EC_GameScene& scene)
+{
     m_FrameBuffer.initFrame();
-    geometryPass();
+    geometryPass(scene);
     glowPass();
-    lightPass();
-    hdrPass();      // add here, before finalPass
+    lightPass(scene);
+    hdrPass();
     finalPass();
-    skyboxPass();
-    debugPass();
+    skyboxPass(scene);
+    debugPass(scene);
 }
+
 void GL_Deferred_Renderer::hdrPass()
 {
     m_HDRTonemapShader.activate();
@@ -153,15 +127,12 @@ void GL_Deferred_Renderer::hdrPass()
     m_HDRTonemapShader.setUniform("exposure", m_Exposure);
     renderQuad();
 }
-void GL_Deferred_Renderer::skyboxPass()
+
+void GL_Deferred_Renderer::skyboxPass(EC_GameScene& scene)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto cameras = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Spatial)),
-        std::type_index(typeid(EC_DOD_Camera))
-        });
 
-    for (EntityID cameraID : cameras) {
+    for (EntityID cameraID : scene.getCameras()) {
         if (!manager.isAlive(cameraID)) continue;
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
         if (!camera.isActive) continue;
@@ -170,44 +141,37 @@ void GL_Deferred_Renderer::skyboxPass()
             glm::radians(camera.fov),
             (float)m_Window->getWidth() / m_Window->getHeight(),
             camera.nearPlane,
-            camera.farPlane
-        );
+            camera.farPlane);
 
         m_FrameBuffer.SkyboxPass();
         m_SkyboxRenderer.render(camera.viewMatrix, projection);
         break;
     }
 }
-void GL_Deferred_Renderer::changeResolution(int width, int height) {
+
+void GL_Deferred_Renderer::changeResolution(int width, int height)
+{
     m_FrameBuffer.resize(width, height);
 }
 
-void GL_Deferred_Renderer::geometryPass() {
+void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
+{
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    auto cameras = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Spatial)),
-        std::type_index(typeid(EC_DOD_Camera))
-        });
-
-    for (EntityID cameraID : cameras) {
+    for (EntityID cameraID : scene.getCameras()) {
         if (!manager.isAlive(cameraID)) continue;
-
         const auto& spatial = manager.getComponent<EC_DOD_Spatial>(cameraID);
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
-
         if (!camera.isActive) continue;
+
         glm::mat4 projection = glm::perspective(
             glm::radians(camera.fov),
             (float)m_Window->getWidth() / m_Window->getHeight(),
             camera.nearPlane,
-            camera.farPlane
-        );
-
+            camera.farPlane);
         glm::mat4 view = camera.viewMatrix;
 
         m_FrameBuffer.GeometryPass();
-
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
         glDepthFunc(GL_LESS);
@@ -217,13 +181,10 @@ void GL_Deferred_Renderer::geometryPass() {
         glCullFace(GL_BACK);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-        auto renderables = manager.getEntitiesWithComponents({
-            std::type_index(typeid(EC_DOD_Transform)),
-            std::type_index(typeid(EC_DOD_GraphicsData))
-            });
-
-        for (EntityID entityID : renderables) {
+        for (EntityID entityID : scene.getEntities()) {
             if (!manager.isAlive(entityID)) continue;
+            if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+            if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
 
             const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
             auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
@@ -231,7 +192,6 @@ void GL_Deferred_Renderer::geometryPass() {
             if (!gfx.visible || !gfx.model || !gfx.shader) continue;
 
             gfx.shader->activate();
-
             gfx.shader->setUniform("camPos", spatial.position);
             gfx.shader->setUniform("ViewTransform", view);
             gfx.shader->setUniform("ProjTransform", projection);
@@ -250,7 +210,6 @@ void GL_Deferred_Renderer::geometryPass() {
             glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
 
-            // Unbind textures
             for (int i = 0; i < 10; i++) {
                 glActiveTexture(GL_TEXTURE0 + i);
                 glBindTexture(GL_TEXTURE_2D, 0);
@@ -264,48 +223,40 @@ void GL_Deferred_Renderer::geometryPass() {
     }
 }
 
-void GL_Deferred_Renderer::lightPass() {
+void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
+{
     if (!m_LightPassShader) return;
-
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    auto cameras = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Spatial)),
-        std::type_index(typeid(EC_DOD_Camera))
-        });
-
-    for (EntityID cameraID : cameras) {
+    for (EntityID cameraID : scene.getCameras()) {
         if (!manager.isAlive(cameraID)) continue;
-
         const auto& spatial = manager.getComponent<EC_DOD_Spatial>(cameraID);
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
-
         if (!camera.isActive) continue;
 
-        updateLights();
+        updateLights(scene);
 
         m_LightPassShader->activate();
         m_FrameBuffer.LightingPass(*m_LightPassShader);
         m_LightBuffer.updatePointLights((int)m_Points.size(), m_Points.data());
         m_LightBuffer.updateSpotLights((int)m_Spots.size(), m_Spots.data());
-
         m_LightBuffer.bindPointLights();
         m_LightPassShader->setUniform("NumPoints", (int)m_Points.size());
         m_LightBuffer.bindSpotLights();
         m_LightPassShader->setUniform("NumSpots", (int)m_Spots.size());
         m_LightPassShader->setUniform("WSCamPos", spatial.position);
 
-        if (!m_Directionals.empty()) {
+        if (!m_Directionals.empty())
             m_LightPassShader->setLight("dirLight", m_Directionals[0]);
-        }
 
         renderQuad();
-        shadowLightingPass();
+        shadowLightingPass(scene);
         break;
     }
 }
 
-void GL_Deferred_Renderer::updateLights() {
+void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
+{
     m_Directionals.clear();
     m_Spots.clear();
     m_Points.clear();
@@ -314,31 +265,20 @@ void GL_Deferred_Renderer::updateLights() {
     m_ShadowPoints.clear();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto* lightArray = manager.getComponentArray<EC_DOD_Light>();
 
-    if (!lightArray) return;
-
-    std::shared_lock lock(lightArray->getMutex());
-    auto& lights = lightArray->getData();
-
-    for (size_t i = 0; i < lights.size(); i++) {
-        EntityID entityID = lightArray->getEntity(i);
+    for (EntityID entityID : scene.getLights()) {
         if (!manager.isAlive(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_Light>(entityID)) continue;
 
-        const auto& light = lights[i];
+        const auto& light = manager.getComponent<EC_DOD_Light>(entityID);
 
         if (light.type == EC_DOD_Light::Type::Directional) {
             DirLightData data;
             data.direction = glm::vec4(light.direction, 0.0f);
             data.colour = glm::vec4(light.colour, 1.0f);
             data.intensity = light.intensity;
-
-            if (!light.castsShadow) {
-                m_Directionals.push_back(data);
-			}
-            else {
-                m_ShadowDirs.push_back(data);
-            }
+            if (!light.castsShadow) m_Directionals.push_back(data);
+            else m_ShadowDirs.push_back(data);
         }
         else if (light.type == EC_DOD_Light::Type::Spot) {
             SpotLightData data;
@@ -348,13 +288,8 @@ void GL_Deferred_Renderer::updateLights() {
             data.intensity = light.intensity;
             data.cutoffAngle = light.cutoffAngle;
             data.attenuation = glm::vec4(light.attenuation, 0.0f);
-
-            if (!light.castsShadow) {
-                m_Spots.push_back(data);
-            }
-            else {
-                m_ShadowSpots.push_back(data);
-            }
+            if (!light.castsShadow) m_Spots.push_back(data);
+            else m_ShadowSpots.push_back(data);
         }
         else {
             LightData data;
@@ -362,25 +297,19 @@ void GL_Deferred_Renderer::updateLights() {
             data.colour = glm::vec4(light.colour, 1.0f);
             data.intensity = light.intensity;
             data.attenuation = glm::vec4(light.attenuation, 0.0f);
-
-            if (!light.castsShadow) {
-                m_Points.push_back(data);
-            }
-            
-            else {
-                m_ShadowPoints.push_back(data);
-            }
+            if (!light.castsShadow) m_Points.push_back(data);
+            else m_ShadowPoints.push_back(data);
         }
     }
 }
 
-void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& light) {
+void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& light, EC_GameScene& scene)
+{
     glm::mat4 biasMatrix(
         0.5f, 0.0f, 0.0f, 0.0f,
         0.0f, 0.5f, 0.0f, 0.0f,
         0.0f, 0.0f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f
-    );
+        0.5f, 0.5f, 0.5f, 1.0f);
 
     glm::vec3 eye = glm::vec3(-light.direction);
     glm::vec3 up;
@@ -399,17 +328,14 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
     glClearDepth(1.0);
 
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto renderables = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Transform)),
-        std::type_index(typeid(EC_DOD_GraphicsData))
-        });
 
-    for (EntityID entityID : renderables) {
+    for (EntityID entityID : scene.getEntities()) {
         if (!manager.isAlive(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
 
         const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
         const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
-
         if (gfx.getMeshHandle() == 0) continue;
 
         m_ShadowShader.activate();
@@ -429,17 +355,16 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& light) {
+void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& light, EC_GameScene& scene)
+{
     glm::mat4 biasMatrix(
         0.5f, 0.0f, 0.0f, 0.0f,
         0.0f, 0.5f, 0.0f, 0.0f,
         0.0f, 0.0f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f
-    );
+        0.5f, 0.5f, 0.5f, 1.0f);
 
     glm::vec3 position = light.position;
     glm::vec3 direction = light.direction;
-
     glm::vec3 up;
     up[0] = direction[1] - direction[2];
     up[1] = direction[2] - direction[0];
@@ -456,17 +381,14 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
     glClearDepth(1.0);
 
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto renderables = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Transform)),
-        std::type_index(typeid(EC_DOD_GraphicsData))
-        });
 
-    for (EntityID entityID : renderables) {
+    for (EntityID entityID : scene.getEntities()) {
         if (!manager.isAlive(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
 
         const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
         const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
-
         if (gfx.getMeshHandle() == 0) continue;
 
         m_ShadowShader.activate();
@@ -486,25 +408,22 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowPointPass(ShadowBuffer& target, LightData& light) {
+void GL_Deferred_Renderer::shadowPointPass(ShadowBuffer& target, LightData& light)
+{
 }
 
-void GL_Deferred_Renderer::shadowLightingPass() {
+void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
+{
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    auto cameras = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Spatial)),
-        std::type_index(typeid(EC_DOD_Camera))
-        });
-
-    for (EntityID cameraID : cameras) {
+    for (EntityID cameraID : scene.getCameras()) {
         if (!manager.isAlive(cameraID)) continue;
-
         const auto& spatial = manager.getComponent<EC_DOD_Spatial>(cameraID);
+        const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
+        if (!camera.isActive) continue;
 
         for (size_t i = 0; i < m_ShadowDirs.size(); i++) {
-            shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i]);
-
+            shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i], scene);
             m_ShadowDirLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
             glEnable(GL_BLEND);
@@ -518,8 +437,7 @@ void GL_Deferred_Renderer::shadowLightingPass() {
         }
 
         for (size_t i = 0; i < m_ShadowSpots.size(); i++) {
-            shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i]);
-
+            shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], scene);
             m_ShadowSpotLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
             glEnable(GL_BLEND);
@@ -534,7 +452,6 @@ void GL_Deferred_Renderer::shadowLightingPass() {
 
         for (size_t i = 0; i < m_ShadowPoints.size(); i++) {
             shadowPointPass(m_ShadowBuffer, m_ShadowPoints[i]);
-
             m_ShadowPointLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowPointLightShader);
             glEnable(GL_BLEND);
@@ -546,7 +463,6 @@ void GL_Deferred_Renderer::shadowLightingPass() {
             renderQuad();
             glDisable(GL_BLEND);
         }
-
         break;
     }
 
@@ -554,7 +470,8 @@ void GL_Deferred_Renderer::shadowLightingPass() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void GL_Deferred_Renderer::postProcess() {
+void GL_Deferred_Renderer::postProcess()
+{
     if (!m_PostProcessShaders.empty()) {
         if (m_MSAA) {
             m_PostProcessShaders[(size_t)PostProcess::MSAA]->activate();
@@ -574,11 +491,11 @@ void GL_Deferred_Renderer::postProcess() {
     }
 }
 
-void GL_Deferred_Renderer::glowPass() {
+void GL_Deferred_Renderer::glowPass()
+{
     m_BloomHShader.activate();
     m_FrameBuffer.GlowPass(m_BloomHShader, true, false);
     renderQuad();
-
     for (int i = 0; i < 5; i++) {
         m_BloomHShader.activate();
         m_FrameBuffer.GlowPass(m_BloomHShader, false, false);
@@ -587,37 +504,31 @@ void GL_Deferred_Renderer::glowPass() {
         m_FrameBuffer.GlowPass(m_BloomVShader, false, false);
         renderQuad();
     }
-
     m_FrameBuffer.GlowPass(m_BloomHShader, false, true);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glUseProgram(0);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void GL_Deferred_Renderer::finalPass() {
+void GL_Deferred_Renderer::finalPass()
+{
     m_FrameBuffer.FinalPass();
 }
 
-void GL_Deferred_Renderer::renderQuad() {
+void GL_Deferred_Renderer::renderQuad()
+{
     glBindVertexArray(m_FS_QuadHandle);
     glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 }
 
-void GL_Deferred_Renderer::debugPass()
+void GL_Deferred_Renderer::debugPass(EC_GameScene& scene)
 {
     if (!m_DebugRenderer.isEnabled()) return;
-
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    auto cameras = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Spatial)),
-        std::type_index(typeid(EC_DOD_Camera))
-        });
-
-    for (EntityID cameraID : cameras) {
+    for (EntityID cameraID : scene.getCameras()) {
         if (!manager.isAlive(cameraID)) continue;
-
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
         if (!camera.isActive) continue;
 
@@ -625,8 +536,7 @@ void GL_Deferred_Renderer::debugPass()
             glm::radians(camera.fov),
             (float)m_Window->getWidth() / m_Window->getHeight(),
             camera.nearPlane,
-            camera.farPlane
-        );
+            camera.farPlane);
 
         m_DebugRenderer.render(camera.viewMatrix, projection);
         break;

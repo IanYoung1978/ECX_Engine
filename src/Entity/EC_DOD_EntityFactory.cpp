@@ -18,12 +18,72 @@ CubemapManager EC_DOD_EntityFactory::s_CubemapManager;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Cameras;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Entities;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Lights;
+std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_HDRAliases;
+std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_MeshAliases;
+std::unordered_map<std::string, EC_DOD_EntityFactory::ShaderPaths> EC_DOD_EntityFactory::s_ShaderAliases;
+std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_ScriptAliases;
+std::unordered_map<std::string, TiXmlElement*> EC_DOD_EntityFactory::s_MaterialElements;
+TiXmlDocument EC_DOD_EntityFactory::s_ManifestDoc;
 
 EC_DOD_EntityFactory::EC_DOD_EntityFactory() {
     s_TexManager.init();
 }
 
 EC_DOD_EntityFactory::~EC_DOD_EntityFactory() {
+}
+
+void EC_DOD_EntityFactory::parseManifest(TiXmlElement* manifestElem)
+{
+    if (!manifestElem) return;
+
+    auto child = manifestElem->FirstChildElement();
+    while (child)
+    {
+        const char* alias = child->Attribute("alias");
+        if (!alias) { child = child->NextSiblingElement(); continue; }
+
+        if (strcmp(child->Value(), "HDR") == 0 && child->GetText())
+        {
+            s_HDRAliases[alias] = child->GetText();
+            s_CubemapManager.loadHDR(child->GetText());
+        }
+        else if (strcmp(child->Value(), "Model") == 0 && child->GetText())
+        {
+            s_MeshAliases[alias] = child->GetText();
+            s_MeshManager.loadObjModel(child->GetText());
+        }
+        else if (strcmp(child->Value(), "Shader") == 0)
+        {
+            const char* vert = child->Attribute("vertex");
+            const char* frag = child->Attribute("fragment");
+            if (vert && frag)
+            {
+                s_ShaderAliases[alias] = { vert, frag };
+                s_ShaderManager.loadShader(vert, frag);
+            }
+        }
+        else if (strcmp(child->Value(), "LuaScript") == 0 && child->GetText())
+        {
+            s_ScriptAliases[alias] = child->GetText();
+        }
+        else if (strcmp(child->Value(), "PBRMaterial") == 0)
+        {
+            TiXmlElement* copy = static_cast<TiXmlElement*>(child->Clone());
+            s_ManifestDoc.LinkEndChild(copy);
+            s_MaterialElements[alias] = copy;
+
+            auto texChild = child->FirstChildElement();
+            while (texChild)
+            {
+                if (strcmp(texChild->Value(), "ParallaxScale") != 0 &&
+                    strcmp(texChild->Value(), "ParallaxBias") != 0 &&
+                    texChild->GetText())
+                    s_TexManager.loadTexture(texChild->GetText());
+                texChild = texChild->NextSiblingElement();
+            }
+        }
+        child = child->NextSiblingElement();
+    }
 }
 
 EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
@@ -46,49 +106,41 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
         att = att->Next();
     }
 
-    if (!uidSet) {
+    if (!uidSet)
         info.uid = static_cast<uint32_t>(s_Entities.size());
-    }
 
     manager.addComponent(entity, info);
 
     auto elem = descriptor.FirstChildElement();
     while (elem != nullptr) {
-        if (strcmp(elem->Value(), "Spatial") == 0) {
+        if (strcmp(elem->Value(), "Spatial") == 0)
             parseSpatial(elem, entity);
-        }
         else if (strcmp(elem->Value(), "Camera") == 0) {
             parseCamera(elem, entity);
             s_Cameras.push_back(entity);
         }
-        else if (strcmp(elem->Value(), "Gfx") == 0) {
+        else if (strcmp(elem->Value(), "Gfx") == 0)
             parseGraphics(elem, entity);
-        }
-        else if (strcmp(elem->Value(), "Transform") == 0) {
+        else if (strcmp(elem->Value(), "Transform") == 0)
             parseTransform(elem, entity);
-        }
         else if (strcmp(elem->Value(), "Light") == 0) {
             parseLight(elem, entity);
             s_Lights.push_back(entity);
         }
-        else if (strcmp(elem->Value(), "ScriptComponent") == 0) {
+        else if (strcmp(elem->Value(), "ScriptComponent") == 0)
             parseScript(elem, entity);
-        }
-        else if (strcmp(elem->Value(), "Collider") == 0) {
+        else if (strcmp(elem->Value(), "Collider") == 0)
             parseCollider(elem, entity);
-        }
-        else if (strcmp(elem->Value(), "Hierarchy") == 0) {
+        else if (strcmp(elem->Value(), "Hierarchy") == 0)
             parseHierarchy(elem, entity);
-        }
-        else if (strcmp(elem->Value(), "Skybox") == 0) {
+        else if (strcmp(elem->Value(), "Skybox") == 0)
             parseSkybox(elem, entity);
-        }
-        else {
+        else if (strcmp(elem->Value(), "Template") == 0)
+            ;
+        else
             LOGGING::ECX_Logger::GetInstance()->LogMessage(
                 "Unknown component type: " + std::string(elem->Value()),
-                LOGGING::LogLevel::WARNING
-            );
-        }
+                LOGGING::LogLevel::WARNING);
         elem = elem->NextSiblingElement();
     }
 
@@ -109,15 +161,12 @@ EntityID EC_DOD_EntityFactory::constructCamera(TiXmlElement& descriptor) {
 
     auto elem = descriptor.FirstChildElement();
     while (elem) {
-        if (strcmp(elem->Value(), "Spatial") == 0) {
+        if (strcmp(elem->Value(), "Spatial") == 0)
             parseSpatial(elem, entity);
-        }
-        else if (strcmp(elem->Value(), "FOV") == 0) {
+        else if (strcmp(elem->Value(), "FOV") == 0)
             camera.fov = std::stof(elem->GetText());
-        }
-        else if (strcmp(elem->Value(), "DrawDistance") == 0) {
+        else if (strcmp(elem->Value(), "DrawDistance") == 0)
             camera.farPlane = std::stof(elem->GetText());
-        }
         elem = elem->NextSiblingElement();
     }
     camera.isActive = true;
@@ -132,13 +181,11 @@ void EC_DOD_EntityFactory::performPostLoadActions() {
     s_MeshManager.finaliseModels();
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
         "Starting cubemap finalization...",
-        LOGGING::LogLevel::INFORMATION
-    );
-	s_CubemapManager.finalizeAll();
+        LOGGING::LogLevel::INFORMATION);
+    s_CubemapManager.finalizeAll();
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
         "Cubemap finalization complete",
-        LOGGING::LogLevel::INFORMATION
-    );
+        LOGGING::LogLevel::INFORMATION);
     s_ShaderManager.finaliseShaders();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
@@ -157,6 +204,10 @@ void EC_DOD_EntityFactory::performPostLoadActions() {
                     LOGGING::ECX_Logger::GetInstance()->LogMessage(
                         "Failed to get model: " + gfx.modelName,
                         LOGGING::LogLevel::SEVERE);
+                else
+                    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                        "Got model: " + gfx.modelName,
+                        LOGGING::LogLevel::INFORMATION);
             }
 
             if (!gfx.vertShader.empty() && !gfx.fragShader.empty()) {
@@ -172,7 +223,6 @@ void EC_DOD_EntityFactory::performPostLoadActions() {
         }
     }
 
-    // Resolve hierarchy UIDs to EntityIDs before clearing s_Entities
     resolveHierarchyReferences();
 
     s_Entities.clear();
@@ -215,27 +265,23 @@ void EC_DOD_EntityFactory::parseSpatial(TiXmlElement* elem, EntityID entity) {
 
     auto child = elem->FirstChildElement();
     while (child != nullptr) {
-        if (strcmp(child->Value(), "Position") == 0) {
+        if (strcmp(child->Value(), "Position") == 0)
             spatial.position = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Velocity") == 0) {
+        else if (strcmp(child->Value(), "Velocity") == 0)
             spatial.velocity = parseVec3(child->GetText());
-        }
         else if (strcmp(child->Value(), "Orientation") == 0) {
             glm::vec3 orient = parseVec3(child->GetText());
             spatial.orientation = glm::vec3(
                 glm::radians(orient.x),
                 glm::radians(orient.y),
-                glm::radians(orient.z)
-            );
+                glm::radians(orient.z));
         }
         else if (strcmp(child->Value(), "AngularVelocity") == 0) {
             glm::vec3 angVel = parseVec3(child->GetText());
             spatial.angVelocity = glm::vec3(
                 glm::radians(angVel.x),
                 glm::radians(angVel.y),
-                glm::radians(angVel.z)
-            );
+                glm::radians(angVel.z));
         }
         child = child->NextSiblingElement();
     }
@@ -249,12 +295,10 @@ void EC_DOD_EntityFactory::parseCamera(TiXmlElement* elem, EntityID entity) {
 
     auto child = elem->FirstChildElement();
     while (child) {
-        if (strcmp(child->Value(), "FOV") == 0) {
+        if (strcmp(child->Value(), "FOV") == 0)
             camera.fov = std::stof(child->GetText());
-        }
-        else if (strcmp(child->Value(), "DrawDistance") == 0) {
+        else if (strcmp(child->Value(), "DrawDistance") == 0)
             camera.farPlane = std::stof(child->GetText());
-        }
         child = child->NextSiblingElement();
     }
 
@@ -272,18 +316,35 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
     auto child = elem->FirstChildElement();
     while (child != nullptr) {
         if (strcmp(child->Value(), "Model") == 0) {
-            modelName = child->GetText();
-            s_MeshManager.loadObjModel(modelName);
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_MeshAliases.find(aliasAttr);
+                if (it != s_MeshAliases.end())
+                    modelName = it->second;
+            }
+            else if (child->GetText()) {
+                modelName = child->GetText();
+                s_MeshManager.loadObjModel(modelName);
+            }
         }
         else if (strcmp(child->Value(), "Shader") == 0) {
-            auto vertex = child->FirstAttribute();
-            if (vertex) {
-                vertShader = vertex->Value();
-                auto frag = vertex->Next();
-                if (frag && !vertShader.empty()) {
-                    fragShader = frag->Value();
-                    if (!fragShader.empty()) {
-                        s_ShaderManager.loadShader(vertShader, fragShader);
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_ShaderAliases.find(aliasAttr);
+                if (it != s_ShaderAliases.end()) {
+                    vertShader = it->second.vert;
+                    fragShader = it->second.frag;
+                }
+            }
+            else {
+                auto vertex = child->FirstAttribute();
+                if (vertex) {
+                    vertShader = vertex->Value();
+                    auto frag = vertex->Next();
+                    if (frag && !vertShader.empty()) {
+                        fragShader = frag->Value();
+                        if (!fragShader.empty())
+                            s_ShaderManager.loadShader(vertShader, fragShader);
                     }
                 }
             }
@@ -312,54 +373,59 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
             }
         }
         else if (strcmp(child->Value(), "PBRMaterial") == 0) {
-            auto pbrSet = std::make_shared<PBR_TextureSet>();
-            gfx.textureSet = pbrSet;
-            gfx.hasTextures = true;
+            const char* aliasAttr = child->Attribute("alias");
+            TiXmlElement* materialElem = aliasAttr
+                ? (s_MaterialElements.count(aliasAttr) ? s_MaterialElements[aliasAttr] : nullptr)
+                : child;
 
-            auto child1 = child->FirstChildElement();
-            while (child1 != nullptr) {
-                if (strcmp(child1->Value(), "Albedo") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::Albedo, texName);
+            if (materialElem) {
+                auto pbrSet = std::make_shared<PBR_TextureSet>();
+                gfx.textureSet = pbrSet;
+                gfx.hasTextures = true;
+
+                auto child1 = materialElem->FirstChildElement();
+                while (child1 != nullptr) {
+                    if (strcmp(child1->Value(), "Albedo") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Albedo, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Normal") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Normal, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Smoothness") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Smoothness, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Height") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Parallax, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Emissive") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Glow, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Metallic") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Metallic, texName);
+                    }
+                    else if (strcmp(child1->Value(), "AO") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::AO, texName);
+                    }
+                    else if (strcmp(child1->Value(), "ParallaxScale") == 0 && child1->GetText())
+                        pbrSet->setParallaxScale(std::stof(child1->GetText()));
+                    else if (strcmp(child1->Value(), "ParallaxBias") == 0 && child1->GetText())
+                        pbrSet->setParallaxBias(std::stof(child1->GetText()));
+                    child1 = child1->NextSiblingElement();
                 }
-                else if (strcmp(child1->Value(), "Normal") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::Normal, texName);
-                }
-                else if (strcmp(child1->Value(), "Smoothness") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::Smoothness, texName);
-                }
-                else if (strcmp(child1->Value(), "Height") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::Parallax, texName);
-                }
-                else if (strcmp(child1->Value(), "Emissive") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::Glow, texName);
-                }
-                else if (strcmp(child1->Value(), "Metallic") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::Metallic, texName);
-                }
-                else if (strcmp(child1->Value(), "AO") == 0) {
-                    std::string texName = child1->GetText();
-                    s_TexManager.loadTexture(texName);
-                    gfx.textureSet->setTexture(TextureID::AO, texName);
-                }
-                else if (strcmp(child1->Value(), "ParallaxScale") == 0 && child1->GetText()) {
-                    pbrSet->setParallaxScale(std::stof(child1->GetText()));
-                }
-                else if (strcmp(child1->Value(), "ParallaxBias") == 0 && child1->GetText()) {
-                    pbrSet->setParallaxBias(std::stof(child1->GetText()));
-                }
-                child1 = child1->NextSiblingElement();
             }
         }
         else if (strcmp(child->Value(), "Colour") == 0 || strcmp(child->Value(), "Color") == 0) {
@@ -370,8 +436,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
         else {
             LOGGING::ECX_Logger::GetInstance()->LogMessage(
                 "Unknown graphics property: " + std::string(child->Value()),
-                LOGGING::LogLevel::WARNING
-            );
+                LOGGING::LogLevel::WARNING);
         }
         child = child->NextSiblingElement();
     }
@@ -389,9 +454,8 @@ void EC_DOD_EntityFactory::parseTransform(TiXmlElement* elem, EntityID entity) {
 
     auto child = elem->FirstChildElement();
     while (child) {
-        if (strcmp(child->Value(), "Scale") == 0) {
+        if (strcmp(child->Value(), "Scale") == 0)
             transform.scale = parseVec3(child->GetText());
-        }
         child = child->NextSiblingElement();
     }
 
@@ -406,9 +470,8 @@ void EC_DOD_EntityFactory::parseHierarchy(TiXmlElement* elem, EntityID entity) {
     while (child != nullptr) {
         if (strcmp(child->Value(), "Parent") == 0) {
             auto idAttr = child->Attribute("uid");
-            if (idAttr) {
+            if (idAttr)
                 hierarchy.parent = static_cast<EntityID>(atoi(idAttr));
-            }
         }
         child = child->NextSiblingElement();
     }
@@ -452,8 +515,7 @@ void EC_DOD_EntityFactory::resolveHierarchyReferences() {
         else {
             LOGGING::ECX_Logger::GetInstance()->LogMessage(
                 "Hierarchy: could not resolve parent UID " + std::to_string(parentUID),
-                LOGGING::LogLevel::WARNING
-            );
+                LOGGING::LogLevel::WARNING);
             hierarchy.parent = INVALID_ENTITY;
         }
     }
@@ -469,9 +531,16 @@ void EC_DOD_EntityFactory::parseScript(TiXmlElement* elem, EntityID entity) {
         ECXEventType eventType = getEventTypeFromHandlerName(handlerName);
 
         if (eventType != ECXEventType::None) {
-            auto filenameAttr = child->Attribute("filename");
-            if (filenameAttr) {
-                script.handlers[eventType] = filenameAttr;
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_ScriptAliases.find(aliasAttr);
+                if (it != s_ScriptAliases.end())
+                    script.handlers[eventType] = it->second;
+            }
+            else {
+                const char* filenameAttr = child->Attribute("filename");
+                if (filenameAttr)
+                    script.handlers[eventType] = filenameAttr;
             }
         }
         child = child->NextSiblingElement();
@@ -516,30 +585,22 @@ void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
             else if (type == "Point")
                 light.type = EC_DOD_Light::Type::Point;
         }
-        else if (strcmp(child->Value(), "Position") == 0) {
+        else if (strcmp(child->Value(), "Position") == 0)
             light.position = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Colour") == 0) {
+        else if (strcmp(child->Value(), "Colour") == 0)
             light.colour = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Direction") == 0) {
+        else if (strcmp(child->Value(), "Direction") == 0)
             light.direction = glm::normalize(parseVec3(child->GetText()));
-        }
-        else if (strcmp(child->Value(), "Intensity") == 0) {
+        else if (strcmp(child->Value(), "Intensity") == 0)
             light.intensity = std::stof(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Cutoff") == 0) {
+        else if (strcmp(child->Value(), "Cutoff") == 0)
             light.cutoffAngle = glm::radians(std::stof(child->GetText()) / 2.0f);
-        }
-        else if (strcmp(child->Value(), "Attenuation") == 0) {
+        else if (strcmp(child->Value(), "Attenuation") == 0)
             light.attenuation = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "CastsShadow") == 0) {
+        else if (strcmp(child->Value(), "CastsShadow") == 0)
             light.castsShadow = (strcmp(child->GetText(), "true") == 0);
-        }
-        else if (strcmp(child->Value(), "Dynamic") == 0) {
+        else if (strcmp(child->Value(), "Dynamic") == 0)
             light.dynamic = (strcmp(child->GetText(), "true") == 0);
-        }
         child = child->NextSiblingElement();
     }
 
@@ -590,15 +651,26 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
 
     manager.addComponent(entity, collider);
 }
+
 void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {
     auto& manager = EC_DOD_EntityManager::getInstance();
     EC_DOD_Skybox skybox;
 
     auto child = elem->FirstChildElement();
     while (child) {
-        if (strcmp(child->Value(), "HDR") == 0 && child->GetText()) {
-            skybox.hdrPath = child->GetText();
-            s_CubemapManager.loadHDR(skybox.hdrPath); // phase 1: load pixels only
+        if (strcmp(child->Value(), "HDR") == 0) {
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_HDRAliases.find(aliasAttr);
+                if (it != s_HDRAliases.end()) {
+                    skybox.hdrPath = it->second;
+                    s_CubemapManager.loadHDR(skybox.hdrPath);
+                }
+            }
+            else if (child->GetText()) {
+                skybox.hdrPath = child->GetText();
+                s_CubemapManager.loadHDR(skybox.hdrPath);
+            }
         }
         child = child->NextSiblingElement();
     }

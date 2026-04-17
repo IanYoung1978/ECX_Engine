@@ -11,6 +11,40 @@
 
 namespace XML
 {
+	struct SceneDescriptor
+	{
+		std::string alias;
+		std::string filename;
+		bool precache = false;
+		bool unloadOnDeactivate = true;
+	};
+
+	inline bool loadScenesFile(const std::string& file, std::vector<SceneDescriptor>& scenes)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root || strcmp(root->Value(), "Scenes") != 0)
+			return false;
+
+		auto child = root->FirstChildElement("Scene");
+		while (child)
+		{
+			SceneDescriptor desc;
+			const char* alias = child->Attribute("alias");
+			if (alias) desc.alias = alias;
+			const char* precache = child->Attribute("precache");
+			if (precache) desc.precache = (strcmp(precache, "true") == 0);
+			const char* unload = child->Attribute("unloadondeactivate");
+			if (unload) desc.unloadOnDeactivate = (strcmp(unload, "true") == 0);
+			if (child->GetText()) desc.filename = child->GetText();
+			scenes.push_back(desc);
+			child = child->NextSiblingElement("Scene");
+		}
+		return true;
+	}
+
 	inline bool loadKeyMapping(const std::string& file, std::map<SDL_Scancode, std::string>& mappings)
 	{
 		TiXmlDocument doc(file.c_str());
@@ -70,10 +104,10 @@ namespace XML
 					//game controls data
 					settings.controls = child->FirstAttribute()->Value();
 				}
-				else if (strcmp(child->Value(), "GameWorlds") == 0)
+				else if (strcmp(child->Value(), "Scenes") == 0)
 				{
 					//game world data
-					settings.game_world_data = child->FirstAttribute()->Value();
+					settings.scenes_file = child->FirstAttribute()->Value();
 				}
 				else if (strcmp(child->Value(), "GraphicsSettings") == 0)
 				{

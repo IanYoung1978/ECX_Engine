@@ -10,52 +10,40 @@
 #include "Entity/EC_DOD_EntityFactory.h"
 
 class TiXmlElement;
+class EC_GameScene;
 
 class EC_DOD_LoadingWorker : public EC_Task {
 public:
     EC_DOD_LoadingWorker();
     ~EC_DOD_LoadingWorker();
-
-    void scheduleEntity(const std::string& filename);
-    void scheduleScene(const std::string& filename);
-
+    void scheduleEntity(const std::string& filename, EC_GameScene* scene);
+    void scheduleScene(const std::string& filename, EC_GameScene& scene);
     void start();
     void abort();
     void shutdown();
-
     float getProgress() const;
     bool isLoading() const;
-
     bool needsFinalization() const;
     void finalizeOnMainThread();
-
-    // Inherited from EC_Task
     void execute() override;
-
 private:
     struct LoadTask {
-        enum class Type {
-            Entity,
-            Scene
-        };
+        enum class Type { Entity, Scene };
         Type type;
         std::string filename;
+        EC_GameScene* scene = nullptr;
     };
-
-    bool loadEntityFile(const std::string& filename);
-    bool loadSceneFile(const std::string& filename);
-    EntityID parseEntity(TiXmlElement* element);
-    void parseSceneEntities(TiXmlElement* sceneRoot);
-
+    bool loadEntityFile(const std::string& filename, EC_GameScene* scene);
+    bool loadSceneFile(const std::string& filename, EC_GameScene& scene);
+    EntityID parseEntity(TiXmlElement* element, EC_GameScene& scene);
+    void parseSceneEntities(TiXmlElement* sceneRoot, EC_GameScene& scene);
     std::atomic<bool> m_Running;
     std::atomic<bool> m_Loading;
     std::atomic<bool> m_ReadyToFinalize;
     std::atomic<bool> m_Finalized;
-
     mutable std::mutex m_QueueMutex;
     std::condition_variable m_QueueCV;
     std::deque<LoadTask> m_LoadQueue;
-
     mutable std::mutex m_ProgressMutex;
     size_t m_TotalTasks;
     size_t m_CompletedTasks;
