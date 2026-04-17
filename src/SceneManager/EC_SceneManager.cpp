@@ -92,7 +92,7 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
         float progress = m_Loader->getProgress();
     }
 
-    m_Renderer->renderScene();
+    m_Renderer->renderScene(m_Scenes[m_ActiveScene]);
 }
 
 void EC_SceneManager::toggleDebug()
