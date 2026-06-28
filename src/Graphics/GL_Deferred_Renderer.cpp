@@ -85,6 +85,11 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load directional shadow pass shader", LOGGING::LogLevel::CRITICAL);
     if (!m_ShadowSpotLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/SpotlightShadowPBR.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load spot shadow pass shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_PointShadowDepthShader.loadShader(
+        "data/assets/shaders/point_shadow.vert",
+        "data/assets/shaders/point_shadow.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "failed to load point shadow depth shader", LOGGING::LogLevel::CRITICAL);
     if (!m_BloomHShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomH.frag") ||
         !m_BloomVShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomV.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load bloom shader", LOGGING::LogLevel::CRITICAL);
@@ -94,7 +99,13 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "HDR tonemap shader loaded, handle=" + std::to_string(m_HDRTonemapShader.getShaderHandle()),
             LOGGING::LogLevel::INFORMATION);
+    if (!m_ShadowPointLightShader.loadShader(
+        "data/assets/shaders/ShadowLightPass.vert",
+        "data/assets/shaders/PointShadowLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "failed to load point shadow light shader", LOGGING::LogLevel::CRITICAL);
 
+    m_PointShadowBuffer.init(1024, 1024);
     m_FrameBuffer.init(window->getWidth(), window->getHeight());
     m_LightBuffer.init((*m_LightPassShader));
     m_ShadowBuffer.init(2048, 2048);
@@ -408,21 +419,76 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowPointPass(ShadowBuffer& target, LightData& light)
+void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& light, EC_GameScene& scene)
 {
+    glm::vec3 lightPos = glm::vec3(light.position);
+
+    glm::mat4 projection = glm::perspective(
+        glm::radians(90.0f), 1.0f, 0.1f, m_PointShadowFarPlane);
+
+    glm::mat4 faceViews[6] = {
+        glm::lookAt(lightPos, lightPos + glm::vec3(1, 0, 0), glm::vec3(0,-1, 0)),
+        glm::lookAt(lightPos, lightPos + glm::vec3(-1, 0, 0), glm::vec3(0,-1, 0)),
+        glm::lookAt(lightPos, lightPos + glm::vec3(0, 1, 0), glm::vec3(0, 0, 1)),
+        glm::lookAt(lightPos, lightPos + glm::vec3(0,-1, 0), glm::vec3(0, 0,-1)),
+        glm::lookAt(lightPos, lightPos + glm::vec3(0, 0, 1), glm::vec3(0,-1, 0)),
+        glm::lookAt(lightPos, lightPos + glm::vec3(0, 0,-1), glm::vec3(0,-1, 0))
+    };
+
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(2.0, 2.0);
+    glCullFace(GL_FRONT);
+
+    auto& manager = EC_DOD_EntityManager::getInstance();
+
+    for (int face = 0; face < 6; face++)
+    {
+        target.bindFace(face);
+
+        for (EntityID entityID : scene.getEntities())
+        {
+            if (!manager.isAlive(entityID)) continue;
+            if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+            if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
+
+            const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
+            const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
+
+            if (gfx.getMeshHandle() == 0) continue;
+
+            m_PointShadowDepthShader.activate();
+            m_PointShadowDepthShader.setUniform("ModelTransform", transform.matrix);
+            m_PointShadowDepthShader.setUniform("ViewTransform", faceViews[face]);
+            m_PointShadowDepthShader.setUniform("ProjTransform", projection);
+            m_PointShadowDepthShader.setUniform("LightPos", lightPos);
+            m_PointShadowDepthShader.setUniform("FarPlane", m_PointShadowFarPlane);
+
+            glBindVertexArray(gfx.getMeshHandle());
+            glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
+            glBindVertexArray(0);
+        }
+    }
+
+    glUseProgram(0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glEnable(GL_CULL_FACE);
+    glDisable(GL_POLYGON_OFFSET_FILL);
+    glCullFace(GL_BACK);
 }
 
 void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    for (EntityID cameraID : scene.getCameras()) {
+    for (EntityID cameraID : scene.getCameras())
+    {
         if (!manager.isAlive(cameraID)) continue;
         const auto& spatial = manager.getComponent<EC_DOD_Spatial>(cameraID);
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
         if (!camera.isActive) continue;
 
-        for (size_t i = 0; i < m_ShadowDirs.size(); i++) {
+        for (size_t i = 0; i < m_ShadowDirs.size(); i++)
+        {
             shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i], scene);
             m_ShadowDirLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
@@ -436,7 +502,8 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             glDisable(GL_BLEND);
         }
 
-        for (size_t i = 0; i < m_ShadowSpots.size(); i++) {
+        for (size_t i = 0; i < m_ShadowSpots.size(); i++)
+        {
             shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], scene);
             m_ShadowSpotLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
@@ -450,19 +517,25 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             glDisable(GL_BLEND);
         }
 
-        for (size_t i = 0; i < m_ShadowPoints.size(); i++) {
-            shadowPointPass(m_ShadowBuffer, m_ShadowPoints[i]);
+        for (size_t i = 0; i < m_ShadowPoints.size(); i++)
+        {
+            shadowPointPass(m_PointShadowBuffer, m_ShadowPoints[i], scene);
             m_ShadowPointLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowPointLightShader);
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE, GL_ONE);
             m_ShadowPointLightShader.setUniform("WSCamPos", spatial.position);
             m_ShadowPointLightShader.setLight("pointLight", m_ShadowPoints[i]);
-            m_ShadowPointLightShader.setUniform("ShadowTransform", m_ShadowDirMatrix);
-            m_ShadowPointLightShader.bindTexture("shadowMap", 5, m_ShadowBuffer.getDepthTexture());
+            m_ShadowPointLightShader.setUniform("FarPlane", m_PointShadowFarPlane);
+
+            glActiveTexture(GL_TEXTURE5);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, m_PointShadowBuffer.getTexture());
+            m_ShadowPointLightShader.setUniform("shadowMap", 5);
+
             renderQuad();
             glDisable(GL_BLEND);
         }
+
         break;
     }
 

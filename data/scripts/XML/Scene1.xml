@@ -39,8 +39,8 @@
 		</PBRMaterial>
 		<PBRMaterial alias="brickwall1">
 			<Albedo>data/assets/Images/bricks/bricks_diffuseOriginal.png</Albedo>
-			<Normal>data/assets/Images/bricks/bricks_normal.png</Normal>
-			<Smoothness>data/assets/Images/bricks/bricks_normal.png</Smoothness>
+			<Normal>data/assets/Images/bricks/bricks_normal-ogl.png</Normal>
+			<Smoothness>data/assets/Images/bricks/bricks_smoothness.png</Smoothness>
 			<Height>data/assets/Images/bricks/bricks_height.png</Height>
 			<Metallic>data/assets/Images/bricks/bricks_metallic.png</Metallic>
 			<AO>data/assets/Images/bricks/bricks_ao.png</AO>
@@ -72,7 +72,7 @@
 			<OnMouseMove alias="mousemove"/>
 		</ScriptComponent>
 	</Entity>
-	<Entity uid="1" name="directionalLight01">
+	<!--<Entity uid="1" name="directionalLight01">
 		<Light>
 			<Type>Directional</Type>
 			<Direction>1.0,-1.0,0.0,0.0</Direction>
@@ -100,6 +100,17 @@
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 			<Intensity>5.0</Intensity>
 			<Cutoff>60.0</Cutoff>
+			<Attenuation>1.0,0.1,0.01</Attenuation>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>false</Dynamic>
+		</Light>
+	</Entity>-->
+	<Entity uid="4" name="pointLight01">
+		<Light>
+			<Type>Point</Type>
+			<Position>5.0,5.0,-5.0</Position>
+			<Colour>1.0,0.8,0.6,1.0</Colour>
+			<Intensity>5.0</Intensity>
 			<Attenuation>1.0,0.1,0.01</Attenuation>
 			<CastsShadow>true</CastsShadow>
 			<Dynamic>false</Dynamic>

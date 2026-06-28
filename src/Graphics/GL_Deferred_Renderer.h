@@ -3,7 +3,7 @@
 #include "FrameBufferSet.h"
 #include "LightUniformBuffer.h"
 #include "ShadowBuffer.h"
-#include "ShadowCubeBuffer.h"
+#include "CubemapBuffer.h"
 #include "Shader.h"
 #include "ShadowData.h"
 #include "GL_DebugRenderer.h"
@@ -21,7 +21,9 @@ enum class PostProcess {
     DOF,
     NumProcesses
 };
+
 class EC_GameScene;
+
 class GL_Deferred_Renderer : public Renderer, public ICommandListener {
 public:
     GL_Deferred_Renderer();
@@ -32,13 +34,14 @@ public:
     virtual void changeResolution(int width, int height) override;
     void setExposure(float exposure) { m_Exposure = exposure; }
     float getExposure() const { return m_Exposure; }
+
 private:
     void geometryPass(EC_GameScene& scene);
     void lightPass(EC_GameScene& scene);
     void updateLights(EC_GameScene& scene);
     void shadowDirPass(ShadowBuffer& target, DirLightData& light, EC_GameScene& scene);
     void shadowSpotPass(ShadowBuffer& target, SpotLightData& light, EC_GameScene& scene);
-    void shadowPointPass(ShadowBuffer& target, LightData& light);
+    void shadowPointPass(CubemapBuffer& target, LightData& light, EC_GameScene& scene);
     void shadowLightingPass(EC_GameScene& scene);
     void skyboxPass(EC_GameScene& scene);
     void debugPass(EC_GameScene& scene);
@@ -47,6 +50,7 @@ private:
     void renderQuad();
     void finalPass();
     void hdrPass();
+
     std::mutex m_Lock;
     LightUniformBuffer m_LightBuffer;
     FrameBufferSet m_FrameBuffer;
@@ -69,6 +73,7 @@ private:
     Shader m_ShadowPointLightShader;
     Shader m_BloomVShader;
     Shader m_BloomHShader;
+    Shader m_PointShadowDepthShader;
     GL_SkyboxRenderer m_SkyboxRenderer;
     Shader m_HDRTonemapShader;
     float m_Exposure = 0.75f;
@@ -76,7 +81,8 @@ private:
     glm::mat4 m_ShadowDirMatrix;
     glm::mat4 m_ShadowSpotMatrix;
     ShadowData m_ShadowPointMatrices;
-    ShadowCubeBuffer m_ShadowCubeBuffer;
+    CubemapBuffer m_PointShadowBuffer;
+    float m_PointShadowFarPlane = 100.0f;
     std::vector<DirLightData> m_ShadowDirs;
     std::vector<LightData> m_ShadowPoints;
     std::vector<SpotLightData> m_ShadowSpots;
