@@ -1,115 +1,134 @@
 #version 430 core
-// Some drivers require the following
 precision highp float;
-#define MAX_NUM_POINT_LIGHTS 128
 
 layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
-layout (location = 2) uniform sampler2D colourMap;
-layout (location = 3) uniform sampler2D specularMap;
+layout (location = 2) uniform sampler2D AlbedoMap;
+layout (location = 3) uniform sampler2D PBRMap;
 layout (location = 4) uniform sampler2D glowMap;
-uniform int NumSpots;
-uniform int NumPoints;
+layout (location = 5) uniform samplerCube shadowMap;
+
+const float PI = 3.14159265359;
 
 struct LightData
 {
-	vec4 colour;
-	vec4 position;
-	vec4 attenuation;
-	float intensity;
-};
-struct SpotLightData
-{
-	vec4 colour;
-	vec4 position;
-	vec4 attenuation;
-	float intensity;
-	vec3 padding;
-	vec4 direction;
-	float cutoffAngle;
-};
-struct DirLightData
-{
-	vec4 colour;
-	float intensity;
-	vec4 direction;
-};
-	
-layout (std140) uniform PointLights
-{
-	LightData points[MAX_NUM_POINT_LIGHTS];
+    vec4 colour;
+    vec4 position;
+    vec4 attenuation;
+    float intensity;
 };
 
-layout (std140) uniform SpotLights
-{
-	SpotLightData spots[MAX_NUM_POINT_LIGHTS];
-};
-
-uniform DirLightData dirLight;
-out vec4 colour;
+uniform LightData pointLight;
 uniform vec3 WSCamPos;
+uniform float FarPlane;
+
+out vec4 colour;
+
 in xferBlock
 {
-	vec3 VSVertex;
-	vec2 VSTexCoord;
+    vec3 VSVertex;
+    vec2 VSTexCoord;
 } indata;
 
-vec3 computeLightFragment(vec3 eyeVec, vec3 lightVec, vec3 normal, vec3 colour, vec3 attenuation, float intensity, float spec)
+vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
-	//compute lighting fragment
-	float dist = length(lightVec);
-	lightVec = normalize(lightVec);
-
-	vec3 diffCol = colour * max(0.0,dot(normalize(normal),lightVec));
-	vec3 reflectVec = normalize(reflect(-lightVec,normal));
-	float specFactor = max(dot(reflectVec,eyeVec),0);
-	float specPow = pow(specFactor,spec*255.0);
-	vec3 specCol = colour * specPow;
-	float attn = 1.0/(attenuation.x + 
-	attenuation.y * dist + 
-	attenuation.z * dist * dist);
-	vec3 fragcol = (diffCol+specCol)*intensity*attn;
-	return fragcol;
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
+
+float DistributionGGX(vec3 N, vec3 H, float roughness)
+{
+    float a      = roughness * roughness;
+    float a2     = a * a;
+    float NdotH  = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float num    = a2;
+    float denom  = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom        = PI * denom * denom;
+    return num / denom;
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness)
+{
+    float r     = (roughness + 1.0);
+    float k     = (r * r) / 8.0;
+    float num   = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+    return num / denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+{
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx2  = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+vec3 computeLight(
+    vec3 Ldirection,
+    vec3 Vdirection,
+    vec3 Lcolour,
+    vec3 albedo,
+    vec3 normal,
+    float Lintensity,
+    vec3 pbr)
+{
+    vec3 F0 = vec3(0.04);
+    F0 = mix(F0, albedo, pbr.g);
+    vec3 H = normalize(Vdirection + Ldirection);
+    float distance    = length(Ldirection);
+    float attenuation = 1.0 / (distance * distance);
+    vec3 radiance     = Lcolour * (attenuation * Lintensity);
+
+    float NDF = DistributionGGX(normal, H, pbr.r);
+    float G   = GeometrySmith(normal, Vdirection, Ldirection, pbr.r);
+    vec3 F    = fresnelSchlick(max(dot(H, Vdirection), 0.0), F0);
+
+    vec3 nominator    = NDF * G * F;
+    float denominator = 4.0 * max(dot(normal, Vdirection), 0.0) * max(dot(normal, Ldirection), 0.0) + 0.001;
+    vec3 specular     = nominator / denominator;
+
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - pbr.g;
+
+    float NdotL = max(dot(normal, Ldirection), 0.0);
+    return (kD * albedo / PI + specular) * radiance * NdotL;
+}
+
+float computeOcclusion(vec3 fragPos, vec3 lightPos)
+{
+    vec3 fragToLight   = fragPos - lightPos;
+    float closestDepth = texture(shadowMap, fragToLight).r * FarPlane;
+    float currentDepth = length(fragToLight);
+    float bias         = 0.05;
+    return (currentDepth - bias > closestDepth) ? 0.2 : 1.0;
+    //return closestDepth;
+}
+
 void main()
 {
-	vec4 pcolour = texture(positionMap, indata.VSTexCoord).rgba;
-	if (pcolour.a == 0.0) discard;
-	vec4 ncolour = texture(normalMap, indata.VSTexCoord).rgba;
-	vec4 dcolour = texture(colourMap, indata.VSTexCoord).rgba;
-	vec4 scolour = texture(specularMap, indata.VSTexCoord).rgba;
-	vec4 gcolour = texture(glowMap, indata.VSTexCoord).rgba;
-	vec3 vToEye = WSCamPos - pcolour.xyz;
-	vToEye = normalize(vToEye);
-	vec3 outColour = vec3(0.0,0.0,0.0);
-	for (int i = 0; i < NumPoints; i++)
-	{
-		//compute lighting fragment
-		vec3 ltf = points[i].position.xyz - pcolour.rgb;
-		outColour+=computeLightFragment(vToEye, ltf, ncolour.rgb, points[i].colour.rgb, points[i].attenuation.xyz, points[i].intensity, scolour.r);
-	}
-	for (int i = 0; i < NumSpots; i++)
-	{
-		vec3 ltf = spots[i].position.xyz - pcolour.rgb;
-		float cos_cur_angle = dot(normalize(-ltf),spots[i].direction.xyz);
-		if (cos_cur_angle > acos(spots[i].cutoffAngle))
-		{
-			vec3 fragCol = computeLightFragment(vToEye, ltf, ncolour.rgb, spots[i].colour.rgb, spots[i].attenuation.xyz, spots[i].intensity, scolour.r);
-			outColour+=fragCol * clamp((cos_cur_angle-spots[i].cutoffAngle)/(1.0-spots[i].cutoffAngle), 0.0, 1.0);
-		}
-	}
+    vec4 pcolour = texture(positionMap, indata.VSTexCoord).rgba;
+    if (pcolour.a == 0.0) discard;
+    vec4 ncolour = texture(normalMap,   indata.VSTexCoord).rgba;
+    vec4 albedo  = texture(AlbedoMap,   indata.VSTexCoord).rgba;
+    vec3 pbr     = texture(PBRMap,      indata.VSTexCoord).rgb;
+    vec4 gcolour = texture(glowMap,     indata.VSTexCoord).rgba;
 
-	vec3 diffCol = dirLight.colour.rgb * max(0.0,dot(normalize(ncolour.rgb),-dirLight.direction.xyz));
-	vec3 reflectVec = normalize(reflect(dirLight.direction.xyz,ncolour.rgb));
-	float specFactor = max(dot(reflectVec,vToEye),0);
-	float specPow = pow(specFactor,scolour.r*255.0);
-	vec3 specCol = dirLight.colour.rgb * specPow;
-	outColour+=(diffCol+specCol)*dirLight.intensity;
-		
-	colour = dcolour*vec4(outColour,1);
-	//colour = vec4(dcolour.rgb*outColour.rgb,1.0);
-	//colour = dcolour+pcolour+ncolour+scolour+gcolour;
-	//colour = vec4(indata.VSTexCoord,0.0,1.0);
-	//colour = dcolour;
-	//colour = ncolour;
+    vec3 vToEye    = normalize(WSCamPos - pcolour.xyz);
+    vec3 ltf       = pointLight.position.xyz - pcolour.xyz;
+    float visibility = computeOcclusion(pcolour.xyz, pointLight.position.xyz);
+
+    vec3 fragCol = computeLight(
+        normalize(ltf),
+        vToEye,
+        pointLight.colour.rgb,
+        albedo.rgb,
+        ncolour.rgb,
+        pointLight.intensity,
+        pbr);
+
+    colour = vec4(visibility * fragCol + gcolour.rgb, 1.0);
+    //colour = vec4(vec3(computeOcclusion(pcolour.xyz, pointLight.position.xyz)), 1.0);
 }
