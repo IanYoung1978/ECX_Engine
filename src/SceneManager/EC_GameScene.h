@@ -3,7 +3,6 @@
 #include <mutex>
 #include "Entity/EC_DOD_Types.h"
 #include <string>
-#include <glm/glm.hpp>
 
 class EC_GameScene
 {
@@ -38,18 +37,6 @@ public:
     void setUnloadOnDeactivate(bool v) { m_UnloadOnDeactivate = v; }
     void setLoaded(bool v) { m_Loaded = v; }
 
-    bool hasStreamTrigger()      const { return m_HasStreamTrigger; }
-    const glm::vec3& getTriggerPosition() const { return m_TriggerPosition; }
-    float getLoadRadius()        const { return m_LoadRadius; }
-    float getActivateRadius()    const { return m_ActivateRadius; }
-    void setStreamTrigger(const glm::vec3& position, float loadRadius, float activateRadius)
-    {
-        m_TriggerPosition = position;
-        m_LoadRadius = loadRadius;
-        m_ActivateRadius = activateRadius;
-        m_HasStreamTrigger = true;
-    }
-
 private:
     std::string m_Alias;
     std::string m_Filename;
@@ -60,9 +47,4 @@ private:
     std::vector<EntityID> m_Cameras;
     std::vector<EntityID> m_Lights;
     mutable std::mutex m_Mutex;
-
-    bool m_HasStreamTrigger = false;
-    glm::vec3 m_TriggerPosition{};
-    float m_LoadRadius = 0.f;
-    float m_ActivateRadius = 0.f;
 };

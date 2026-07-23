@@ -64,8 +64,6 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
         scene.setFilename(descriptors[i].filename);
         scene.setPrecache(descriptors[i].precache);
         scene.setUnloadOnDeactivate(descriptors[i].unloadOnDeactivate);
-        if (descriptors[i].hasStreamTrigger)
-            scene.setStreamTrigger(descriptors[i].triggerPosition, descriptors[i].loadRadius, descriptors[i].activateRadius);
         if (!descriptors[i].alias.empty())
             m_AliasMap[descriptors[i].alias] = i;
     }
@@ -90,8 +88,6 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
 
 void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
 {
-    updateStreamingZones();
-
     // Resolve a handful of pending GPU resources every frame (not gated on the whole batch
     // finishing) so entities visibly pop in as they load, rather than appearing all at once.
     EC_DOD_EntityFactory::finalizePendingGraphics(kMaxGraphicsFinalizePerFrame);
@@ -187,44 +183,6 @@ void EC_SceneManager::activateScene(const std::string& alias)
         loadScene(alias);
 
     activateSceneByIndex(idx);
-}
-
-void EC_SceneManager::setStreamingReferencePosition(const glm::vec3& position)
-{
-    std::lock_guard<std::mutex> lock(m_Lock);
-    m_ReferencePosition = position;
-    m_HasReferencePosition = true;
-}
-
-void EC_SceneManager::updateStreamingZones()
-{
-    glm::vec3 referencePosition;
-    {
-        std::lock_guard<std::mutex> lock(m_Lock);
-        if (!m_HasReferencePosition)
-            return;
-        referencePosition = m_ReferencePosition;
-    }
-
-    for (size_t i = 0; i < m_Scenes.size(); i++)
-    {
-        EC_GameScene& scene = m_Scenes[i];
-        if (!scene.hasStreamTrigger())
-            continue;
-
-        float dist = glm::length(referencePosition - scene.getTriggerPosition());
-        bool wantActive = dist <= scene.getActivateRadius();
-        bool wantLoaded = dist <= scene.getLoadRadius();
-
-        if (wantActive && i != m_ActiveScene)
-        {
-            activateScene(scene.getAlias());
-        }
-        else if (wantLoaded && !scene.isLoaded() && !m_LoadingScenes.count(i))
-        {
-            loadScene(scene.getAlias());
-        }
-    }
 }
 
 void EC_SceneManager::activateSceneByIndex(size_t index)

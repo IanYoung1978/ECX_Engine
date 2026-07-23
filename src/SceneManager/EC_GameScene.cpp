@@ -17,10 +17,6 @@ EC_GameScene::EC_GameScene(EC_GameScene&& other) noexcept
     m_Entities = std::move(other.m_Entities);
     m_Cameras = std::move(other.m_Cameras);
     m_Lights = std::move(other.m_Lights);
-    m_HasStreamTrigger = other.m_HasStreamTrigger;
-    m_TriggerPosition = other.m_TriggerPosition;
-    m_LoadRadius = other.m_LoadRadius;
-    m_ActivateRadius = other.m_ActivateRadius;
 }
 
 EC_GameScene& EC_GameScene::operator=(EC_GameScene&& other) noexcept
@@ -37,10 +33,6 @@ EC_GameScene& EC_GameScene::operator=(EC_GameScene&& other) noexcept
     m_Entities = std::move(other.m_Entities);
     m_Cameras = std::move(other.m_Cameras);
     m_Lights = std::move(other.m_Lights);
-    m_HasStreamTrigger = other.m_HasStreamTrigger;
-    m_TriggerPosition = other.m_TriggerPosition;
-    m_LoadRadius = other.m_LoadRadius;
-    m_ActivateRadius = other.m_ActivateRadius;
     return *this;
 }
 

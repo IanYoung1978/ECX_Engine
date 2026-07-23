@@ -19,7 +19,6 @@
 			<OnKeyUp filename="data/scripts/LUA/OnKeyUp.lua"/>
 			<OnKeyHeld filename="data/scripts/LUA/OnKeyHeld.lua"/>
 			<OnMouseMove filename="data/scripts/LUA/onMouseMove.lua"/>
-			<OnUpdate filename="data/scripts/LUA/OnStreamingUpdate.lua"/>
 		</ScriptComponent>
 	</Entity>
 	<Entity uid="22" name="streamed_sun">

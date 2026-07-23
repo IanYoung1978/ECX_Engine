@@ -7,7 +7,6 @@
 #include <string>
 #include <map>
 #include <SDL.h>
-#include <glm/glm.hpp>
 #include "Logging/ECX_Logging.h"
 
 namespace XML
@@ -18,10 +17,6 @@ namespace XML
 		std::string filename;
 		bool precache = false;
 		bool unloadOnDeactivate = true;
-		bool hasStreamTrigger = false;
-		glm::vec3 triggerPosition{};
-		float loadRadius = 0.f;
-		float activateRadius = 0.f;
 	};
 
 	inline bool loadScenesFile(const std::string& file, std::vector<SceneDescriptor>& scenes)
@@ -43,19 +38,6 @@ namespace XML
 			if (precache) desc.precache = (strcmp(precache, "true") == 0);
 			const char* unload = child->Attribute("unloadondeactivate");
 			if (unload) desc.unloadOnDeactivate = (strcmp(unload, "true") == 0);
-
-			const char* triggerX = child->Attribute("triggerx");
-			const char* triggerY = child->Attribute("triggery");
-			const char* triggerZ = child->Attribute("triggerz");
-			if (triggerX && triggerY && triggerZ)
-			{
-				desc.triggerPosition = glm::vec3(std::stof(triggerX), std::stof(triggerY), std::stof(triggerZ));
-				desc.hasStreamTrigger = true;
-			}
-			const char* loadRadius = child->Attribute("loadradius");
-			if (loadRadius) desc.loadRadius = std::stof(loadRadius);
-			const char* activateRadius = child->Attribute("activateradius");
-			if (activateRadius) desc.activateRadius = std::stof(activateRadius);
 
 			if (child->GetText()) desc.filename = child->GetText();
 			scenes.push_back(desc);

@@ -348,7 +348,6 @@ private:
             .addFunction("loadScene", &ScriptAPI::GameAPI::loadScene)
             .addFunction("unloadScene", &ScriptAPI::GameAPI::unloadScene)
             .addFunction("activateScene", &ScriptAPI::GameAPI::activateScene)
-            .addFunction("setStreamingReferencePosition", &ScriptAPI::GameAPI::setStreamingReferencePosition)
             .endClass();
 
         luabridge::push(m_luaState, m_game);

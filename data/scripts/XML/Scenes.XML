@@ -1,7 +1,5 @@
 <?xml version="1.0"?>
 <Scenes>
 	<Scene alias="main" precache="true" unloadondeactivate="false">data/scripts/XML/Scene1.xml</Scene>
-	<Scene alias="streamed" precache="false" unloadondeactivate="true"
-	       triggerx="60.0" triggery="0.0" triggerz="0.0"
-	       loadradius="45.0" activateradius="20.0">data/scripts/XML/StreamedZone.xml</Scene>
+	<Scene alias="streamed" precache="false" unloadondeactivate="true">data/scripts/XML/StreamedZone.xml</Scene>
 </Scenes>
