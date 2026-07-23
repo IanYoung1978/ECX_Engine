@@ -97,6 +97,7 @@ private:
     std::vector<EntityID> m_AliveEntities;
 
     std::unordered_map<std::type_index, std::shared_ptr<EC_IComponentArray>> m_ComponentArrays;
+    mutable std::shared_mutex m_ComponentArraysMutex;
 
     mutable std::shared_mutex m_EntityMutex;
 
@@ -263,19 +264,27 @@ template<typename T>
 EC_ComponentArray<T>* EC_DOD_EntityManager::getComponentArray() {
     std::type_index typeIndex(typeid(T));
 
-    auto it = m_ComponentArrays.find(typeIndex);
-    if (it == m_ComponentArrays.end()) {
-        auto newArray = std::make_shared<EC_ComponentArray<T>>();
-        m_ComponentArrays[typeIndex] = newArray;
-        return newArray.get();
+    {
+        std::shared_lock readLock(m_ComponentArraysMutex);
+        auto it = m_ComponentArrays.find(typeIndex);
+        if (it != m_ComponentArrays.end())
+            return static_cast<EC_ComponentArray<T>*>(it->second.get());
     }
 
-    return static_cast<EC_ComponentArray<T>*>(it->second.get());
+    std::unique_lock writeLock(m_ComponentArraysMutex);
+    auto it = m_ComponentArrays.find(typeIndex);
+    if (it != m_ComponentArrays.end())
+        return static_cast<EC_ComponentArray<T>*>(it->second.get());
+
+    auto newArray = std::make_shared<EC_ComponentArray<T>>();
+    m_ComponentArrays[typeIndex] = newArray;
+    return newArray.get();
 }
 
 template<typename T>
 const EC_ComponentArray<T>* EC_DOD_EntityManager::getComponentArray() const {
     std::type_index typeIndex(typeid(T));
+    std::shared_lock readLock(m_ComponentArraysMutex);
     auto it = m_ComponentArrays.find(typeIndex);
     if (it == m_ComponentArrays.end()) {
         return nullptr;

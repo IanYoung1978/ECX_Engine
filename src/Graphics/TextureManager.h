@@ -2,6 +2,7 @@
 #include <string>
 #include <string.h>
 #include <map>
+#include <mutex>
 #include <SDL_image.h>
 
 class TextureManager
@@ -20,5 +21,6 @@ private:
 	unsigned int finalizeTexture(const std::string& fname, SDL_Surface* surface);
 	std::map<std::string, SDL_Surface*> m_img_data;
 	std::map<std::string, unsigned int> m_Textures;
+	std::recursive_mutex m_Mutex;
 };
 

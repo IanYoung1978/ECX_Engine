@@ -3,6 +3,7 @@
 #include <memory>
 #include <map>
 #include <tuple>
+#include <mutex>
 
 struct ShaderData
 {
@@ -31,6 +32,7 @@ private:
 	ShaderData findShader(const std::string& vert, const std::string& frag);
 	std::map<std::pair<const std::string, const std::string>, ShaderData> m_ShaderData;
 	std::map<std::pair<const std::string, const std::string>, std::shared_ptr<Shader>> m_Shaders;
+	std::recursive_mutex m_Mutex;
 
 };
 

@@ -19,6 +19,7 @@ public:
     EntityID constructEntity(TiXmlElement& descriptor);
     EntityID constructCamera(TiXmlElement& descriptor);
     void performPostLoadActions();
+    static void finalizePendingGraphics(size_t maxPerCall);
     const std::vector<EntityID>& getCameras() const;
     const std::vector<EntityID>& getEntities() const;
     const std::vector<EntityID>& getLights() const;

@@ -111,6 +111,22 @@ namespace ScriptAPI
             cmd.type = ECXCommandType::GraphicsToggleDebug;
             messenger->publish(cmd);
 		}
+
+        void loadScene(const std::string& alias) {
+            if (game) game->loadScene(alias);
+        }
+
+        void unloadScene(const std::string& alias) {
+            if (game) game->unloadScene(alias);
+        }
+
+        void activateScene(const std::string& alias) {
+            if (game) game->activateScene(alias);
+        }
+
+        void setStreamingReferencePosition(const glm::vec3& position) {
+            if (game) game->setStreamingReferencePosition(position);
+        }
     private:
         void updateDepth(EntityID entity, uint32_t depth) {
             auto& mgr = EC_DOD_EntityManager::getInstance();

@@ -6,6 +6,7 @@
 		<LuaScript alias="keyup">data/scripts/LUA/OnKeyUp.lua</LuaScript>
 		<LuaScript alias="keyheld">data/scripts/LUA/OnKeyHeld.lua</LuaScript>
 		<LuaScript alias="mousemove">data/scripts/LUA/onMouseMove.lua</LuaScript>
+		<LuaScript alias="streamupdate">data/scripts/LUA/OnStreamingUpdate.lua</LuaScript>
 		<PBRMaterial alias="crate_material">
 			<Albedo>data/assets/Images/Crate/Crate_D.png</Albedo>
 			<Normal>data/assets/Images/Crate/crate_normal.png</Normal>
@@ -70,6 +71,7 @@
 			<OnKeyUp alias="keyup"/>
 			<OnKeyHeld alias="keyheld"/>
 			<OnMouseMove alias="mousemove"/>
+			<OnUpdate alias="streamupdate"/>
 		</ScriptComponent>
 	</Entity>
 	<!--<Entity uid="1" name="directionalLight01">

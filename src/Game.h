@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <vector>
+#include <glm/glm.hpp>
 #include "SceneManager/EC_SceneManager.h"
 #include "Window/Window.h"
 #include "Engine/Timer.h"
@@ -31,6 +32,10 @@ public:
     EntityID getEntityByUID(uint32_t uid) const;
     EntityID getEntityByName(const std::string& name) const;
     void toggleDebug();
+    void loadScene(const std::string& alias);
+    void unloadScene(const std::string& alias);
+    void activateScene(const std::string& alias);
+    void setStreamingReferencePosition(const glm::vec3& position);
     std::shared_ptr<Window> getWindow();
     ~EC_Game();
 

@@ -24,6 +24,7 @@ bool TextureManager::init()
 
 int TextureManager::loadTexture(const std::string & filename)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	GLuint texID = 0;
 	texID = findTexture(filename);
 	if (texID > 0)
@@ -46,6 +47,7 @@ int TextureManager::loadTexture(const std::string & filename)
 
 unsigned int TextureManager::getTexture(const std::string & filename)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	GLuint texID = findTexture(filename);
 	if (texID == 0)
 		finalizeTexture(filename);
@@ -54,6 +56,7 @@ unsigned int TextureManager::getTexture(const std::string & filename)
 
 void TextureManager::finalizeTextures()
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	for (auto img : m_img_data)
 	{
 		finalizeTexture(img.first, img.second);
@@ -62,6 +65,7 @@ void TextureManager::finalizeTextures()
 
 void TextureManager::finalizeTexture(const std::string & filename)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	auto img = m_img_data.find(filename);
 	if (img != m_img_data.end()) {
 		finalizeTexture(img->first, img->second);
@@ -76,6 +80,7 @@ TextureManager::~TextureManager()
 
 unsigned int TextureManager::findTexture(const std::string& filename)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	auto it = m_Textures.find(filename);
 	if (it == m_Textures.end())
 		return 0;
@@ -110,6 +115,7 @@ void TextureManager::flipYpixels(int BPP, char* pixels, int width, int height)
 
 unsigned int TextureManager::finalizeTexture(const std::string & fname, SDL_Surface *surface)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	GLuint texID = 0;
 	texID = findTexture(fname);
 	if (texID == 0)

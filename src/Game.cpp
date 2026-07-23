@@ -85,6 +85,26 @@ void EC_Game::toggleDebug()
     m_SceneManager.toggleDebug();
 }
 
+void EC_Game::loadScene(const std::string& alias)
+{
+    m_SceneManager.loadScene(alias);
+}
+
+void EC_Game::unloadScene(const std::string& alias)
+{
+    m_SceneManager.unloadScene(alias);
+}
+
+void EC_Game::activateScene(const std::string& alias)
+{
+    m_SceneManager.activateScene(alias);
+}
+
+void EC_Game::setStreamingReferencePosition(const glm::vec3& position)
+{
+    m_SceneManager.setStreamingReferencePosition(position);
+}
+
 void EC_Game::shutDown()
 {
     ECXCommand command;
