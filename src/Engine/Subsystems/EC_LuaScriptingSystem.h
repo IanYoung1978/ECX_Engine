@@ -345,6 +345,9 @@ private:
             .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
             .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
             .addFunction("setExposure", &ScriptAPI::GameAPI::setExposure)
+            .addFunction("loadScene", &ScriptAPI::GameAPI::loadScene)
+            .addFunction("unloadScene", &ScriptAPI::GameAPI::unloadScene)
+            .addFunction("activateScene", &ScriptAPI::GameAPI::activateScene)
             .endClass();
 
         luabridge::push(m_luaState, m_game);

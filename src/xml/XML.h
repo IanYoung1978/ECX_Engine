@@ -38,6 +38,7 @@ namespace XML
 			if (precache) desc.precache = (strcmp(precache, "true") == 0);
 			const char* unload = child->Attribute("unloadondeactivate");
 			if (unload) desc.unloadOnDeactivate = (strcmp(unload, "true") == 0);
+
 			if (child->GetText()) desc.filename = child->GetText();
 			scenes.push_back(desc);
 			child = child->NextSiblingElement("Scene");

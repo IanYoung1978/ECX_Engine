@@ -31,6 +31,9 @@ public:
     EntityID getEntityByUID(uint32_t uid) const;
     EntityID getEntityByName(const std::string& name) const;
     void toggleDebug();
+    void loadScene(const std::string& alias);
+    void unloadScene(const std::string& alias);
+    void activateScene(const std::string& alias);
     std::shared_ptr<Window> getWindow();
     ~EC_Game();
 

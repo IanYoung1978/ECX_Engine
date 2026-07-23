@@ -1,0 +1,150 @@
+<?xml version="1.0"?>
+<Scene>
+	<Entity uid="20" name="streamed_skybox">
+		<Skybox>
+			<HDR>data/assets/Images/Skybox/qwantani_moon_noon_puresky_4k.hdr</HDR>
+		</Skybox>
+	</Entity>
+	<Entity uid="21" name="streamed_camera">
+		<Camera>
+			<FOV>60.0</FOV>
+			<DrawDistance>150.0</DrawDistance>
+		</Camera>
+		<Spatial>
+			<Position>60.0,10.0,-20.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<ScriptComponent>
+			<OnKeyDown filename="data/scripts/LUA/OnKeyDown.lua"/>
+			<OnKeyUp filename="data/scripts/LUA/OnKeyUp.lua"/>
+			<OnKeyHeld filename="data/scripts/LUA/OnKeyHeld.lua"/>
+			<OnMouseMove filename="data/scripts/LUA/onMouseMove.lua"/>
+		</ScriptComponent>
+	</Entity>
+	<Entity uid="22" name="streamed_sun">
+		<Light>
+			<Type>Directional</Type>
+			<Direction>0.6,-1.0,0.4,0.0</Direction>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Intensity>1.0</Intensity>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>false</Dynamic>
+		</Light>
+	</Entity>
+	<Entity uid="23" name="streamed_pointlight">
+		<Light>
+			<Type>Point</Type>
+			<Position>60.0,10.0,0.0</Position>
+			<Colour>0.7,0.85,1.0,1.0</Colour>
+			<Intensity>6.0</Intensity>
+			<Attenuation>1.0,0.05,0.005</Attenuation>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>false</Dynamic>
+		</Light>
+	</Entity>
+	<Entity name="streamed_floor">
+		<Spatial>
+			<Position>60.0,0.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+			<AngularVelocity>0.0,0.0,0.0</AngularVelocity>
+		</Spatial>
+		<Transform>
+			<Scale>10.0,10.0,10.0</Scale>
+		</Transform>
+		<Gfx>
+			<PBRMaterial>
+				<Albedo>data/assets/Images/Wood_floor/Wood_floor_albedo.png</Albedo>
+				<Normal>data/assets/Images/Wood_floor/Wood_floor_normal-ogl.png</Normal>
+				<Smoothness>data/assets/Images/Wood_floor/Wood_floor_smoothness.png</Smoothness>
+				<Height>data/assets/Images/Wood_floor/Wood_floor_height.png</Height>
+				<Metallic>data/assets/Images/Wood_floor/Wood_floor_metallic.png</Metallic>
+				<AO>data/assets/Images/Wood_floor/Wood_floor_ao.png</AO>
+				<ParallaxScale>0.05</ParallaxScale>
+				<ParallaxBias>0.001</ParallaxBias>
+			</PBRMaterial>
+			<Model>data/assets/models/plane.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+		</Gfx>
+	</Entity>
+	<Entity name="streamed_crate_1">
+		<Spatial><Position>44.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>10.0,0.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_2">
+		<Spatial><Position>48.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,10.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_3">
+		<Spatial><Position>52.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_4">
+		<Spatial><Position>56.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>10.0,0.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_5">
+		<Spatial><Position>60.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,10.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_6">
+		<Spatial><Position>64.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_7">
+		<Spatial><Position>68.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>10.0,0.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_8">
+		<Spatial><Position>72.0,2.0,-16.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,10.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_9">
+		<Spatial><Position>44.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_10">
+		<Spatial><Position>48.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>10.0,0.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_11">
+		<Spatial><Position>52.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,10.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_12">
+		<Spatial><Position>56.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_13">
+		<Spatial><Position>60.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>10.0,0.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_14">
+		<Spatial><Position>64.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,10.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_15">
+		<Spatial><Position>68.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+	<Entity name="streamed_crate_16">
+		<Spatial><Position>72.0,2.0,-8.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>10.0,0.0,0.0</AngularVelocity></Spatial>
+		<Transform><Scale>2.0,2.0,2.0</Scale></Transform>
+		<Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx>
+	</Entity>
+</Scene>

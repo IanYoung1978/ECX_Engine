@@ -10,6 +10,10 @@
 #include "Messaging/ECXCommand.h"
 #include "Messaging/ECXCommandType.h"
 
+namespace
+{
+    constexpr size_t kMaxGraphicsFinalizePerFrame = 8;
+}
 
 EC_SceneManager::EC_SceneManager()
 {
@@ -48,26 +52,33 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
         return;
     }
 
+    // EC_GameScene owns a mutex (non-copyable/non-movable), and EC_DOD_LoadingWorker stores raw
+    // EC_GameScene* pointers into m_Scenes, so this vector must never reallocate after scenes are
+    // scheduled. Reserve the exact final size and construct in place.
+    m_Scenes.reserve(descriptors.size());
     for (size_t i = 0; i < descriptors.size(); i++)
     {
-        EC_GameScene scene;
+        m_Scenes.emplace_back();
+        EC_GameScene& scene = m_Scenes.back();
         scene.setAlias(descriptors[i].alias);
         scene.setFilename(descriptors[i].filename);
         scene.setPrecache(descriptors[i].precache);
         scene.setUnloadOnDeactivate(descriptors[i].unloadOnDeactivate);
         if (!descriptors[i].alias.empty())
             m_AliasMap[descriptors[i].alias] = i;
-        m_Scenes.push_back(scene);
     }
 
     m_Loader = std::make_shared<EC_DOD_LoadingWorker>();
     m_ThreadManager.addTask(m_Loader);
     m_ThreadManager.executeTasks();
 
-    for (auto& scene : m_Scenes)
+    for (size_t i = 0; i < m_Scenes.size(); i++)
     {
-        if (scene.isPrecached())
-            m_Loader->scheduleScene(scene.getFilename(), scene);
+        if (m_Scenes[i].isPrecached())
+        {
+            m_Loader->scheduleScene(m_Scenes[i].getFilename(), m_Scenes[i]);
+            m_LoadingScenes.insert(i);
+        }
     }
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
         "Scheduling " + std::to_string(m_Scenes.size()) + " scenes, queue size before start: unknown",
@@ -77,10 +88,23 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
 
 void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
 {
+    // Resolve a handful of pending GPU resources every frame (not gated on the whole batch
+    // finishing) so entities visibly pop in as they load, rather than appearing all at once.
+    EC_DOD_EntityFactory::finalizePendingGraphics(kMaxGraphicsFinalizePerFrame);
+
     if (m_Loader->needsFinalization())
     {
         m_Loader->finalizeOnMainThread();
-        m_Scenes[m_ActiveScene].activate();
+
+        for (auto it = m_LoadingScenes.begin(); it != m_LoadingScenes.end(); )
+        {
+            size_t idx = *it;
+            if (m_Scenes[idx].isLoaded())
+                it = m_LoadingScenes.erase(it);
+            else
+                ++it;
+        }
+
         buildEntityMaps();
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "Load complete!",
@@ -93,6 +117,94 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
     }
 
     m_Renderer->renderScene(m_Scenes[m_ActiveScene]);
+}
+
+void EC_SceneManager::loadScene(const std::string& alias)
+{
+    auto it = m_AliasMap.find(alias);
+    if (it == m_AliasMap.end())
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "loadScene: unknown alias '" + alias + "'",
+            LOGGING::LogLevel::SEVERE);
+        return;
+    }
+
+    size_t idx = it->second;
+    if (m_Scenes[idx].isLoaded() || m_LoadingScenes.count(idx))
+        return;
+
+    m_LoadingScenes.insert(idx);
+    m_Loader->scheduleScene(m_Scenes[idx].getFilename(), m_Scenes[idx]);
+    m_Loader->start();
+}
+
+void EC_SceneManager::unloadScene(const std::string& alias)
+{
+    auto it = m_AliasMap.find(alias);
+    if (it == m_AliasMap.end())
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "unloadScene: unknown alias '" + alias + "'",
+            LOGGING::LogLevel::SEVERE);
+        return;
+    }
+
+    size_t idx = it->second;
+    if (!m_Scenes[idx].isLoaded())
+        return;
+
+    if (idx == m_ActiveScene)
+        m_Scenes[idx].deactivate();
+
+    unloadSceneByIndex(idx);
+}
+
+void EC_SceneManager::activateScene(const std::string& alias)
+{
+    auto it = m_AliasMap.find(alias);
+    if (it == m_AliasMap.end())
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "activateScene: unknown alias '" + alias + "'",
+            LOGGING::LogLevel::SEVERE);
+        return;
+    }
+
+    size_t idx = it->second;
+    if (idx == m_ActiveScene)
+        return;
+
+    // Switch immediately rather than waiting for the load to finish: the renderer starts
+    // drawing this scene's (initially near-empty, growing) entity list right away, and
+    // entities become visible as the loader appends them and finalizePendingGraphics()
+    // resolves their GPU resources over the following frames.
+    if (!m_Scenes[idx].isLoaded())
+        loadScene(alias);
+
+    activateSceneByIndex(idx);
+}
+
+void EC_SceneManager::activateSceneByIndex(size_t index)
+{
+    size_t previous = m_ActiveScene;
+    bool hadPrevious = previous < m_Scenes.size() && previous != index && m_Scenes[previous].isLoaded();
+
+    if (hadPrevious)
+    {
+        m_Scenes[previous].deactivate();
+        if (m_Scenes[previous].isUnloadOnDeactivate())
+            unloadSceneByIndex(previous);
+    }
+
+    m_ActiveScene = index;
+    m_Scenes[index].activate();
+}
+
+void EC_SceneManager::unloadSceneByIndex(size_t index)
+{
+    m_Scenes[index].unload();
+    buildEntityMaps();
 }
 
 void EC_SceneManager::toggleDebug()

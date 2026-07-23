@@ -230,6 +230,34 @@ void EC_DOD_EntityFactory::performPostLoadActions() {
     s_Lights.clear();
 }
 
+void EC_DOD_EntityFactory::finalizePendingGraphics(size_t maxPerCall) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    auto* gfxArray = manager.getComponentArray<EC_DOD_GraphicsData>();
+    if (!gfxArray) return;
+
+    size_t resolved = 0;
+    std::unique_lock lock(gfxArray->getMutex());
+    auto& gfxComponents = gfxArray->getData();
+
+    for (size_t i = 0; i < gfxComponents.size() && resolved < maxPerCall; i++) {
+        auto& gfx = gfxComponents[i];
+
+        bool needsModel = !gfx.model && !gfx.modelName.empty();
+        bool needsShader = !gfx.shader && !gfx.vertShader.empty() && !gfx.fragShader.empty();
+        if (!needsModel && !needsShader)
+            continue;
+
+        if (needsModel)
+            gfx.model = s_MeshManager.finaliseModel(gfx.modelName);
+        if (needsShader)
+            gfx.shader = s_ShaderManager.finaliseShader(gfx.vertShader, gfx.fragShader);
+        if (gfx.hasTextures && gfx.textureSet)
+            gfx.textureSet->setTextureHandles(s_TexManager);
+
+        resolved++;
+    }
+}
+
 const std::vector<EntityID>& EC_DOD_EntityFactory::getCameras() const {
     return s_Cameras;
 }
