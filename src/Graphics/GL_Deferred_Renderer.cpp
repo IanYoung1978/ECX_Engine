@@ -340,6 +340,8 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     m_ShadowDirs.clear();
     m_ShadowSpots.clear();
     m_ShadowPoints.clear();
+    m_ShadowSpotRadii.clear();
+    m_ShadowPointRadii.clear();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
@@ -366,7 +368,10 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             data.cutoffAngle = light.cutoffAngle;
             data.attenuation = glm::vec4(light.attenuation, 0.0f);
             if (!light.castsShadow) m_Spots.push_back(data);
-            else m_ShadowSpots.push_back(data);
+            else {
+                m_ShadowSpots.push_back(data);
+                m_ShadowSpotRadii.push_back(light.cutoffRadius);
+            }
         }
         else {
             LightData data;
@@ -375,7 +380,10 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             data.intensity = light.intensity;
             data.attenuation = glm::vec4(light.attenuation, 0.0f);
             if (!light.castsShadow) m_Points.push_back(data);
-            else m_ShadowPoints.push_back(data);
+            else {
+                m_ShadowPoints.push_back(data);
+                m_ShadowPointRadii.push_back(light.cutoffRadius);
+            }
         }
     }
 }
@@ -556,9 +564,10 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         // Shadow casters are never narrowed by camera visibility - an entity fully
         // outside the camera's frustum can still cast a shadow onto something that is
         // visible. Each shadow pass gets only the light's own influence radius.
-        // Directional lights have no meaningful world position, so this queries
-        // around the camera instead, purely as a bounding heuristic (not a visibility
-        // test).
+        // Directional lights have no meaningful world position or cutoff radius, so
+        // this queries around the camera instead, purely as a bounding heuristic (not
+        // a visibility test). Spot/point lights use their cached per-light cutoff
+        // radius (EC_DOD_Light::cutoffRadius) instead.
         auto dirCasters = queryEntitiesNear(spatial.position, m_ShadowQueryRadius);
         for (size_t i = 0; i < m_ShadowDirs.size(); i++)
         {
@@ -577,7 +586,7 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
 
         for (size_t i = 0; i < m_ShadowSpots.size(); i++)
         {
-            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowSpots[i].position), m_ShadowQueryRadius);
+            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowSpots[i].position), m_ShadowSpotRadii[i]);
             shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], nearby);
             m_ShadowSpotLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
@@ -596,7 +605,7 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         // full entity list per face.
         for (size_t i = 0; i < m_ShadowPoints.size(); i++)
         {
-            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowPoints[i].position), m_ShadowQueryRadius);
+            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowPoints[i].position), m_ShadowPointRadii[i]);
             shadowPointPass(m_PointShadowBuffer, m_ShadowPoints[i], nearby);
             m_ShadowPointLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowPointLightShader);

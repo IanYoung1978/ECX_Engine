@@ -3,6 +3,7 @@
 #include "Logging/ECX_Logging.h"
 #include <sstream>
 #include <unordered_map>
+#include <cmath>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include "Graphics/ObjModel.h"
@@ -640,6 +641,35 @@ ECXEventType EC_DOD_EntityFactory::getEventTypeFromHandlerName(const std::string
     return (it != handlerMap.end()) ? it->second : ECXEventType::None;
 }
 
+namespace {
+    // Distance at which this light's intensity, attenuated per the standard
+    // 1/(Kc + Kl*d + Kq*d^2) falloff, drops below 1/256 - the smallest step an
+    // 8-bit colour channel can represent. Solves Kq*d^2 + Kl*d + (Kc - intensity*256) = 0.
+    float computeLightCutoffRadius(float intensity, const glm::vec3& attenuation) {
+        const float Kc = attenuation.x;
+        const float Kl = attenuation.y;
+        const float Kq = attenuation.z;
+        const float threshold = intensity * 256.0f;
+
+        if (Kq > 0.0f) {
+            const float discriminant = Kl * Kl - 4.0f * Kq * (Kc - threshold);
+            if (discriminant > 0.0f) {
+                const float d = (-Kl + std::sqrt(discriminant)) / (2.0f * Kq);
+                if (d > 0.0f) return d;
+            }
+        }
+        else if (Kl > 0.0f) {
+            const float d = (threshold - Kc) / Kl;
+            if (d > 0.0f) return d;
+        }
+
+        // No quadratic/linear falloff term (or a degenerate one) - the light
+        // doesn't naturally attenuate to imperceptibility, so fall back to a
+        // generous fixed radius rather than treating it as infinite.
+        return 100.0f;
+    }
+}
+
 void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
     auto& manager = EC_DOD_EntityManager::getInstance();
     EC_DOD_Light light;
@@ -673,6 +703,10 @@ void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
             light.dynamic = (strcmp(child->GetText(), "true") == 0);
         child = child->NextSiblingElement();
     }
+
+    light.cutoffRadius = (light.type != EC_DOD_Light::Type::Directional)
+        ? computeLightCutoffRadius(light.intensity, light.attenuation)
+        : 0.0f;
 
     manager.addComponent(entity, light);
 }

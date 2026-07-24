@@ -64,8 +64,9 @@ private:
     // visible, so narrowing shadow casters by camera visibility is wrong, not just an
     // optimization detail.
     std::vector<EntityID> m_VisibleEntities;
-    // Placeholder query radius for shadow-caster influence searches (all three light
-    // types). The real per-light cutoff-radius formula (Issue 3) doesn't exist yet.
+    // Directional lights have no meaningful world position/radius, so their shadow-
+    // caster search is a bounding heuristic around the camera instead of a per-light
+    // cutoff radius (see EC_DOD_Light::cutoffRadius, used by spot/point lights).
     float m_ShadowQueryRadius = 100.0f;
 
     std::mutex m_Lock;
@@ -103,5 +104,10 @@ private:
     std::vector<DirLightData> m_ShadowDirs;
     std::vector<LightData> m_ShadowPoints;
     std::vector<SpotLightData> m_ShadowSpots;
+    // Cached cutoff radius for each entry in m_ShadowPoints/m_ShadowSpots, indices
+    // aligned 1:1. Copied from EC_DOD_Light::cutoffRadius in updateLights() - not
+    // recomputed here, since the radius only depends on light data set at load time.
+    std::vector<float> m_ShadowPointRadii;
+    std::vector<float> m_ShadowSpotRadii;
     GL_DebugRenderer m_DebugRenderer;
 };

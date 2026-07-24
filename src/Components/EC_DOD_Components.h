@@ -93,7 +93,11 @@ struct EC_DOD_Light {
     glm::vec3 direction;
     glm::vec3 colour;
     float intensity;
-    float range;
+    // Distance beyond which this light's contribution falls below a perceptible
+    // threshold (1/256, the smallest step an 8-bit colour channel can represent).
+    // Computed once at load time (see EC_DOD_EntityFactory::parseLight) from
+    // intensity/attenuation - not meaningful for Directional lights (left at 0).
+    float cutoffRadius;
     float cutoffAngle;
     glm::vec3 attenuation;
     bool castsShadow;
