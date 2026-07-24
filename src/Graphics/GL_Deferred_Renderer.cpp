@@ -1,5 +1,6 @@
 #include "GL_Deferred_Renderer.h"
 #include "Components/EC_DOD_Components.h"
+#include "Components/EC_CollisionLayers.h"
 #include "BufferType.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include "Entity/EC_DOD_EntityFactory.h"
@@ -9,6 +10,8 @@
 #include "Graphics/TextureSet.h"
 #include <chrono>
 #include "Messaging/ECXMessenger.h"
+#include "Messaging/ECXRequest.h"
+#include "Messaging/ECXResponse.h"
 #include "SceneManager/EC_GameScene.h"
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
@@ -38,6 +41,7 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
 
+    m_Messenger = &messenger;
     m_Window = window;
     m_DebugRenderer.init(window);
     m_SkyboxRenderer.init(window);
@@ -165,6 +169,53 @@ void GL_Deferred_Renderer::changeResolution(int width, int height)
     m_FrameBuffer.resize(width, height);
 }
 
+std::vector<EntityID> GL_Deferred_Renderer::queryVisibleEntities(const glm::mat4& viewProjection)
+{
+    if (!m_Messenger) return {};
+
+    ECXRequest request;
+    request.type = ECXRequestType::FrustumCheck;
+    request.args[0] = viewProjection;
+    request.args[1] = static_cast<uint32_t>(CollisionLayers::Renderable);
+
+    ECXResponse response;
+    m_Messenger->publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        return std::any_cast<std::vector<EntityID>>(response.responseData[0]);
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
+}
+
+std::vector<EntityID> GL_Deferred_Renderer::queryEntitiesNear(const glm::vec3& position, float radius)
+{
+    if (!m_Messenger) return {};
+
+    ECXRequest request;
+    request.type = ECXRequestType::EntitySearch;
+    request.args[0] = position;
+    request.args[1] = radius;
+    request.args[2] = static_cast<uint32_t>(CollisionLayers::Renderable);
+
+    ECXResponse response;
+    m_Messenger->publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        return std::any_cast<std::vector<EntityID>>(response.responseData[0]);
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
+}
+
 void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
@@ -182,6 +233,10 @@ void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
             camera.farPlane);
         glm::mat4 view = camera.viewMatrix;
 
+        // Camera-visible set, via the collision system's spatial index (EC_BroadPhase)
+        // rather than the renderer maintaining its own structure.
+        m_VisibleEntities = queryVisibleEntities(projection * view);
+
         m_FrameBuffer.GeometryPass();
         glEnable(GL_DEPTH_TEST);
         glDepthMask(GL_TRUE);
@@ -192,7 +247,7 @@ void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
         glCullFace(GL_BACK);
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
-        for (EntityID entityID : scene.getEntities()) {
+        for (EntityID entityID : m_VisibleEntities) {
             if (!manager.isAlive(entityID)) continue;
             if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
             if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
@@ -259,6 +314,17 @@ void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
 
         if (!m_Directionals.empty())
             m_LightPassShader->setLight("dirLight", m_Directionals[0]);
+        else {
+            DirLightData noDirLight;
+            noDirLight.colour = glm::vec4(0.0f);
+            noDirLight.position = glm::vec4(0.0f);
+            noDirLight.attenuation = glm::vec4(0.0f);
+            noDirLight.intensity = 0.0f;
+            noDirLight.padding = glm::vec3(0.0f);
+            noDirLight.addPadding = glm::vec4(0.0f);
+            noDirLight.direction = glm::vec4(0.0f);
+            m_LightPassShader->setLight("dirLight", noDirLight);
+        }
 
         renderQuad();
         shadowLightingPass(scene);
@@ -314,7 +380,7 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     }
 }
 
-void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& light, EC_GameScene& scene)
+void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& light, const std::vector<EntityID>& entities)
 {
     glm::mat4 biasMatrix(
         0.5f, 0.0f, 0.0f, 0.0f,
@@ -340,7 +406,7 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    for (EntityID entityID : scene.getEntities()) {
+    for (EntityID entityID : entities) {
         if (!manager.isAlive(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
@@ -366,7 +432,7 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& light, EC_GameScene& scene)
+void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& light, const std::vector<EntityID>& entities)
 {
     glm::mat4 biasMatrix(
         0.5f, 0.0f, 0.0f, 0.0f,
@@ -382,7 +448,7 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
     up[2] = direction[0] - direction[1];
 
     glm::mat4 view = glm::lookAt(position, position + direction, up);
-    glm::mat4 projection = glm::perspective(45.0f, 1.0f, 1.0f, 100.0f);
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1.0f, 1.0f, 100.0f);
     m_ShadowSpotMatrix = biasMatrix * projection * view;
 
     glEnable(GL_POLYGON_OFFSET_FILL);
@@ -393,7 +459,7 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    for (EntityID entityID : scene.getEntities()) {
+    for (EntityID entityID : entities) {
         if (!manager.isAlive(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
@@ -419,7 +485,7 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& light, EC_GameScene& scene)
+void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& light, const std::vector<EntityID>& entities)
 {
     glm::vec3 lightPos = glm::vec3(light.position);
 
@@ -445,7 +511,7 @@ void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& lig
     {
         target.bindFace(face);
 
-        for (EntityID entityID : scene.getEntities())
+        for (EntityID entityID : entities)
         {
             if (!manager.isAlive(entityID)) continue;
             if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
@@ -487,9 +553,16 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
         if (!camera.isActive) continue;
 
+        // Shadow casters are never narrowed by camera visibility - an entity fully
+        // outside the camera's frustum can still cast a shadow onto something that is
+        // visible. Each shadow pass gets only the light's own influence radius.
+        // Directional lights have no meaningful world position, so this queries
+        // around the camera instead, purely as a bounding heuristic (not a visibility
+        // test).
+        auto dirCasters = queryEntitiesNear(spatial.position, m_ShadowQueryRadius);
         for (size_t i = 0; i < m_ShadowDirs.size(); i++)
         {
-            shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i], scene);
+            shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i], dirCasters);
             m_ShadowDirLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
             glEnable(GL_BLEND);
@@ -504,7 +577,8 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
 
         for (size_t i = 0; i < m_ShadowSpots.size(); i++)
         {
-            shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], scene);
+            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowSpots[i].position), m_ShadowQueryRadius);
+            shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], nearby);
             m_ShadowSpotLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
             glEnable(GL_BLEND);
@@ -517,9 +591,13 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             glDisable(GL_BLEND);
         }
 
+        // Computed once per light here (not per cubemap face) - shadowPointPass loops
+        // this same list across all 6 faces internally, a 6x win over re-scanning the
+        // full entity list per face.
         for (size_t i = 0; i < m_ShadowPoints.size(); i++)
         {
-            shadowPointPass(m_PointShadowBuffer, m_ShadowPoints[i], scene);
+            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowPoints[i].position), m_ShadowQueryRadius);
+            shadowPointPass(m_PointShadowBuffer, m_ShadowPoints[i], nearby);
             m_ShadowPointLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowPointLightShader);
             glEnable(GL_BLEND);

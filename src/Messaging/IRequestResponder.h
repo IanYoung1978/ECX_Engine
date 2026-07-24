@@ -6,6 +6,6 @@
 class IRequestResponder
 {
 public:
-	virtual ECXResponse& receive(ECXRequest& request) = 0;
+	virtual ECXResponse receive(ECXRequest& request) = 0;
 	virtual ~IRequestResponder() { ; }
 };

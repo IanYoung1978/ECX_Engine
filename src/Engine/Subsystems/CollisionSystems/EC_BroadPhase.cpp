@@ -1,7 +1,11 @@
 #include "EC_BroadPhase.h"
 #include "Messaging/ECXMessenger.h"
+#include "Messaging/ECXRequest.h"
+#include "Messaging/ECXResponse.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include "EC_CollisionShapes.h"
+#include "Spatial/EC_Frustum.h"
+#include <limits>
 
 void EC_BroadPhase::broadPhaseCollisionDetection()
 {
@@ -11,88 +15,93 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
         std::type_index(typeid(EC_DOD_Spatial))
         });
 
-    if (entities.empty())
-        return;
+    // Built entirely into locals - this function runs on the physics/scripting worker
+    // thread, while receive() is called synchronously from the renderer on the main
+    // thread. Doing the (potentially expensive) AABB computation and sweep-and-prune
+    // here, unlocked, and only taking m_Mutex for the final swap-in keeps the critical
+    // section short and avoids exposing partially-built state to the reader thread.
+    std::vector<EntityAABB> localAABBs;
+    std::unordered_map<uint32_t, size_t> localIndex;
+    EC_SpatialGrid localGrid;
 
-    // Get component arrays
-    auto* colliderArray = EC_DOD_EntityManager::getInstance().getComponentArray<EC_DOD_Collider>();
-    auto* spatialArray = EC_DOD_EntityManager::getInstance().getComponentArray<EC_DOD_Spatial>();
+    if (!entities.empty()) {
+        auto* colliderArray = EC_DOD_EntityManager::getInstance().getComponentArray<EC_DOD_Collider>();
+        auto* spatialArray = EC_DOD_EntityManager::getInstance().getComponentArray<EC_DOD_Spatial>();
 
-    if (!colliderArray || !spatialArray)
-        return;
+        if (colliderArray && spatialArray) {
+            localAABBs.reserve(entities.size());
 
-    // Compute world-space AABBs for each entity
-    struct EntityAABB {
-        uint32_t entityId;
-        AABB worldAABB;
-        uint32_t collisionLayer;
-        uint32_t collisionMask;
-    };
+            for (uint32_t entityId : entities) {
+                // Lock and get components (get() has its own locking)
+                EC_DOD_Collider collider;
+                EC_DOD_Spatial spatial;
 
-    std::vector<EntityAABB> entityAABBs;
-    entityAABBs.reserve(entities.size());
+                try {
+                    collider = colliderArray->get(entityId);
+                    spatial = spatialArray->get(entityId);
+                }
+                catch (const std::runtime_error&) {
+                    // Entity doesn't have required components, skip
+                    continue;
+                }
 
-    for (uint32_t entityId : entities) {
-        // Lock and get components (get() has its own locking)
-        EC_DOD_Collider collider;
-        EC_DOD_Spatial spatial;
+                // Compute world-space AABB from collider bounds
+                AABB worldAABB = computeWorldAABB(collider, spatial);
+                localIndex[entityId] = localAABBs.size();
+                localAABBs.push_back({ entityId, worldAABB, collider.collisionLayer, collider.collisionMask });
+                localGrid.insert(entityId, worldAABB);
+            }
 
-        try {
-            collider = colliderArray->get(entityId);
-            spatial = spatialArray->get(entityId);
-        }
-        catch (const std::runtime_error&) {
-            // Entity doesn't have required components, skip
-            continue;
-        }
+            // Broad-phase collision detection using Sweep and Prune (Sort and Sweep)
+            // This is efficient for many objects and handles temporal coherence well
+            std::vector<EntityAABB> sweepOrder = localAABBs;
 
-        // Compute world-space AABB from collider bounds
-        AABB worldAABB = computeWorldAABB(collider, spatial);
-        entityAABBs.push_back({ entityId, worldAABB, collider.collisionLayer, collider.collisionMask });
-    }
+            // Sort entities by minimum X coordinate
+            std::sort(sweepOrder.begin(), sweepOrder.end(),
+                [](const EntityAABB& a, const EntityAABB& b) {
+                    return a.worldAABB.min.x < b.worldAABB.min.x;
+                });
 
-    // Broad-phase collision detection using Sweep and Prune (Sort and Sweep)
-    // This is efficient for many objects and handles temporal coherence well
+            // Sweep and prune algorithm
+            for (size_t i = 0; i < sweepOrder.size(); ++i) {
+                const EntityAABB& entityA = sweepOrder[i];
 
-    // Sort entities by minimum X coordinate
-    std::sort(entityAABBs.begin(), entityAABBs.end(),
-        [](const EntityAABB& a, const EntityAABB& b) {
-            return a.worldAABB.min.x < b.worldAABB.min.x;
-        });
+                // Check against all entities whose min.x is less than entityA's max.x
+                for (size_t j = i + 1; j < sweepOrder.size(); ++j) {
+                    const EntityAABB& entityB = sweepOrder[j];
 
-    // Sweep and prune algorithm
-    for (size_t i = 0; i < entityAABBs.size(); ++i) {
-        const EntityAABB& entityA = entityAABBs[i];
+                    // Early exit if entityB is beyond entityA's max X
+                    if (entityB.worldAABB.min.x > entityA.worldAABB.max.x)
+                        break;
 
-        // Check against all entities whose min.x is less than entityA's max.x
-        for (size_t j = i + 1; j < entityAABBs.size(); ++j) {
-            const EntityAABB& entityB = entityAABBs[j];
+                    // Check collision layer filtering
+                    bool canCollide = (entityA.collisionLayer & entityB.collisionMask) != 0 &&
+                        (entityB.collisionLayer & entityA.collisionMask) != 0;
 
-            // Early exit if entityB is beyond entityA's max X
-            if (entityB.worldAABB.min.x > entityA.worldAABB.max.x)
-                break;
+                    if (!canCollide)
+                        continue;
 
-            // Check collision layer filtering
-            bool canCollide = (entityA.collisionLayer & entityB.collisionMask) != 0 &&
-                (entityB.collisionLayer & entityA.collisionMask) != 0;
+                    // Check AABB overlap in all three axes
+                    bool overlapX = entityA.worldAABB.max.x >= entityB.worldAABB.min.x &&
+                        entityB.worldAABB.max.x >= entityA.worldAABB.min.x;
+                    bool overlapY = entityA.worldAABB.max.y >= entityB.worldAABB.min.y &&
+                        entityB.worldAABB.max.y >= entityA.worldAABB.min.y;
+                    bool overlapZ = entityA.worldAABB.max.z >= entityB.worldAABB.min.z &&
+                        entityB.worldAABB.max.z >= entityA.worldAABB.min.z;
 
-            if (!canCollide)
-                continue;
-
-            // Check AABB overlap in all three axes
-            bool overlapX = entityA.worldAABB.max.x >= entityB.worldAABB.min.x &&
-                entityB.worldAABB.max.x >= entityA.worldAABB.min.x;
-            bool overlapY = entityA.worldAABB.max.y >= entityB.worldAABB.min.y &&
-                entityB.worldAABB.max.y >= entityA.worldAABB.min.y;
-            bool overlapZ = entityA.worldAABB.max.z >= entityB.worldAABB.min.z &&
-                entityB.worldAABB.max.z >= entityA.worldAABB.min.z;
-
-            if (overlapX && overlapY && overlapZ) {
-                // Potential collision detected - add to pair manager
-                m_PairManager.addPair(entityA.entityId, entityB.entityId);
+                    if (overlapX && overlapY && overlapZ) {
+                        // Potential collision detected - add to pair manager
+                        m_PairManager.addPair(entityA.entityId, entityB.entityId);
+                    }
+                }
             }
         }
     }
+
+    std::lock_guard<std::mutex> lock(m_Mutex);
+    m_EntityAABBs = std::move(localAABBs);
+    m_EntityIndex = std::move(localIndex);
+    m_SpatialGrid = std::move(localGrid);
 }
 
 
@@ -100,19 +109,123 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
 void EC_BroadPhase::init(ECXMessenger& messenger)
 {
 	messenger.Subscribe(*this, ECXRequestType::FrustumCheck);
+	messenger.Subscribe(*this, ECXRequestType::EntitySearch);
 }
 
-ECXResponse& EC_BroadPhase::receive(ECXRequest& request)
+ECXResponse EC_BroadPhase::receive(ECXRequest& request)
 {
-	// TODO: insert return statement here
-	// handle frustum check request
-	ECXResponse response;
-	// perform frustum check broad-phase collision detection
-	// cheap AABB vs Frustum checks
-	// populate response with results
+	switch (request.type)
+	{
+	case ECXRequestType::FrustumCheck:
+		return handleFrustumCheck(request);
+	case ECXRequestType::EntitySearch:
+		return handleEntitySearch(request);
+	default:
+	{
+		ECXResponse response;
+		response.response = ECXResponseType::Unsupported;
+		return response;
+	}
+	}
+}
 
-	response.response = ECXResponseType::Unsupported;
-	
+ECXResponse EC_BroadPhase::handleFrustumCheck(ECXRequest& request)
+{
+	ECXResponse response;
+	glm::mat4 viewProjection;
+	uint32_t layerMask = 0xFFFFFFFFu;
+
+	try {
+		viewProjection = std::any_cast<glm::mat4>(request.args[0]);
+		if (request.args[1].has_value())
+			layerMask = std::any_cast<uint32_t>(request.args[1]);
+	}
+	catch (const std::bad_any_cast&) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+
+	auto planes = EC_Frustum::extractPlanes(viewProjection);
+
+	// Bounding AABB of the frustum via inverse-transformed NDC cube corners, used to
+	// seed the grid cell query before the precise per-candidate plane test.
+	glm::mat4 invViewProjection = glm::inverse(viewProjection);
+	glm::vec3 boundsMin(std::numeric_limits<float>::max());
+	glm::vec3 boundsMax(std::numeric_limits<float>::lowest());
+	for (float x : { -1.0f, 1.0f }) {
+		for (float y : { -1.0f, 1.0f }) {
+			for (float z : { -1.0f, 1.0f }) {
+				glm::vec4 corner = invViewProjection * glm::vec4(x, y, z, 1.0f);
+				if (corner.w != 0.0f)
+					corner /= corner.w;
+				boundsMin = glm::min(boundsMin, glm::vec3(corner));
+				boundsMax = glm::max(boundsMax, glm::vec3(corner));
+			}
+		}
+	}
+
+	std::vector<EntityID> result;
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto candidates = m_SpatialGrid.queryAABB(AABB{ boundsMin, boundsMax });
+		result.reserve(candidates.size());
+		for (EntityID candidate : candidates) {
+			auto it = m_EntityIndex.find(candidate);
+			if (it == m_EntityIndex.end())
+				continue;
+			const EntityAABB& aabb = m_EntityAABBs[it->second];
+			if ((aabb.collisionLayer & layerMask) == 0)
+				continue;
+			if (EC_Frustum::intersectsAABB(planes, aabb.worldAABB))
+				result.push_back(candidate);
+		}
+	}
+
+	response.response = ECXResponseType::Success;
+	response.responseData.push_back(result);
+	return response;
+}
+
+ECXResponse EC_BroadPhase::handleEntitySearch(ECXRequest& request)
+{
+	ECXResponse response;
+	glm::vec3 center;
+	float radius = 0.0f;
+	uint32_t layerMask = 0xFFFFFFFFu;
+
+	try {
+		center = std::any_cast<glm::vec3>(request.args[0]);
+		radius = std::any_cast<float>(request.args[1]);
+		if (request.args[2].has_value())
+			layerMask = std::any_cast<uint32_t>(request.args[2]);
+	}
+	catch (const std::bad_any_cast&) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+
+	AABB queryRegion{ center - glm::vec3(radius), center + glm::vec3(radius) };
+	std::vector<EntityID> result;
+	float radiusSq = radius * radius;
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto candidates = m_SpatialGrid.queryAABB(queryRegion);
+		for (EntityID candidate : candidates) {
+			auto it = m_EntityIndex.find(candidate);
+			if (it == m_EntityIndex.end())
+				continue;
+			const EntityAABB& aabb = m_EntityAABBs[it->second];
+			if ((aabb.collisionLayer & layerMask) == 0)
+				continue;
+			glm::vec3 aabbCenter = (aabb.worldAABB.min + aabb.worldAABB.max) * 0.5f;
+			glm::vec3 d = aabbCenter - center;
+			if (glm::dot(d, d) <= radiusSq)
+				result.push_back(candidate);
+		}
+	}
+
+	response.response = ECXResponseType::Success;
+	response.responseData.push_back(result);
 	return response;
 }
 

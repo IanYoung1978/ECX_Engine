@@ -10,6 +10,7 @@
 #include "Graphics/ADS_TextureSet.h"
 #include "Graphics/PBR_TextureSet.h"
 #include "Components/EC_ScriptComponent.h"
+#include "Components/EC_CollisionLayers.h"
 
 TextureManager EC_DOD_EntityFactory::s_TexManager;
 MeshManager EC_DOD_EntityFactory::s_MeshManager;
@@ -111,26 +112,39 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
 
     manager.addComponent(entity, info);
 
+    bool hasGraphics = false;
+    bool hasSpatial = false;
+    bool hasTransform = false;
+    bool hasCollider = false;
+
     auto elem = descriptor.FirstChildElement();
     while (elem != nullptr) {
-        if (strcmp(elem->Value(), "Spatial") == 0)
+        if (strcmp(elem->Value(), "Spatial") == 0) {
             parseSpatial(elem, entity);
+            hasSpatial = true;
+        }
         else if (strcmp(elem->Value(), "Camera") == 0) {
             parseCamera(elem, entity);
             s_Cameras.push_back(entity);
         }
-        else if (strcmp(elem->Value(), "Gfx") == 0)
+        else if (strcmp(elem->Value(), "Gfx") == 0) {
             parseGraphics(elem, entity);
-        else if (strcmp(elem->Value(), "Transform") == 0)
+            hasGraphics = true;
+        }
+        else if (strcmp(elem->Value(), "Transform") == 0) {
             parseTransform(elem, entity);
+            hasTransform = true;
+        }
         else if (strcmp(elem->Value(), "Light") == 0) {
             parseLight(elem, entity);
             s_Lights.push_back(entity);
         }
         else if (strcmp(elem->Value(), "ScriptComponent") == 0)
             parseScript(elem, entity);
-        else if (strcmp(elem->Value(), "Collider") == 0)
+        else if (strcmp(elem->Value(), "Collider") == 0) {
             parseCollider(elem, entity);
+            hasCollider = true;
+        }
         else if (strcmp(elem->Value(), "Hierarchy") == 0)
             parseHierarchy(elem, entity);
         else if (strcmp(elem->Value(), "Skybox") == 0)
@@ -142,6 +156,34 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
                 "Unknown component type: " + std::string(elem->Value()),
                 LOGGING::LogLevel::WARNING);
         elem = elem->NextSiblingElement();
+    }
+
+    // Any renderable entity needs to be discoverable by spatial queries (camera
+    // frustum, light influence radius) serviced by EC_BroadPhase, which only ever
+    // iterates entities with EC_DOD_Collider + EC_DOD_Spatial. Rather than requiring
+    // every renderable entity to author a <Collider> just to be found, tag it with
+    // the reserved Renderable layer bit automatically - existing scene XML needs no
+    // changes.
+    if (hasGraphics && hasSpatial) {
+        if (!hasCollider) {
+            EC_DOD_Collider autoCollider;
+            autoCollider.type = EC_DOD_Collider::Type::AABB;
+            autoCollider.extents = hasTransform
+                ? manager.getComponent<EC_DOD_Transform>(entity).scale
+                : glm::vec3(1.0f);
+            autoCollider.collisionLayer = CollisionLayers::Renderable;
+            // Mask of 0 means this never forms a gameplay collision pair with anything
+            // (canCollide requires both sides' layer&mask to be non-zero) - it only
+            // exists to be spatially indexed.
+            autoCollider.collisionMask = 0;
+            manager.addComponent(entity, autoCollider);
+        }
+        else {
+            // Entity authored its own <Collider> for gameplay purposes - OR in the
+            // Renderable bit so it's still discoverable by spatial queries without
+            // disturbing whatever layer/mask semantics the author set for gameplay.
+            manager.getComponent<EC_DOD_Collider>(entity).collisionLayer |= CollisionLayers::Renderable;
+        }
     }
 
     s_Entities.push_back(entity);
