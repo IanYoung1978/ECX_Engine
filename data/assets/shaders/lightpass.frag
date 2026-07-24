@@ -74,7 +74,7 @@ vec3 computeLightFragment(vec3 eyeVec, vec3 lightVec, vec3 normal, vec3 colour, 
 void main()
 {
     vec4 pcolour = texture(positionMap, indata.VSTexCoord).rgba;
-    // No geometry written here — let skybox show through
+    // No geometry written here ï¿½ let skybox show through
     if (pcolour.a == 0.0) discard;
 	vec4 ncolour = texture(normalMap, indata.VSTexCoord).rgba;
 	vec4 dcolour = texture(colourMap, indata.VSTexCoord).rgba;
@@ -106,10 +106,9 @@ void main()
 	float specPow = pow(specFactor,scolour.r*255.0);
 	vec3 specCol = (dirLight.colour.rgb * diffCol)* specPow;
 	outColour+=(diffCol+specCol)*dirLight.intensity;
-	//outColour+=gcolour.rgb;
 		
 	//colour = vec4(outColour,1);
-	colour = vec4(dcolour.rgb*outColour.rgb,1.0);
+	colour = vec4(dcolour.rgb*outColour.rgb + gcolour.rgb,1.0);
 	//colour = dcolour+pcolour+ncolour+scolour+gcolour;
 	//colour = vec4(indata.VSTexCoord,0.0,1.0);
 	//colour = pcolour;

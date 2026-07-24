@@ -23,6 +23,7 @@ enum class PostProcess {
 };
 
 class EC_GameScene;
+class ECXMessenger;
 
 class GL_Deferred_Renderer : public Renderer, public ICommandListener {
 public:
@@ -39,9 +40,9 @@ private:
     void geometryPass(EC_GameScene& scene);
     void lightPass(EC_GameScene& scene);
     void updateLights(EC_GameScene& scene);
-    void shadowDirPass(ShadowBuffer& target, DirLightData& light, EC_GameScene& scene);
-    void shadowSpotPass(ShadowBuffer& target, SpotLightData& light, EC_GameScene& scene);
-    void shadowPointPass(CubemapBuffer& target, LightData& light, EC_GameScene& scene);
+    void shadowDirPass(ShadowBuffer& target, DirLightData& light, const std::vector<EntityID>& entities);
+    void shadowSpotPass(ShadowBuffer& target, SpotLightData& light, const std::vector<EntityID>& entities);
+    void shadowPointPass(CubemapBuffer& target, LightData& light, const std::vector<EntityID>& entities);
     void shadowLightingPass(EC_GameScene& scene);
     void skyboxPass(EC_GameScene& scene);
     void debugPass(EC_GameScene& scene);
@@ -50,6 +51,22 @@ private:
     void renderQuad();
     void finalPass();
     void hdrPass();
+
+    // Ask the collision system's spatial index for entities, rather than the renderer
+    // owning/maintaining its own - decouples rendering from collision internals.
+    std::vector<EntityID> queryVisibleEntities(const glm::mat4& viewProjection);
+    std::vector<EntityID> queryEntitiesNear(const glm::vec3& position, float radius);
+
+    ECXMessenger* m_Messenger = nullptr;
+    // Camera-visible set, computed once in geometryPass() - what actually gets drawn
+    // to the gbuffer. Deliberately NOT reused by the shadow passes: a shadow caster
+    // outside the camera's frustum can still cast a shadow onto something that is
+    // visible, so narrowing shadow casters by camera visibility is wrong, not just an
+    // optimization detail.
+    std::vector<EntityID> m_VisibleEntities;
+    // Placeholder query radius for shadow-caster influence searches (all three light
+    // types). The real per-light cutoff-radius formula (Issue 3) doesn't exist yet.
+    float m_ShadowQueryRadius = 100.0f;
 
     std::mutex m_Lock;
     LightUniformBuffer m_LightBuffer;

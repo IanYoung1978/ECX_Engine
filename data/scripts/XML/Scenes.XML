@@ -1,5 +1,6 @@
 <?xml version="1.0"?>
 <Scenes>
-	<Scene alias="main" precache="true" unloadondeactivate="false">data/scripts/XML/Scene1.xml</Scene>
+	<Scene alias="yard" precache="true" unloadondeactivate="false">data/scripts/XML/LargeYard.xml</Scene>
+	<Scene alias="main" precache="false" unloadondeactivate="false">data/scripts/XML/Scene1.xml</Scene>
 	<Scene alias="streamed" precache="false" unloadondeactivate="true">data/scripts/XML/StreamedZone.xml</Scene>
 </Scenes>
