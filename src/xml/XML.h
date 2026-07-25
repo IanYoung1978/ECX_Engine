@@ -4,6 +4,7 @@
 #include "Window/WindowSettings.h"
 #include "Engine/Config.h"
 #include "Engine/GameModeSettings.h"
+#include "Graphics/RenderConfig.h"
 #include <string>
 #include <map>
 #include <SDL.h>
@@ -203,7 +204,7 @@ namespace XML
 		}
 		return true;
 	}
-	inline bool loadGraphicsSettings(const std::string& file, float& exposure)
+	inline bool loadRenderConfig(const std::string& file, RenderConfig& settings)
 	{
 		TiXmlDocument doc(file.c_str());
 		if (!doc.LoadFile())
@@ -215,7 +216,23 @@ namespace XML
 		while (child)
 		{
 			if (strcmp(child->Value(), "Exposure") == 0 && child->GetText())
-				exposure = std::stof(child->GetText());
+			{
+				settings.exposure = std::stof(child->GetText());
+			}
+			else if (strcmp(child->Value(), "ShadowAtlas") == 0)
+			{
+				const char* size = child->Attribute("size");
+				if (size) settings.shadowAtlasSize = std::stoi(size);
+				const char* tileSize = child->Attribute("tileSize");
+				if (tileSize) settings.shadowAtlasTileSize = std::stoi(tileSize);
+			}
+			else if (strcmp(child->Value(), "PointShadowPool") == 0)
+			{
+				const char* size = child->Attribute("size");
+				if (size) settings.pointShadowPoolSize = std::stoi(size);
+				const char* faceSize = child->Attribute("faceSize");
+				if (faceSize) settings.pointShadowFaceSize = std::stoi(faceSize);
+			}
 			child = child->NextSiblingElement();
 		}
 		return true;

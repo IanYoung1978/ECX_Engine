@@ -6,6 +6,7 @@
 #include "CubemapBuffer.h"
 #include "Shader.h"
 #include "ShadowData.h"
+#include "RenderConfig.h"
 #include "GL_DebugRenderer.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include <memory>
@@ -29,7 +30,7 @@ class GL_Deferred_Renderer : public Renderer, public ICommandListener {
 public:
     GL_Deferred_Renderer();
     virtual ~GL_Deferred_Renderer();
-    virtual void init(std::shared_ptr<Window> window, ECXMessenger& messenger);
+    virtual void init(std::shared_ptr<Window> window, ECXMessenger& messenger, const RenderConfig& config) override;
     virtual void receive(ECXCommand& command) override;
     virtual void renderScene(EC_GameScene& scene) override;
     virtual void changeResolution(int width, int height) override;
@@ -58,6 +59,7 @@ private:
     std::vector<EntityID> queryEntitiesNear(const glm::vec3& position, float radius);
 
     ECXMessenger* m_Messenger = nullptr;
+    RenderConfig m_RenderConfig;
     // Camera-visible set, computed once in geometryPass() - what actually gets drawn
     // to the gbuffer. Deliberately NOT reused by the shadow passes: a shadow caster
     // outside the camera's frustum can still cast a shadow onto something that is

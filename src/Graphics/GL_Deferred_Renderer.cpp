@@ -36,13 +36,15 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
         m_DebugRenderer.toggle();
 }
 
-void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger)
+void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger, const RenderConfig& config)
 {
     messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
 
     m_Messenger = &messenger;
     m_Window = window;
+    m_RenderConfig = config;
+    m_Exposure = config.exposure;
     m_DebugRenderer.init(window);
     m_SkyboxRenderer.init(window);
 
