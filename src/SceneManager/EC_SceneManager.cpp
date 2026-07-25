@@ -108,9 +108,14 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
         {
             size_t idx = *it;
             if (m_Scenes[idx].isLoaded())
+            {
+                m_Renderer->bakeStaticShadows(m_Scenes[idx]);
                 it = m_LoadingScenes.erase(it);
+            }
             else
+            {
                 ++it;
+            }
         }
 
         buildEntityMaps();

@@ -3,6 +3,7 @@
 #include "FrameBufferSet.h"
 #include "LightUniformBuffer.h"
 #include "ShadowAtlas.h"
+#include "CubemapShadowPool.h"
 #include "CubemapBuffer.h"
 #include "Shader.h"
 #include "ShadowData.h"
@@ -12,6 +13,8 @@
 #include <memory>
 #include <vector>
 #include <mutex>
+#include <unordered_set>
+#include <unordered_map>
 #include <glm/glm.hpp>
 #include "GL_SkyboxRenderer.h"
 #include "Messaging/ICommandListener.h"
@@ -34,6 +37,7 @@ public:
     virtual void receive(ECXCommand& command) override;
     virtual void renderScene(EC_GameScene& scene) override;
     virtual void changeResolution(int width, int height) override;
+    virtual void bakeStaticShadows(EC_GameScene& scene) override;
     void setExposure(float exposure) { m_Exposure = exposure; }
     float getExposure() const { return m_Exposure; }
 
@@ -43,7 +47,7 @@ private:
     void updateLights(EC_GameScene& scene);
     void shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
-    void shadowPointPass(CubemapBuffer& target, LightData& light, const std::vector<EntityID>& entities);
+    void shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities);
     void shadowLightingPass(EC_GameScene& scene);
     void skyboxPass(EC_GameScene& scene);
     void debugPass(EC_GameScene& scene);
@@ -99,16 +103,30 @@ private:
     float m_Exposure = 0.75f;
     ShadowAtlas m_ShadowAtlas;
     ShadowData m_ShadowPointMatrices;
-    CubemapBuffer m_PointShadowBuffer;
+    CubemapShadowPool m_PointShadowPool;
     float m_PointShadowFarPlane = 100.0f;
     std::vector<DirLightData> m_ShadowDirs;
     std::vector<LightData> m_ShadowPoints;
     std::vector<SpotLightData> m_ShadowSpots;
-    // Parallel to m_ShadowDirs/m_ShadowSpots, populated in updateLights() - the stable
-    // per-light identity ShadowAtlas needs for tile assignment (light data structs alone
-    // carry no EntityID).
+    // Parallel to m_ShadowDirs/m_ShadowSpots/m_ShadowPoints, populated in updateLights() -
+    // the stable per-light identity ShadowAtlas/CubemapShadowPool need for slot assignment
+    // (light data structs alone carry no EntityID).
     std::vector<EntityID> m_ShadowDirIDs;
     std::vector<EntityID> m_ShadowSpotIDs;
+    std::vector<EntityID> m_ShadowPointIDs;
+
+    // Static-light shadow baking (EC_DOD_Light::dynamic == false): a static light's depth
+    // is rendered once (see bakeStaticShadows(), called after scene load) and never again -
+    // shadowLightingPass() skips the depth re-render for any light present in these sets,
+    // reusing the cached transform (dir/spot) or the pool's already-populated cubemap
+    // (point). Entries are erased when ShadowAtlas/CubemapShadowPool::reconcile() evicts
+    // that light's tile/slot, so a later re-acquired tile/slot is never mistaken for
+    // already-baked data left behind by a different light.
+    std::unordered_set<EntityID> m_BakedStaticDirLights;
+    std::unordered_set<EntityID> m_BakedStaticSpotLights;
+    std::unordered_set<EntityID> m_BakedStaticPointLights;
+    std::unordered_map<EntityID, glm::mat4> m_BakedDirShadowTransforms;
+    std::unordered_map<EntityID, glm::mat4> m_BakedSpotShadowTransforms;
     // Cached cutoff radius for each entry in m_ShadowPoints/m_ShadowSpots, indices
     // aligned 1:1. Copied from EC_DOD_Light::cutoffRadius in updateLights() - not
     // recomputed here, since the radius only depends on light data set at load time.

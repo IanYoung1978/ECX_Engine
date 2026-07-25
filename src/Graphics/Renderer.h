@@ -13,5 +13,9 @@ public:
     virtual void changeResolution(int width, int height) = 0;
     virtual void renderScene(EC_GameScene& scene) = 0;
     virtual void toggleDebug() {}
+    // Render each currently-static (EC_DOD_Light::dynamic == false) shadow-casting light's
+    // shadow map exactly once. Called after a scene finishes loading; default no-op for any
+    // Renderer implementation that doesn't support shadow baking.
+    virtual void bakeStaticShadows(EC_GameScene& scene) {}
     virtual ~Renderer();
 };
