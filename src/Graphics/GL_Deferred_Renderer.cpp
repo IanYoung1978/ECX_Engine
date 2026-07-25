@@ -114,7 +114,7 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     m_PointShadowBuffer.init(1024, 1024);
     m_FrameBuffer.init(window->getWidth(), window->getHeight());
     m_LightBuffer.init((*m_LightPassShader));
-    m_ShadowBuffer.init(2048, 2048);
+    m_ShadowAtlas.init(config.shadowAtlasSize, config.shadowAtlasTileSize);
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -344,6 +344,8 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     m_ShadowPoints.clear();
     m_ShadowSpotRadii.clear();
     m_ShadowPointRadii.clear();
+    m_ShadowDirIDs.clear();
+    m_ShadowSpotIDs.clear();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
@@ -359,7 +361,10 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             data.colour = glm::vec4(light.colour, 1.0f);
             data.intensity = light.intensity;
             if (!light.castsShadow) m_Directionals.push_back(data);
-            else m_ShadowDirs.push_back(data);
+            else {
+                m_ShadowDirs.push_back(data);
+                m_ShadowDirIDs.push_back(entityID);
+            }
         }
         else if (light.type == EC_DOD_Light::Type::Spot) {
             SpotLightData data;
@@ -373,6 +378,7 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             else {
                 m_ShadowSpots.push_back(data);
                 m_ShadowSpotRadii.push_back(light.cutoffRadius);
+                m_ShadowSpotIDs.push_back(entityID);
             }
         }
         else {
@@ -390,13 +396,9 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     }
 }
 
-void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& light, const std::vector<EntityID>& entities)
+void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
 {
-    glm::mat4 biasMatrix(
-        0.5f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.5f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f);
+    if (!m_ShadowAtlas.acquireTile(lightID)) return;
 
     glm::vec3 eye = glm::vec3(-light.direction);
     glm::vec3 up;
@@ -406,13 +408,12 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
 
     glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
     glm::mat4 projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
-    m_ShadowDirMatrix = biasMatrix * projection * view;
+    outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(2.0, 2.0);
     glCullFace(GL_FRONT);
-    target.bind();
-    glClearDepth(1.0);
+    m_ShadowAtlas.bindTileForWriting(lightID);
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
@@ -436,19 +437,15 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
     }
 
     glUseProgram(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_ShadowAtlas.unbindTileForWriting();
     glEnable(GL_CULL_FACE);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& light, const std::vector<EntityID>& entities)
+void GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
 {
-    glm::mat4 biasMatrix(
-        0.5f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.5f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f);
+    if (!m_ShadowAtlas.acquireTile(lightID)) return;
 
     glm::vec3 position = light.position;
     glm::vec3 direction = light.direction;
@@ -459,13 +456,12 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
 
     glm::mat4 view = glm::lookAt(position, position + direction, up);
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1.0f, 1.0f, 100.0f);
-    m_ShadowSpotMatrix = biasMatrix * projection * view;
+    outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(2.0, 2.0);
     glCullFace(GL_FRONT);
-    target.bind();
-    glClearDepth(1.0);
+    m_ShadowAtlas.bindTileForWriting(lightID);
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
@@ -489,7 +485,7 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
     }
 
     glUseProgram(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_ShadowAtlas.unbindTileForWriting();
     glEnable(GL_CULL_FACE);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glCullFace(GL_BACK);
@@ -570,18 +566,26 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         // this queries around the camera instead, purely as a bounding heuristic (not
         // a visibility test). Spot/point lights use their cached per-light cutoff
         // radius (EC_DOD_Light::cutoffRadius) instead.
+        std::vector<EntityID> activeAtlasLights;
+        activeAtlasLights.insert(activeAtlasLights.end(), m_ShadowDirIDs.begin(), m_ShadowDirIDs.end());
+        activeAtlasLights.insert(activeAtlasLights.end(), m_ShadowSpotIDs.begin(), m_ShadowSpotIDs.end());
+        m_ShadowAtlas.reconcile(activeAtlasLights);
+
         auto dirCasters = queryEntitiesNear(spatial.position, m_ShadowQueryRadius);
         for (size_t i = 0; i < m_ShadowDirs.size(); i++)
         {
-            shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i], dirCasters);
+            glm::mat4 shadowTransform;
+            shadowDirPass(m_ShadowDirIDs[i], m_ShadowDirs[i], dirCasters, shadowTransform);
+            if (!m_ShadowAtlas.hasTile(m_ShadowDirIDs[i])) continue; // atlas full, skip this light entirely this frame
+
             m_ShadowDirLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE, GL_ONE);
             m_ShadowDirLightShader.setUniform("WSCamPos", spatial.position);
             m_ShadowDirLightShader.setDirLight("dirLight", m_ShadowDirs[i]);
-            m_ShadowDirLightShader.setUniform("ShadowTransform", m_ShadowDirMatrix);
-            m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowBuffer.getDepthTexture());
+            m_ShadowDirLightShader.setUniform("ShadowTransform", shadowTransform);
+            m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
             glDisable(GL_BLEND);
         }
@@ -589,15 +593,18 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         for (size_t i = 0; i < m_ShadowSpots.size(); i++)
         {
             auto nearby = queryEntitiesNear(glm::vec3(m_ShadowSpots[i].position), m_ShadowSpotRadii[i]);
-            shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], nearby);
+            glm::mat4 shadowTransform;
+            shadowSpotPass(m_ShadowSpotIDs[i], m_ShadowSpots[i], nearby, shadowTransform);
+            if (!m_ShadowAtlas.hasTile(m_ShadowSpotIDs[i])) continue; // atlas full, skip this light entirely this frame
+
             m_ShadowSpotLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE, GL_ONE);
             m_ShadowSpotLightShader.setUniform("WSCamPos", spatial.position);
             m_ShadowSpotLightShader.setSpotLight("spotLight", m_ShadowSpots[i]);
-            m_ShadowSpotLightShader.setUniform("ShadowTransform", m_ShadowSpotMatrix);
-            m_ShadowSpotLightShader.bindTexture("shadowMap", 5, m_ShadowBuffer.getDepthTexture());
+            m_ShadowSpotLightShader.setUniform("ShadowTransform", shadowTransform);
+            m_ShadowSpotLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
             glDisable(GL_BLEND);
         }

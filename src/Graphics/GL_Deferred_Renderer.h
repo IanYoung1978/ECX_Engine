@@ -2,7 +2,7 @@
 #include "Renderer.h"
 #include "FrameBufferSet.h"
 #include "LightUniformBuffer.h"
-#include "ShadowBuffer.h"
+#include "ShadowAtlas.h"
 #include "CubemapBuffer.h"
 #include "Shader.h"
 #include "ShadowData.h"
@@ -41,8 +41,8 @@ private:
     void geometryPass(EC_GameScene& scene);
     void lightPass(EC_GameScene& scene);
     void updateLights(EC_GameScene& scene);
-    void shadowDirPass(ShadowBuffer& target, DirLightData& light, const std::vector<EntityID>& entities);
-    void shadowSpotPass(ShadowBuffer& target, SpotLightData& light, const std::vector<EntityID>& entities);
+    void shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
+    void shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowPointPass(CubemapBuffer& target, LightData& light, const std::vector<EntityID>& entities);
     void shadowLightingPass(EC_GameScene& scene);
     void skyboxPass(EC_GameScene& scene);
@@ -97,15 +97,18 @@ private:
     GL_SkyboxRenderer m_SkyboxRenderer;
     Shader m_HDRTonemapShader;
     float m_Exposure = 0.75f;
-    ShadowBuffer m_ShadowBuffer;
-    glm::mat4 m_ShadowDirMatrix;
-    glm::mat4 m_ShadowSpotMatrix;
+    ShadowAtlas m_ShadowAtlas;
     ShadowData m_ShadowPointMatrices;
     CubemapBuffer m_PointShadowBuffer;
     float m_PointShadowFarPlane = 100.0f;
     std::vector<DirLightData> m_ShadowDirs;
     std::vector<LightData> m_ShadowPoints;
     std::vector<SpotLightData> m_ShadowSpots;
+    // Parallel to m_ShadowDirs/m_ShadowSpots, populated in updateLights() - the stable
+    // per-light identity ShadowAtlas needs for tile assignment (light data structs alone
+    // carry no EntityID).
+    std::vector<EntityID> m_ShadowDirIDs;
+    std::vector<EntityID> m_ShadowSpotIDs;
     // Cached cutoff radius for each entry in m_ShadowPoints/m_ShadowSpots, indices
     // aligned 1:1. Copied from EC_DOD_Light::cutoffRadius in updateLights() - not
     // recomputed here, since the radius only depends on light data set at load time.
