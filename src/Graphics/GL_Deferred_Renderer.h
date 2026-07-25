@@ -4,9 +4,7 @@
 #include "LightUniformBuffer.h"
 #include "ShadowAtlas.h"
 #include "CubemapShadowPool.h"
-#include "CubemapBuffer.h"
 #include "Shader.h"
-#include "ShadowData.h"
 #include "RenderConfig.h"
 #include "GL_DebugRenderer.h"
 #include "Entity/EC_DOD_EntityManager.h"
@@ -45,6 +43,12 @@ private:
     void geometryPass(EC_GameScene& scene);
     void lightPass(EC_GameScene& scene);
     void updateLights(EC_GameScene& scene);
+    // Shared entity-draw loop used by shadowDirPass/shadowSpotPass (identical body -
+    // alive/Transform/GraphicsData/mesh-handle checks + m_ShadowShader uniform sets + draw
+    // call - only the view/projection construction differs between the two callers, which
+    // they each keep). shadowPointPass's 6-face loop is structurally different enough that
+    // forcing it into this helper would hurt readability more than it would help.
+    void renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities);
     void shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities);
@@ -102,7 +106,6 @@ private:
     Shader m_HDRTonemapShader;
     float m_Exposure = 0.75f;
     ShadowAtlas m_ShadowAtlas;
-    ShadowData m_ShadowPointMatrices;
     CubemapShadowPool m_PointShadowPool;
     float m_PointShadowFarPlane = 100.0f;
     std::vector<DirLightData> m_ShadowDirs;

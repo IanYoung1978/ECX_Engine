@@ -456,25 +456,8 @@ void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)
     }
 }
 
-void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
+void GL_Deferred_Renderer::renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities)
 {
-    if (!m_ShadowAtlas.acquireTile(lightID)) return;
-
-    glm::vec3 eye = glm::vec3(-light.direction);
-    glm::vec3 up;
-    up[0] = eye[1] - eye[2];
-    up[1] = eye[2] - eye[0];
-    up[2] = eye[0] - eye[1];
-
-    glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
-    glm::mat4 projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
-    outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
-
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0, 2.0);
-    glCullFace(GL_FRONT);
-    m_ShadowAtlas.bindTileForWriting(lightID);
-
     auto& manager = EC_DOD_EntityManager::getInstance();
 
     for (EntityID entityID : entities) {
@@ -495,6 +478,28 @@ void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, 
         glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
     }
+}
+
+void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
+{
+    if (!m_ShadowAtlas.acquireTile(lightID)) return;
+
+    glm::vec3 eye = glm::vec3(-light.direction);
+    glm::vec3 up;
+    up[0] = eye[1] - eye[2];
+    up[1] = eye[2] - eye[0];
+    up[2] = eye[0] - eye[1];
+
+    glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
+    glm::mat4 projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
+    outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
+
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(2.0, 2.0);
+    glCullFace(GL_FRONT);
+    m_ShadowAtlas.bindTileForWriting(lightID);
+
+    renderShadowCasters(view, projection, entities);
 
     glUseProgram(0);
     m_ShadowAtlas.unbindTileForWriting();
@@ -523,26 +528,7 @@ void GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light
     glCullFace(GL_FRONT);
     m_ShadowAtlas.bindTileForWriting(lightID);
 
-    auto& manager = EC_DOD_EntityManager::getInstance();
-
-    for (EntityID entityID : entities) {
-        if (!manager.isAlive(entityID)) continue;
-        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
-        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
-
-        const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
-        const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
-        if (gfx.getMeshHandle() == 0) continue;
-
-        m_ShadowShader.activate();
-        m_ShadowShader.setUniform("ViewTransform", view);
-        m_ShadowShader.setUniform("ProjTransform", projection);
-        m_ShadowShader.setUniform("ModelTransform", transform.matrix);
-
-        glBindVertexArray(gfx.getMeshHandle());
-        glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
-    }
+    renderShadowCasters(view, projection, entities);
 
     glUseProgram(0);
     m_ShadowAtlas.unbindTileForWriting();
