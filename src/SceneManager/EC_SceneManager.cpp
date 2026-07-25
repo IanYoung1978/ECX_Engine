@@ -40,8 +40,16 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     messenger.Subscribe(*this, ECXCommandType::SystemStart);
     messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
 
+    RenderConfig renderConfig;
+    if (!XML::loadRenderConfig(m_Settings.graphics_settings, renderConfig))
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Failed to load graphics settings: " + m_Settings.graphics_settings + " - using defaults",
+            LOGGING::LogLevel::WARNING);
+    }
+
     m_Renderer = std::make_unique<GL_Deferred_Renderer>();
-    m_Renderer->init(game.getWindow(), messenger);
+    m_Renderer->init(game.getWindow(), messenger, renderConfig);
 
     std::vector<XML::SceneDescriptor> descriptors;
     if (!XML::loadScenesFile(m_Settings.scenes_file, descriptors))
@@ -100,9 +108,14 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
         {
             size_t idx = *it;
             if (m_Scenes[idx].isLoaded())
+            {
+                m_Renderer->bakeStaticShadows(m_Scenes[idx]);
                 it = m_LoadingScenes.erase(it);
+            }
             else
+            {
                 ++it;
+            }
         }
 
         buildEntityMaps();

@@ -69,6 +69,8 @@ struct EC_DOD_GraphicsData {
     glm::vec4 colour{ 1.0f };
     bool hasTextures = false;
     bool visible = true;
+    bool castsShadow = true;
+    bool receivesShadow = true;
     uint32_t getMeshHandle() const { return model ? model->getHandle() : 0; }
     uint32_t getVertexCount() const { return model ? model->getVertCount() : 0; }
 };

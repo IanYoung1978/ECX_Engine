@@ -504,6 +504,12 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
             sscanf(color.c_str(), "%f,%f,%f,%f",
                 &gfx.colour.r, &gfx.colour.g, &gfx.colour.b, &gfx.colour.a);
         }
+        else if (strcmp(child->Value(), "CastsShadow") == 0 && child->GetText()) {
+            gfx.castsShadow = (strcmp(child->GetText(), "true") == 0);
+        }
+        else if (strcmp(child->Value(), "ReceivesShadow") == 0 && child->GetText()) {
+            gfx.receivesShadow = (strcmp(child->GetText(), "true") == 0);
+        }
         else {
             LOGGING::ECX_Logger::GetInstance()->LogMessage(
                 "Unknown graphics property: " + std::string(child->Value()),

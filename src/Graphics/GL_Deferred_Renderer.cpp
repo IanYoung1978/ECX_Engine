@@ -36,13 +36,15 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
         m_DebugRenderer.toggle();
 }
 
-void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger)
+void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger, const RenderConfig& config)
 {
     messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
 
     m_Messenger = &messenger;
     m_Window = window;
+    m_RenderConfig = config;
+    m_Exposure = config.exposure;
     m_DebugRenderer.init(window);
     m_SkyboxRenderer.init(window);
 
@@ -108,11 +110,22 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
         "data/assets/shaders/PointShadowLightPass.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "failed to load point shadow light shader", LOGGING::LogLevel::CRITICAL);
+    // Issue #28 receivesShadow-exempt shaders: paired with shadow.vert (bare MVP transform,
+    // no varyings) since these draw real mesh geometry rather than a full-screen quad.
+    if (!m_ExemptDirLightShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/ShadowExemptDirLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "failed to load exempt directional shadow shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_ExemptSpotLightShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/ShadowExemptSpotLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "failed to load exempt spot shadow shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_ExemptPointLightShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/ShadowExemptPointLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "failed to load exempt point shadow shader", LOGGING::LogLevel::CRITICAL);
 
-    m_PointShadowBuffer.init(1024, 1024);
+    m_PointShadowPool.init(config.pointShadowPoolSize, config.pointShadowFaceSize);
     m_FrameBuffer.init(window->getWidth(), window->getHeight());
     m_LightBuffer.init((*m_LightPassShader));
-    m_ShadowBuffer.init(2048, 2048);
+    m_ShadowAtlas.init(config.shadowAtlasSize, config.shadowAtlasTileSize);
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LESS);
@@ -342,6 +355,9 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     m_ShadowPoints.clear();
     m_ShadowSpotRadii.clear();
     m_ShadowPointRadii.clear();
+    m_ShadowDirIDs.clear();
+    m_ShadowSpotIDs.clear();
+    m_ShadowPointIDs.clear();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
@@ -357,7 +373,10 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             data.colour = glm::vec4(light.colour, 1.0f);
             data.intensity = light.intensity;
             if (!light.castsShadow) m_Directionals.push_back(data);
-            else m_ShadowDirs.push_back(data);
+            else {
+                m_ShadowDirs.push_back(data);
+                m_ShadowDirIDs.push_back(entityID);
+            }
         }
         else if (light.type == EC_DOD_Light::Type::Spot) {
             SpotLightData data;
@@ -371,6 +390,7 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             else {
                 m_ShadowSpots.push_back(data);
                 m_ShadowSpotRadii.push_back(light.cutoffRadius);
+                m_ShadowSpotIDs.push_back(entityID);
             }
         }
         else {
@@ -383,35 +403,72 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             else {
                 m_ShadowPoints.push_back(data);
                 m_ShadowPointRadii.push_back(light.cutoffRadius);
+                m_ShadowPointIDs.push_back(entityID);
             }
         }
     }
 }
 
-void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& light, const std::vector<EntityID>& entities)
+void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)
 {
-    glm::mat4 biasMatrix(
-        0.5f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.5f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f);
+    updateLights(scene);
 
-    glm::vec3 eye = glm::vec3(-light.direction);
-    glm::vec3 up;
-    up[0] = eye[1] - eye[2];
-    up[1] = eye[2] - eye[0];
-    up[2] = eye[0] - eye[1];
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    // Baking runs right at scene-load completion, potentially before the collision
+    // system's spatial index has processed the newly-loaded entities on its own thread -
+    // use the full scene entity list rather than a spatial query, since correctness
+    // matters more than efficiency for a one-time operation.
+    std::vector<EntityID> allEntities = scene.getEntities();
 
-    glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
-    glm::mat4 projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
-    m_ShadowDirMatrix = biasMatrix * projection * view;
+    for (size_t i = 0; i < m_ShadowDirs.size(); i++)
+    {
+        EntityID id = m_ShadowDirIDs[i];
+        if (m_BakedStaticDirLights.count(id)) continue;
+        if (!manager.isAlive(id) || !manager.hasComponent<EC_DOD_Light>(id)) continue;
+        if (manager.getComponent<EC_DOD_Light>(id).dynamic) continue;
 
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0, 2.0);
-    glCullFace(GL_FRONT);
-    target.bind();
-    glClearDepth(1.0);
+        glm::mat4 shadowTransform;
+        shadowDirPass(id, m_ShadowDirs[i], allEntities, shadowTransform);
+        if (m_ShadowAtlas.hasTile(id))
+        {
+            m_BakedStaticDirLights.insert(id);
+            m_BakedDirShadowTransforms[id] = shadowTransform;
+        }
+    }
 
+    for (size_t i = 0; i < m_ShadowSpots.size(); i++)
+    {
+        EntityID id = m_ShadowSpotIDs[i];
+        if (m_BakedStaticSpotLights.count(id)) continue;
+        if (!manager.isAlive(id) || !manager.hasComponent<EC_DOD_Light>(id)) continue;
+        if (manager.getComponent<EC_DOD_Light>(id).dynamic) continue;
+
+        glm::mat4 shadowTransform;
+        shadowSpotPass(id, m_ShadowSpots[i], allEntities, shadowTransform);
+        if (m_ShadowAtlas.hasTile(id))
+        {
+            m_BakedStaticSpotLights.insert(id);
+            m_BakedSpotShadowTransforms[id] = shadowTransform;
+        }
+    }
+
+    for (size_t i = 0; i < m_ShadowPoints.size(); i++)
+    {
+        EntityID id = m_ShadowPointIDs[i];
+        if (m_BakedStaticPointLights.count(id)) continue;
+        if (!manager.isAlive(id) || !manager.hasComponent<EC_DOD_Light>(id)) continue;
+        if (manager.getComponent<EC_DOD_Light>(id).dynamic) continue;
+
+        shadowPointPass(id, m_ShadowPoints[i], allEntities);
+        if (m_PointShadowPool.hasSlot(id))
+        {
+            m_BakedStaticPointLights.insert(id);
+        }
+    }
+}
+
+void GL_Deferred_Renderer::renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities)
+{
     auto& manager = EC_DOD_EntityManager::getInstance();
 
     for (EntityID entityID : entities) {
@@ -422,6 +479,7 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
         const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
         const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
         if (gfx.getMeshHandle() == 0) continue;
+        if (!gfx.castsShadow) continue;
 
         m_ShadowShader.activate();
         m_ShadowShader.setUniform("ViewTransform", view);
@@ -432,21 +490,39 @@ void GL_Deferred_Renderer::shadowDirPass(ShadowBuffer& target, DirLightData& lig
         glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
     }
+}
+
+void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
+{
+    if (!m_ShadowAtlas.acquireTile(lightID)) return;
+
+    glm::vec3 eye = glm::vec3(-light.direction);
+    glm::vec3 up;
+    up[0] = eye[1] - eye[2];
+    up[1] = eye[2] - eye[0];
+    up[2] = eye[0] - eye[1];
+
+    glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
+    glm::mat4 projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
+    outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
+
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(2.0, 2.0);
+    glCullFace(GL_FRONT);
+    m_ShadowAtlas.bindTileForWriting(lightID);
+
+    renderShadowCasters(view, projection, entities);
 
     glUseProgram(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_ShadowAtlas.unbindTileForWriting();
     glEnable(GL_CULL_FACE);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& light, const std::vector<EntityID>& entities)
+void GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
 {
-    glm::mat4 biasMatrix(
-        0.5f, 0.0f, 0.0f, 0.0f,
-        0.0f, 0.5f, 0.0f, 0.0f,
-        0.0f, 0.0f, 0.5f, 0.0f,
-        0.5f, 0.5f, 0.5f, 1.0f);
+    if (!m_ShadowAtlas.acquireTile(lightID)) return;
 
     glm::vec3 position = light.position;
     glm::vec3 direction = light.direction;
@@ -457,44 +533,27 @@ void GL_Deferred_Renderer::shadowSpotPass(ShadowBuffer& target, SpotLightData& l
 
     glm::mat4 view = glm::lookAt(position, position + direction, up);
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1.0f, 1.0f, 100.0f);
-    m_ShadowSpotMatrix = biasMatrix * projection * view;
+    outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(2.0, 2.0);
     glCullFace(GL_FRONT);
-    target.bind();
-    glClearDepth(1.0);
+    m_ShadowAtlas.bindTileForWriting(lightID);
 
-    auto& manager = EC_DOD_EntityManager::getInstance();
-
-    for (EntityID entityID : entities) {
-        if (!manager.isAlive(entityID)) continue;
-        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
-        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
-
-        const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
-        const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
-        if (gfx.getMeshHandle() == 0) continue;
-
-        m_ShadowShader.activate();
-        m_ShadowShader.setUniform("ViewTransform", view);
-        m_ShadowShader.setUniform("ProjTransform", projection);
-        m_ShadowShader.setUniform("ModelTransform", transform.matrix);
-
-        glBindVertexArray(gfx.getMeshHandle());
-        glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
-        glBindVertexArray(0);
-    }
+    renderShadowCasters(view, projection, entities);
 
     glUseProgram(0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    m_ShadowAtlas.unbindTileForWriting();
     glEnable(GL_CULL_FACE);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glCullFace(GL_BACK);
 }
 
-void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& light, const std::vector<EntityID>& entities)
+void GL_Deferred_Renderer::shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities)
 {
+    if (!m_PointShadowPool.acquireSlot(lightID)) return;
+    CubemapBuffer& target = m_PointShadowPool.getBuffer(lightID);
+
     glm::vec3 lightPos = glm::vec3(light.position);
 
     glm::mat4 projection = glm::perspective(
@@ -529,6 +588,7 @@ void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& lig
             const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
 
             if (gfx.getMeshHandle() == 0) continue;
+            if (!gfx.castsShadow) continue;
 
             m_PointShadowDepthShader.activate();
             m_PointShadowDepthShader.setUniform("ModelTransform", transform.matrix);
@@ -550,6 +610,129 @@ void GL_Deferred_Renderer::shadowPointPass(CubemapBuffer& target, LightData& lig
     glCullFace(GL_BACK);
 }
 
+void GL_Deferred_Renderer::exemptDirShadowPass(DirLightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities)
+{
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    bool bound = false;
+
+    for (EntityID entityID : entities) {
+        if (!manager.isAlive(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
+
+        const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
+        if (gfx.getMeshHandle() == 0) continue;
+        if (gfx.receivesShadow) continue;
+
+        if (!bound) {
+            m_ExemptDirLightShader.activate();
+            m_FrameBuffer.LightingPass(m_ExemptDirLightShader);
+            m_FrameBuffer.ExemptShadowPass();
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            m_ExemptDirLightShader.setUniform("WSCamPos", camPos);
+            m_ExemptDirLightShader.setDirLight("dirLight", light);
+            m_ExemptDirLightShader.setUniform("ViewTransform", view);
+            m_ExemptDirLightShader.setUniform("ProjTransform", projection);
+            bound = true;
+        }
+
+        const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
+        m_ExemptDirLightShader.setUniform("ModelTransform", transform.matrix);
+
+        glBindVertexArray(gfx.getMeshHandle());
+        glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+    }
+
+    if (bound) {
+        glDisable(GL_BLEND);
+        m_FrameBuffer.EndExemptShadowPass();
+    }
+}
+
+void GL_Deferred_Renderer::exemptSpotShadowPass(SpotLightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities)
+{
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    bool bound = false;
+
+    for (EntityID entityID : entities) {
+        if (!manager.isAlive(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
+
+        const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
+        if (gfx.getMeshHandle() == 0) continue;
+        if (gfx.receivesShadow) continue;
+
+        if (!bound) {
+            m_ExemptSpotLightShader.activate();
+            m_FrameBuffer.LightingPass(m_ExemptSpotLightShader);
+            m_FrameBuffer.ExemptShadowPass();
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            m_ExemptSpotLightShader.setUniform("WSCamPos", camPos);
+            m_ExemptSpotLightShader.setSpotLight("spotLight", light);
+            m_ExemptSpotLightShader.setUniform("ViewTransform", view);
+            m_ExemptSpotLightShader.setUniform("ProjTransform", projection);
+            bound = true;
+        }
+
+        const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
+        m_ExemptSpotLightShader.setUniform("ModelTransform", transform.matrix);
+
+        glBindVertexArray(gfx.getMeshHandle());
+        glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+    }
+
+    if (bound) {
+        glDisable(GL_BLEND);
+        m_FrameBuffer.EndExemptShadowPass();
+    }
+}
+
+void GL_Deferred_Renderer::exemptPointShadowPass(LightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities)
+{
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    bool bound = false;
+
+    for (EntityID entityID : entities) {
+        if (!manager.isAlive(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_Transform>(entityID)) continue;
+        if (!manager.hasComponent<EC_DOD_GraphicsData>(entityID)) continue;
+
+        const auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entityID);
+        if (gfx.getMeshHandle() == 0) continue;
+        if (gfx.receivesShadow) continue;
+
+        if (!bound) {
+            m_ExemptPointLightShader.activate();
+            m_FrameBuffer.LightingPass(m_ExemptPointLightShader);
+            m_FrameBuffer.ExemptShadowPass();
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            m_ExemptPointLightShader.setUniform("WSCamPos", camPos);
+            m_ExemptPointLightShader.setLight("pointLight", light);
+            m_ExemptPointLightShader.setUniform("ViewTransform", view);
+            m_ExemptPointLightShader.setUniform("ProjTransform", projection);
+            bound = true;
+        }
+
+        const auto& transform = manager.getComponent<EC_DOD_Transform>(entityID);
+        m_ExemptPointLightShader.setUniform("ModelTransform", transform.matrix);
+
+        glBindVertexArray(gfx.getMeshHandle());
+        glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
+        glBindVertexArray(0);
+    }
+
+    if (bound) {
+        glDisable(GL_BLEND);
+        m_FrameBuffer.EndExemptShadowPass();
+    }
+}
+
 void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
@@ -561,6 +744,16 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
         if (!camera.isActive) continue;
 
+        // Same camera matrices geometryPass() used - the exempt pass below depth-tests
+        // GL_EQUAL against the G-buffer's depth, which requires bit-for-bit the same
+        // projection*view*model result geometryPass wrote, not a separately recomputed one.
+        glm::mat4 camProjection = glm::perspective(
+            glm::radians(camera.fov),
+            (float)m_Window->getWidth() / m_Window->getHeight(),
+            camera.nearPlane,
+            camera.farPlane);
+        glm::mat4 camView = camera.viewMatrix;
+
         // Shadow casters are never narrowed by camera visibility - an entity fully
         // outside the camera's frustum can still cast a shadow onto something that is
         // visible. Each shadow pass gets only the light's own influence radius.
@@ -568,36 +761,71 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         // this queries around the camera instead, purely as a bounding heuristic (not
         // a visibility test). Spot/point lights use their cached per-light cutoff
         // radius (EC_DOD_Light::cutoffRadius) instead.
+        std::vector<EntityID> activeAtlasLights;
+        activeAtlasLights.insert(activeAtlasLights.end(), m_ShadowDirIDs.begin(), m_ShadowDirIDs.end());
+        activeAtlasLights.insert(activeAtlasLights.end(), m_ShadowSpotIDs.begin(), m_ShadowSpotIDs.end());
+        for (EntityID evicted : m_ShadowAtlas.reconcile(activeAtlasLights))
+        {
+            m_BakedStaticDirLights.erase(evicted);
+            m_BakedStaticSpotLights.erase(evicted);
+            m_BakedDirShadowTransforms.erase(evicted);
+            m_BakedSpotShadowTransforms.erase(evicted);
+        }
+        for (EntityID evicted : m_PointShadowPool.reconcile(m_ShadowPointIDs))
+        {
+            m_BakedStaticPointLights.erase(evicted);
+        }
+
         auto dirCasters = queryEntitiesNear(spatial.position, m_ShadowQueryRadius);
         for (size_t i = 0; i < m_ShadowDirs.size(); i++)
         {
-            shadowDirPass(m_ShadowBuffer, m_ShadowDirs[i], dirCasters);
+            EntityID id = m_ShadowDirIDs[i];
+            glm::mat4 shadowTransform;
+            bool baked = m_BakedStaticDirLights.count(id) != 0;
+            if (baked)
+                shadowTransform = m_BakedDirShadowTransforms.at(id);
+            else
+                shadowDirPass(id, m_ShadowDirs[i], dirCasters, shadowTransform);
+            if (!m_ShadowAtlas.hasTile(id)) continue; // atlas full, skip this light entirely this frame
+
             m_ShadowDirLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowDirLightShader);
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE, GL_ONE);
             m_ShadowDirLightShader.setUniform("WSCamPos", spatial.position);
             m_ShadowDirLightShader.setDirLight("dirLight", m_ShadowDirs[i]);
-            m_ShadowDirLightShader.setUniform("ShadowTransform", m_ShadowDirMatrix);
-            m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowBuffer.getDepthTexture());
+            m_ShadowDirLightShader.setUniform("ShadowTransform", shadowTransform);
+            m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
             glDisable(GL_BLEND);
+
+            exemptDirShadowPass(m_ShadowDirs[i], camView, camProjection, spatial.position, dirCasters);
         }
 
         for (size_t i = 0; i < m_ShadowSpots.size(); i++)
         {
+            EntityID id = m_ShadowSpotIDs[i];
             auto nearby = queryEntitiesNear(glm::vec3(m_ShadowSpots[i].position), m_ShadowSpotRadii[i]);
-            shadowSpotPass(m_ShadowBuffer, m_ShadowSpots[i], nearby);
+            glm::mat4 shadowTransform;
+            bool baked = m_BakedStaticSpotLights.count(id) != 0;
+            if (baked)
+                shadowTransform = m_BakedSpotShadowTransforms.at(id);
+            else
+                shadowSpotPass(id, m_ShadowSpots[i], nearby, shadowTransform);
+            if (!m_ShadowAtlas.hasTile(id)) continue; // atlas full, skip this light entirely this frame
+
             m_ShadowSpotLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowSpotLightShader);
             glEnable(GL_BLEND);
             glBlendFunc(GL_ONE, GL_ONE);
             m_ShadowSpotLightShader.setUniform("WSCamPos", spatial.position);
             m_ShadowSpotLightShader.setSpotLight("spotLight", m_ShadowSpots[i]);
-            m_ShadowSpotLightShader.setUniform("ShadowTransform", m_ShadowSpotMatrix);
-            m_ShadowSpotLightShader.bindTexture("shadowMap", 5, m_ShadowBuffer.getDepthTexture());
+            m_ShadowSpotLightShader.setUniform("ShadowTransform", shadowTransform);
+            m_ShadowSpotLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
             glDisable(GL_BLEND);
+
+            exemptSpotShadowPass(m_ShadowSpots[i], camView, camProjection, spatial.position, nearby);
         }
 
         // Computed once per light here (not per cubemap face) - shadowPointPass loops
@@ -605,8 +833,13 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         // full entity list per face.
         for (size_t i = 0; i < m_ShadowPoints.size(); i++)
         {
+            EntityID id = m_ShadowPointIDs[i];
             auto nearby = queryEntitiesNear(glm::vec3(m_ShadowPoints[i].position), m_ShadowPointRadii[i]);
-            shadowPointPass(m_PointShadowBuffer, m_ShadowPoints[i], nearby);
+            bool baked = m_BakedStaticPointLights.count(id) != 0;
+            if (!baked)
+                shadowPointPass(id, m_ShadowPoints[i], nearby);
+            if (!m_PointShadowPool.hasSlot(id)) continue; // pool full, skip this light entirely this frame
+
             m_ShadowPointLightShader.activate();
             m_FrameBuffer.LightingPass(m_ShadowPointLightShader);
             glEnable(GL_BLEND);
@@ -616,11 +849,13 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             m_ShadowPointLightShader.setUniform("FarPlane", m_PointShadowFarPlane);
 
             glActiveTexture(GL_TEXTURE5);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, m_PointShadowBuffer.getTexture());
+            glBindTexture(GL_TEXTURE_CUBE_MAP, m_PointShadowPool.getTexture(id));
             m_ShadowPointLightShader.setUniform("shadowMap", 5);
 
             renderQuad();
             glDisable(GL_BLEND);
+
+            exemptPointShadowPass(m_ShadowPoints[i], camView, camProjection, spatial.position, nearby);
         }
 
         break;
