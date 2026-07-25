@@ -52,6 +52,14 @@ private:
     void shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities);
+    // Issue #28: redraws just the receivesShadow==false entities among `entities` with this
+    // light's full (unshadowed) contribution, depth-testing GL_EQUAL against the G-buffer so
+    // only their own pixels are touched. view/projection must be the same camera matrices
+    // geometryPass used, not recomputed, to avoid a GL_EQUAL floating-point mismatch. No-op
+    // if none of `entities` are exempt.
+    void exemptDirShadowPass(DirLightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities);
+    void exemptSpotShadowPass(SpotLightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities);
+    void exemptPointShadowPass(LightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities);
     void shadowLightingPass(EC_GameScene& scene);
     void skyboxPass(EC_GameScene& scene);
     void debugPass(EC_GameScene& scene);
@@ -99,6 +107,9 @@ private:
     Shader m_ShadowDirLightShader;
     Shader m_ShadowSpotLightShader;
     Shader m_ShadowPointLightShader;
+    Shader m_ExemptDirLightShader;
+    Shader m_ExemptSpotLightShader;
+    Shader m_ExemptPointLightShader;
     Shader m_BloomVShader;
     Shader m_BloomHShader;
     Shader m_PointShadowDepthShader;

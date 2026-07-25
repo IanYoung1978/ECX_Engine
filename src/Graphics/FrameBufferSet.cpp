@@ -17,6 +17,8 @@ bool FrameBufferSet::init(int width, int height)
 		return false;
 	if (!m_FrameBuffer2.init(width, height))
 		return false;
+	if (!m_ExemptShadowBuffer.init(m_GBuffer.getDepthTexture(), m_FrameBuffer1.getBufferTexture()))
+		return false;
 	m_Width = width;
 	m_Height = height;
 	return true;
@@ -27,6 +29,12 @@ void FrameBufferSet::resize(int width, int height)
 	m_GBuffer.resize(width, height);
 	m_FrameBuffer1.resize(width, height);
 	m_FrameBuffer2.resize(width, height);
+	// FrameBuffer::resize() deletes and recreates its texture (new handle); GBuffer::resize()
+	// is currently a no-op so its depth texture handle is unchanged, but re-attaching both
+	// here unconditionally is correct either way and avoids depending on that detail.
+	m_ExemptShadowBuffer.resize(m_GBuffer.getDepthTexture(), m_FrameBuffer1.getBufferTexture());
+	m_Width = width;
+	m_Height = height;
 }
 
 void FrameBufferSet::initFrame()
@@ -117,6 +125,16 @@ void FrameBufferSet::PostProcessPass()
 void FrameBufferSet::UIPass()
 {
 	//TO:DO
+}
+
+void FrameBufferSet::ExemptShadowPass()
+{
+	m_ExemptShadowBuffer.bindForWriting(m_Width, m_Height);
+}
+
+void FrameBufferSet::EndExemptShadowPass()
+{
+	m_ExemptShadowBuffer.unbind();
 }
 
 void FrameBufferSet::FinalPass()
