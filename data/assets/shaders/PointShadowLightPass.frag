@@ -5,7 +5,6 @@ layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
 layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
-layout (location = 4) uniform sampler2D glowMap;
 layout (location = 5) uniform samplerCube shadowMap;
 
 const float PI = 3.14159265359;
@@ -114,7 +113,6 @@ void main()
     vec4 ncolour = texture(normalMap,   indata.VSTexCoord).rgba;
     vec4 albedo  = texture(AlbedoMap,   indata.VSTexCoord).rgba;
     vec3 pbr     = texture(PBRMap,      indata.VSTexCoord).rgb;
-    vec4 gcolour = texture(glowMap,     indata.VSTexCoord).rgba;
 
     vec3 vToEye    = normalize(WSCamPos - pcolour.xyz);
     vec3 ltf       = pointLight.position.xyz - pcolour.xyz;
@@ -129,6 +127,5 @@ void main()
         pointLight.intensity,
         pbr);
 
-    colour = vec4(visibility * fragCol + gcolour.rgb, 1.0);
-    //colour = vec4(vec3(computeOcclusion(pcolour.xyz, pointLight.position.xyz)), 1.0);
+    colour = vec4(visibility * fragCol, 1.0);
 }

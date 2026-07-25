@@ -11,7 +11,6 @@ layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
 layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
-layout (location = 4) uniform sampler2D glowMap;
 
 const float PI = 3.14159265359;
 
@@ -103,7 +102,6 @@ void main()
     vec4 ncolour = texelFetch(normalMap, px, 0);
     vec4 albedo  = texelFetch(AlbedoMap, px, 0);
     vec3 pbr     = texelFetch(PBRMap, px, 0).rgb;
-    vec4 gcolour = texelFetch(glowMap, px, 0);
 
     vec3 vToEye = normalize(WSCamPos - pcolour.xyz);
     vec3 ltf    = pointLight.position.xyz - pcolour.xyz;
@@ -117,5 +115,5 @@ void main()
         pointLight.intensity,
         pbr);
 
-    colour = vec4(fragCol + gcolour.rgb, 1.0);
+    colour = vec4(fragCol, 1.0);
 }

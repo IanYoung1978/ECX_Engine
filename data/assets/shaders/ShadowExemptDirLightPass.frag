@@ -12,7 +12,6 @@ layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
 layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
-layout (location = 4) uniform sampler2D glowMap;
 const float PI = 3.14159265359;
 
 struct DirLightData
@@ -108,7 +107,6 @@ void main()
 	vec4 ncolour 		= texelFetch(normalMap, px, 0);
 	vec3 dcolour 		= pow(texelFetch(AlbedoMap, px, 0).rgb, vec3(2.2));
 	vec3 pbr 			= texelFetch(PBRMap, px, 0).rgb;
-	vec4 gcolour 		= texelFetch(glowMap, px, 0);
 	vec3 vToEye 		= normalize(WSCamPos - pcolour.xyz);
 
 	vec3 outColour 		= computeLight(
@@ -119,5 +117,5 @@ void main()
 							ncolour.rgb, dirLight.intensity,
 							pbr.r, pbr.g, pbr.b
 						);
-	colour = vec4(pow(outColour + gcolour.rgb, vec3(1.0/2.2)), 1.0);
+	colour = vec4(pow(outColour, vec3(1.0/2.2)), 1.0);
 }

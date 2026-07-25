@@ -12,7 +12,6 @@ layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
 layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
-layout (location = 4) uniform sampler2D glowMap;
 const float PI = 3.14159265359;
 
 struct SpotLightData
@@ -113,7 +112,6 @@ void main()
 	vec4 ncolour 		= texelFetch(normalMap, px, 0);
 	vec4 albedo 		= texelFetch(AlbedoMap, px, 0);
 	vec3 pbr 			= texelFetch(PBRMap, px, 0).rgb;
-	vec4 gcolour 		= texelFetch(glowMap, px, 0);
 	vec3 vToEye 		= normalize(WSCamPos - pcolour.xyz);
 	vec3 outColour 		= vec3(0.0,0.0,0.0);
 
@@ -133,5 +131,5 @@ void main()
 						);
 		outColour = fragCol * clamp((cos_cur_angle-spotLight.cutoffAngle)/(1.0-spotLight.cutoffAngle), 0.0, 1.0);
 	}
-	colour = vec4(outColour+gcolour.rgb,1);
+	colour = vec4(outColour,1);
 }

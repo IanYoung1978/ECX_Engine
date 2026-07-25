@@ -71,6 +71,7 @@ struct EC_DOD_GraphicsData {
     bool visible = true;
     bool castsShadow = true;
     bool receivesShadow = true;
+    float emissiveIntensity = 1.0f;
     uint32_t getMeshHandle() const { return model ? model->getHandle() : 0; }
     uint32_t getVertexCount() const { return model ? model->getVertCount() : 0; }
 };

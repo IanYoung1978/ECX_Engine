@@ -42,6 +42,10 @@ public:
 private:
     void geometryPass(EC_GameScene& scene);
     void lightPass(EC_GameScene& scene);
+    // Adds the G-buffer's emissive/glow contribution exactly once per frame, independent
+    // of active light count - see emissivePass.frag for why this had to be pulled out of
+    // every per-light shader.
+    void emissivePass();
     void updateLights(EC_GameScene& scene);
     // Shared entity-draw loop used by shadowDirPass/shadowSpotPass (identical body -
     // alive/Transform/GraphicsData/mesh-handle checks + m_ShadowShader uniform sets + draw
@@ -110,8 +114,9 @@ private:
     Shader m_ExemptDirLightShader;
     Shader m_ExemptSpotLightShader;
     Shader m_ExemptPointLightShader;
-    Shader m_BloomVShader;
-    Shader m_BloomHShader;
+    Shader m_EmissiveShader;
+    Shader m_BloomDownsampleShader;
+    Shader m_BloomUpsampleShader;
     Shader m_PointShadowDepthShader;
     GL_SkyboxRenderer m_SkyboxRenderer;
     Shader m_HDRTonemapShader;

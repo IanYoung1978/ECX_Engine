@@ -16,6 +16,7 @@ layout (location = 4) out vec4 glow;
 uniform int hasMaterial;
 uniform float parallaxScale;
 uniform float parallaxBias;
+uniform float emissiveIntensity;
 in xferBlock
 {
     vec3 TSViewPos; 
@@ -84,7 +85,7 @@ void main()
         pbr.g = texture(metalMap, txc).r;
         pbr.b = texture(AOMap, txc).r;
         PBR = vec4(pbr, 1.0);
-        glow = vec4(texture(glowMap, txc).rgb, 1.0);
+        glow = vec4(texture(glowMap, txc).rgb * emissiveIntensity, 1.0);
     }
     else
     {

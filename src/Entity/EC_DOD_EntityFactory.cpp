@@ -510,6 +510,9 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
         else if (strcmp(child->Value(), "ReceivesShadow") == 0 && child->GetText()) {
             gfx.receivesShadow = (strcmp(child->GetText(), "true") == 0);
         }
+        else if (strcmp(child->Value(), "EmissiveIntensity") == 0 && child->GetText()) {
+            gfx.emissiveIntensity = std::stof(child->GetText());
+        }
         else {
             LOGGING::ECX_Logger::GetInstance()->LogMessage(
                 "Unknown graphics property: " + std::string(child->Value()),
