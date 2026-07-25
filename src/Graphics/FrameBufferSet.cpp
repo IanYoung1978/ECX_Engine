@@ -9,7 +9,7 @@ FrameBufferSet::FrameBufferSet()
 	m_Width = 0;
 }
 
-bool FrameBufferSet::init(int width, int height)
+bool FrameBufferSet::init(int width, int height, int bloomMipLevels)
 {
 	if (!m_GBuffer.init(width, height))
 		return false;
@@ -18,6 +18,8 @@ bool FrameBufferSet::init(int width, int height)
 	if (!m_FrameBuffer2.init(width, height))
 		return false;
 	if (!m_ExemptShadowBuffer.init(m_GBuffer.getDepthTexture(), m_FrameBuffer1.getBufferTexture()))
+		return false;
+	if (!m_BloomChain.init(width, height, bloomMipLevels))
 		return false;
 	m_Width = width;
 	m_Height = height;
@@ -33,6 +35,7 @@ void FrameBufferSet::resize(int width, int height)
 	// is currently a no-op so its depth texture handle is unchanged, but re-attaching both
 	// here unconditionally is correct either way and avoids depending on that detail.
 	m_ExemptShadowBuffer.resize(m_GBuffer.getDepthTexture(), m_FrameBuffer1.getBufferTexture());
+	m_BloomChain.resize(width, height);
 	m_Width = width;
 	m_Height = height;
 }
@@ -59,49 +62,33 @@ void FrameBufferSet::LightingPass(Shader& shader)
 	shader.bindTexture(("glowMap"), 4, m_GBuffer.getGBufferTexture(FrameBufferType::Glow));
 }
 
-void FrameBufferSet::GlowPass(Shader& shader, bool first, bool last)
+void FrameBufferSet::BeginBloomChain()
 {
-	if (first)
-	{
-		m_GBuffer.setForReading();
-		shader.bindTexture(("glowMap"), 0, m_GBuffer.getGBufferTexture(FrameBufferType::Glow));
-		m_FrameBuffer1.setForWriting();
-		m_SwapBuffers = false;
-	}
-	else if (last)
-	{
-		if (m_SwapBuffers)
-		{
-			glCopyImageSubData(m_FrameBuffer2.getBufferTexture(), GL_TEXTURE_2D, 0, 0, 0, 0,
-				m_GBuffer.getGBufferTexture(FrameBufferType::Glow), GL_TEXTURE_2D, 0, 0, 0, 0,
-				m_Width, m_Height,1
-			);
-		}
-		else
-		{
-			glCopyImageSubData(m_FrameBuffer1.getBufferTexture(), GL_TEXTURE_2D, 0, 0, 0, 0,
-				m_GBuffer.getGBufferTexture(FrameBufferType::Glow), GL_TEXTURE_2D, 0, 0, 0, 0,
-				m_Width, m_Height, 1
-			);
-		}
-	}
-	else
-	{
-		if (m_SwapBuffers)
-		{
-			m_FrameBuffer2.setForReading();
-			m_FrameBuffer2.bindTextures();
-			m_FrameBuffer1.setForWriting();
-			m_SwapBuffers = false;
-		}
-		else
-		{
-			m_FrameBuffer1.setForReading();
-			m_FrameBuffer1.bindTextures();
-			m_FrameBuffer2.setForWriting();
-			m_SwapBuffers = true;
-		}
-	}
+	m_GBuffer.setForReading();
+}
+
+unsigned int FrameBufferSet::getBloomDownsampleSource(int level)
+{
+	return level == 0
+		? m_GBuffer.getGBufferTexture(FrameBufferType::Glow)
+		: m_BloomChain.getLevelTexture(level - 1);
+}
+
+void FrameBufferSet::EndBloomChain()
+{
+	// Level 0 is half the G-buffer's resolution, so this must be a scaled blit (not a 1:1
+	// glCopyImageSubData, which would only fill the destination's bottom-left quadrant and
+	// leave the rest of the Glow texture stale).
+	glm::ivec2 size = m_BloomChain.getLevelSize(0);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, m_BloomChain.getLevelFBO(0));
+	glReadBuffer(GL_COLOR_ATTACHMENT0);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_GBuffer.getBufferHandle());
+	glDrawBuffer(GL_COLOR_ATTACHMENT4); // Glow, per FrameBufferType order (Position,Normal,Albedo,PBR,Glow)
+	glBlitFramebuffer(0, 0, size.x, size.y,
+		0, 0, m_Width, m_Height,
+		GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
 }
 
 void FrameBufferSet::PostProcessPass()

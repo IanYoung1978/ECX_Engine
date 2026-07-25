@@ -96,8 +96,8 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
         "data/assets/shaders/point_shadow.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "failed to load point shadow depth shader", LOGGING::LogLevel::CRITICAL);
-    if (!m_BloomHShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomH.frag") ||
-        !m_BloomVShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomV.frag"))
+    if (!m_BloomDownsampleShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomDownsample.frag") ||
+        !m_BloomUpsampleShader.loadShader("data/assets/shaders/final.vert", "data/assets/shaders/bloomUpsample.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load bloom shader", LOGGING::LogLevel::CRITICAL);
     if (!m_HDRTonemapShader.loadShader("data/assets/shaders/hdr_tonemap.vert", "data/assets/shaders/hdr_tonemap.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("Failed to load HDR tonemap shader", LOGGING::LogLevel::CRITICAL);
@@ -121,9 +121,12 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     if (!m_ExemptPointLightShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/ShadowExemptPointLightPass.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "failed to load exempt point shadow shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_EmissiveShader.loadShader("data/assets/shaders/lightpass.vert", "data/assets/shaders/emissivePass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "failed to load emissive pass shader", LOGGING::LogLevel::CRITICAL);
 
     m_PointShadowPool.init(config.pointShadowPoolSize, config.pointShadowFaceSize);
-    m_FrameBuffer.init(window->getWidth(), window->getHeight());
+    m_FrameBuffer.init(window->getWidth(), window->getHeight(), config.bloomMipLevels);
     m_LightBuffer.init((*m_LightPassShader));
     m_ShadowAtlas.init(config.shadowAtlasSize, config.shadowAtlasTileSize);
 
@@ -142,10 +145,22 @@ void GL_Deferred_Renderer::renderScene(EC_GameScene& scene)
     geometryPass(scene);
     glowPass();
     lightPass(scene);
+    emissivePass();
     hdrPass();
     finalPass();
     skyboxPass(scene);
     debugPass(scene);
+}
+
+void GL_Deferred_Renderer::emissivePass()
+{
+    m_EmissiveShader.activate();
+    m_FrameBuffer.LightingPass(m_EmissiveShader);
+    m_EmissiveShader.setUniform("intensity", m_RenderConfig.emissiveIntensity);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    renderQuad();
+    glDisable(GL_BLEND);
 }
 
 void GL_Deferred_Renderer::hdrPass()
@@ -275,6 +290,7 @@ void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
             gfx.shader->setUniform("ViewTransform", view);
             gfx.shader->setUniform("ProjTransform", projection);
             gfx.shader->setUniform("ModelTransform", transform.matrix);
+            gfx.shader->setUniform("emissiveIntensity", gfx.emissiveIntensity);
 
             if (gfx.hasTextures && gfx.textureSet) {
                 gfx.shader->setUniform("hasMaterial", 1);
@@ -888,18 +904,27 @@ void GL_Deferred_Renderer::postProcess()
 
 void GL_Deferred_Renderer::glowPass()
 {
-    m_BloomHShader.activate();
-    m_FrameBuffer.GlowPass(m_BloomHShader, true, false);
-    renderQuad();
-    for (int i = 0; i < 5; i++) {
-        m_BloomHShader.activate();
-        m_FrameBuffer.GlowPass(m_BloomHShader, false, false);
-        renderQuad();
-        m_BloomVShader.activate();
-        m_FrameBuffer.GlowPass(m_BloomVShader, false, false);
+    m_FrameBuffer.BeginBloomChain();
+    int levels = m_FrameBuffer.getBloomLevelCount();
+
+    m_BloomDownsampleShader.activate();
+    for (int i = 0; i < levels; i++) {
+        m_BloomDownsampleShader.bindTexture("sourceMap", 0, m_FrameBuffer.getBloomDownsampleSource(i));
+        m_FrameBuffer.BindBloomDownsampleTarget(i);
         renderQuad();
     }
-    m_FrameBuffer.GlowPass(m_BloomHShader, false, true);
+
+    m_BloomUpsampleShader.activate();
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE);
+    for (int i = levels - 2; i >= 0; i--) {
+        m_BloomUpsampleShader.bindTexture("sourceMap", 0, m_FrameBuffer.getBloomUpsampleSource(i));
+        m_FrameBuffer.BindBloomUpsampleTarget(i);
+        renderQuad();
+    }
+    glDisable(GL_BLEND);
+
+    m_FrameBuffer.EndBloomChain();
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glUseProgram(0);
     glBindTexture(GL_TEXTURE_2D, 0);

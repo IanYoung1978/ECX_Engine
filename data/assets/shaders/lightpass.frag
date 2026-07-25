@@ -7,7 +7,6 @@ layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
 layout (location = 2) uniform sampler2D colourMap;
 layout (location = 3) uniform sampler2D PBRMap;
-layout (location = 4) uniform sampler2D glowMap;
 uniform int NumSpots;
 uniform int NumPoints;
 
@@ -79,7 +78,6 @@ void main()
 	vec4 ncolour = texture(normalMap, indata.VSTexCoord).rgba;
 	vec4 dcolour = texture(colourMap, indata.VSTexCoord).rgba;
 	vec4 scolour = texture(PBRMap, indata.VSTexCoord).rgba;
-	vec4 gcolour = texture(glowMap, indata.VSTexCoord).rgba;
 	vec3 vToEye = WSCamPos - pcolour.xyz;
 	vToEye = normalize(vToEye);
 	vec3 outColour = vec3(0.0,0.0,0.0);
@@ -107,10 +105,5 @@ void main()
 	vec3 specCol = (dirLight.colour.rgb * diffCol)* specPow;
 	outColour+=(diffCol+specCol)*dirLight.intensity;
 		
-	//colour = vec4(outColour,1);
-	colour = vec4(dcolour.rgb*outColour.rgb + gcolour.rgb,1.0);
-	//colour = dcolour+pcolour+ncolour+scolour+gcolour;
-	//colour = vec4(indata.VSTexCoord,0.0,1.0);
-	//colour = pcolour;
-	//colour = ncolour;
+	colour = vec4(dcolour.rgb*outColour.rgb,1.0);
 }

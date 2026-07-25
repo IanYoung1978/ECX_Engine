@@ -7,7 +7,6 @@ layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
 layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
-layout (location = 4) uniform sampler2D glowMap;
 layout (location = 5) uniform sampler2DShadow shadowMap;
 const float PI = 3.14159265359;
 struct LightData
@@ -147,7 +146,6 @@ void main()
 	vec4 ncolour 		= texture(normalMap, indata.VSTexCoord).rgba;
 	vec4 albedo 		= texture(AlbedoMap, indata.VSTexCoord).rgba;
 	vec3 pbr 			= texture(PBRMap, indata.VSTexCoord).rgb;
-	vec4 gcolour 		= texture(glowMap, indata.VSTexCoord).rgba;
 	vec4 shadowCoords 	= ShadowTransform * pcolour;
 	float visibility 	= computeOcclusion( shadowCoords );
 	vec3 vToEye 		= WSCamPos - pcolour.xyz;
@@ -171,11 +169,5 @@ void main()
 		outColour= fragCol * clamp((cos_cur_angle-spotLight.cutoffAngle)/(1.0-spotLight.cutoffAngle), 0.0, 1.0);
 
 	}
-	//colour 				= vec4(outColour,1.0);
-	colour 			= vec4(visibility*outColour+gcolour.rgb,1);
-	//colour 			= vec4(albedo.rgb*outColour,1);
-	//colour 			= vec4(depth,depth,depth,1.0);
-	//colour 			= albedo;
-	//colour 			= vec4(shadowCoords.z,shadowCoords.z,shadowCoords.z,1.0);
-
+	colour = vec4(visibility*outColour,1);
 }

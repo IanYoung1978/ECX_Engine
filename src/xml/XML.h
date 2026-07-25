@@ -219,6 +219,14 @@ namespace XML
 			{
 				settings.exposure = std::stof(child->GetText());
 			}
+			else if (strcmp(child->Value(), "EmissiveIntensity") == 0 && child->GetText())
+			{
+				settings.emissiveIntensity = std::stof(child->GetText());
+			}
+			else if (strcmp(child->Value(), "BloomMipLevels") == 0 && child->GetText())
+			{
+				settings.bloomMipLevels = std::stoi(child->GetText());
+			}
 			else if (strcmp(child->Value(), "ShadowAtlas") == 0)
 			{
 				const char* size = child->Attribute("size");
