@@ -131,3 +131,15 @@ add_custom_command(
                 ${CMAKE_CURRENT_SOURCE_DIR}/data
                 ${CMAKE_CURRENT_BINARY_DIR}/data
         COMMENT "Copying data files...")
+
+# Standalone unit tests for the GJK collision math (Issues #30/#29) - deliberately
+# isolated from the main ECX target: only depends on glm, not SDL/GLEW/assimp/Lua/the
+# ECS, so it builds fast and can run headless without a graphics context.
+add_executable(ECX_GJK_Tests
+    tests/EC_GJK_Tests.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
+)
+set_property(TARGET ECX_GJK_Tests PROPERTY CXX_STANDARD 17)
+target_include_directories(ECX_GJK_Tests PRIVATE ${SOURCE_DIR} glm::glm)
+target_link_libraries(ECX_GJK_Tests glm::glm)

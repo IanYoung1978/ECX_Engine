@@ -24,6 +24,8 @@ enum class ECXCommandType
 	GameLoadWorld,
 	GraphicsChangeHDRExposure,
 	GraphicsToggleDebug,
+	GraphicsShowDebugRay,
+	GraphicsShowDebugCone,
 	EntityAnimationStart,
 	EntityAnimationStop,
 	EntityChangeAnimation,

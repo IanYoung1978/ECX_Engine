@@ -14,6 +14,7 @@
 #include "Messaging/ECXResponse.h"
 #include "SceneManager/EC_GameScene.h"
 #include "UI/EC_UI_Components.h"
+#include "Graphics/DebugVisualization.h"
 #include <algorithm>
 #include <typeindex>
 
@@ -37,12 +38,18 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
         m_Exposure = std::any_cast<float>(command.args[0]);
     else if (command.type == ECXCommandType::GraphicsToggleDebug)
         m_DebugRenderer.toggle();
+    else if (command.type == ECXCommandType::GraphicsShowDebugRay)
+        m_DebugRenderer.showRay(std::any_cast<DebugRayVisualization>(command.args[0]));
+    else if (command.type == ECXCommandType::GraphicsShowDebugCone)
+        m_DebugRenderer.showCone(std::any_cast<DebugConeVisualization>(command.args[0]));
 }
 
 void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger, const RenderConfig& config)
 {
     messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
+    messenger.Subscribe(*this, ECXCommandType::GraphicsShowDebugRay);
+    messenger.Subscribe(*this, ECXCommandType::GraphicsShowDebugCone);
 
     m_Messenger = &messenger;
     m_Window = window;
@@ -949,7 +956,7 @@ void GL_Deferred_Renderer::renderQuad()
 
 void GL_Deferred_Renderer::debugPass(EC_GameScene& scene)
 {
-    if (!m_DebugRenderer.isEnabled()) return;
+    if (!m_DebugRenderer.hasVisualization()) return;
     auto& manager = EC_DOD_EntityManager::getInstance();
 
     for (EntityID cameraID : scene.getCameras()) {

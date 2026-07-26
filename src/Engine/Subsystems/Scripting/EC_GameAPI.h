@@ -5,8 +5,12 @@
 #include "Engine/Subsystems/Scripting/EC_EntityAPI.h"
 #include "UI/EC_UI_Components.h"
 #include "Logging/ECX_Logging.h"
+#include "Spatial/RayQueryHit.h"
+#include "Graphics/DebugVisualization.h"
+#include "Game.h"
 #include <string>
 #include <algorithm>
+#include <vector>
 #include "Messaging/ECXMessenger.h"
 class EC_Game;
 
@@ -212,7 +216,83 @@ namespace ScriptAPI
         void log(const std::string& message) {
             LOGGING::ECX_Logger::GetInstance()->LogMessage(message, LOGGING::LogLevel::INFORMATION);
         }
+
+        // Issue #30. Returns all entities the ray intersects (not just the nearest) unless
+        // firstHitOnly is set. Caches the result for the paginated getters below - avoids
+        // marshaling a vector-of-struct across the Lua boundary, matching the
+        // getRecentLogCount/getRecentLog pattern already used for the debug overlay.
+        int rayQuery(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, bool firstHitOnly = false) {
+            if (!game) { m_LastRayHits.clear(); return 0; }
+            m_LastRayHits = game->queryRay(glm::vec3(ox, oy, oz), glm::vec3(dx, dy, dz), maxDistance, firstHitOnly);
+            return static_cast<int>(m_LastRayHits.size());
+        }
+
+        EntityAPI getRayHitEntity(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastRayHits.size()) return EntityAPI(INVALID_ENTITY);
+            return EntityAPI(m_LastRayHits[index].entity);
+        }
+
+        glm::vec3 getRayHitPosition(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastRayHits.size()) return glm::vec3(0.0f);
+            return m_LastRayHits[index].position;
+        }
+
+        glm::vec3 getRayHitNormal(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastRayHits.size()) return glm::vec3(0.0f);
+            return m_LastRayHits[index].normal;
+        }
+
+        float getRayHitDistance(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastRayHits.size()) return 0.0f;
+            return m_LastRayHits[index].distance;
+        }
+
+        // Issue #29. Entities whose shape overlaps the cone, restricted to castsShadow ==
+        // true geometry by default. checkOcclusion opts into additionally requiring
+        // unobstructed line-of-sight to the apex (a candidate stacked behind a closer one
+        // is excluded) - independent of containment, not fused into it. Same caching
+        // pattern as rayQuery above.
+        int coneQuery(float ax, float ay, float az, float dx, float dy, float dz, float halfAngleDegrees, float maxDistance, bool castsShadowOnly = true, bool checkOcclusion = false) {
+            if (!game) { m_LastConeHits.clear(); return 0; }
+            m_LastConeHits = game->queryCone(glm::vec3(ax, ay, az), glm::vec3(dx, dy, dz), halfAngleDegrees, maxDistance, castsShadowOnly, checkOcclusion);
+            return static_cast<int>(m_LastConeHits.size());
+        }
+
+        EntityAPI getConeHitEntity(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastConeHits.size()) return EntityAPI(INVALID_ENTITY);
+            return EntityAPI(m_LastConeHits[index].entity);
+        }
+
+        glm::vec3 getConeHitPosition(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastConeHits.size()) return glm::vec3(0.0f);
+            return m_LastConeHits[index].position;
+        }
+
+        float getConeHitDistance(int index) {
+            if (index < 0 || static_cast<size_t>(index) >= m_LastConeHits.size()) return 0.0f;
+            return m_LastConeHits[index].distance;
+        }
+
+        // Visualizes the last ray/cone query (Issues #30/#29) - a debug draw only, no
+        // effect on collision/query behaviour. Persists until replaced by another call.
+        void showDebugRay(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance) {
+            if (!messenger) return;
+            ECXCommand cmd;
+            cmd.type = ECXCommandType::GraphicsShowDebugRay;
+            cmd.args[0] = DebugRayVisualization{ glm::vec3(ox, oy, oz), glm::normalize(glm::vec3(dx, dy, dz)), maxDistance };
+            messenger->publish(cmd);
+        }
+
+        void showDebugCone(float ax, float ay, float az, float dx, float dy, float dz, float halfAngleDegrees, float maxDistance) {
+            if (!messenger) return;
+            ECXCommand cmd;
+            cmd.type = ECXCommandType::GraphicsShowDebugCone;
+            cmd.args[0] = DebugConeVisualization{ glm::vec3(ax, ay, az), glm::normalize(glm::vec3(dx, dy, dz)), glm::radians(halfAngleDegrees), maxDistance };
+            messenger->publish(cmd);
+        }
     private:
+        std::vector<RayQueryHit> m_LastRayHits;
+        std::vector<RayQueryHit> m_LastConeHits;
         void updateDepth(EntityID entity, uint32_t depth) {
             auto& mgr = EC_DOD_EntityManager::getInstance();
             if (!mgr.hasComponent<EC_DOD_Hierarchy>(entity)) return;

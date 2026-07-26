@@ -20,7 +20,39 @@
 			<OnKeyHeld filename="data/scripts/LUA/OnKeyHeld.lua"/>
 			<OnMouseMove filename="data/scripts/LUA/onMouseMove.lua"/>
 			<OnUpdate filename="data/scripts/LUA/DebugOverlay.lua"/>
+			<OnMouseDown filename="data/scripts/LUA/RayConeClickTest.lua"/>
 		</ScriptComponent>
+	</Entity>
+
+	<!-- Ray/cone query test targets (Issues #30/#29). yard_camera is at (0,10,-20)
+	     facing +Z. Left click: ray check along camera forward. Right click: cone check,
+	     20deg half-angle, castsShadowOnly=true. -->
+	<Entity name="target_close">
+		<Spatial><Position>0.0,10.0,-8.0</Position></Spatial>
+		<Collider><Type>Sphere</Type><Radius>1.0</Radius></Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,1.0,0.0,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="target_far">
+		<Spatial><Position>0.0,10.0,10.0</Position></Spatial>
+		<Collider><Type>Sphere</Type><Radius>1.0</Radius></Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,0.0,0.0,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="target_side">
+		<Spatial><Position>12.0,10.0,-8.0</Position></Spatial>
+		<Collider><Type>Sphere</Type><Radius>1.0</Radius></Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,0.5,1.0,1.0</Colour>
+		</Gfx>
 	</Entity>
 
 	<Entity uid="102" name="yard_sun">
@@ -174,4 +206,5 @@
 	<Entity name="yard_crate_9_3"><Spatial><Position>135.0,3.0,2.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial><Transform><Scale>2.0,2.0,2.0</Scale></Transform><Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx></Entity>
 	<Entity name="yard_crate_9_4"><Spatial><Position>135.0,3.0,6.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,10.0,0.0</AngularVelocity></Spatial><Transform><Scale>2.0,2.0,2.0</Scale></Transform><Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx></Entity>
 	<Entity name="yard_crate_9_5"><Spatial><Position>135.0,3.0,10.0</Position><Velocity>0.0,0.0,0.0</Velocity><Orientation>0.0,0.0,0.0</Orientation><AngularVelocity>0.0,0.0,10.0</AngularVelocity></Spatial><Transform><Scale>2.0,2.0,2.0</Scale></Transform><Gfx><PBRMaterial><Albedo>data/assets/Images/Crate/Crate_D.png</Albedo><Normal>data/assets/Images/Crate/crate_normal.png</Normal><Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic><Height>data/assets/Images/Crate/crate_height.png</Height><Emissive>data/assets/Images/Crate/Crate_E.png</Emissive><AO>data/assets/Images/Crate/crate_ao.png</AO><Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness><ParallaxScale>0.02</ParallaxScale><ParallaxBias>0.001</ParallaxBias></PBRMaterial><Model>data/assets/models/crate.obj</Model><Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader></Gfx></Entity>
+
 </Scene>
