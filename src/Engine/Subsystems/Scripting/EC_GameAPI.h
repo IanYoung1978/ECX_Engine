@@ -3,6 +3,8 @@
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Entity/EC_DOD_Types.h"
 #include "Engine/Subsystems/Scripting/EC_EntityAPI.h"
+#include "UI/EC_UI_Components.h"
+#include "Logging/ECX_Logging.h"
 #include <string>
 #include <algorithm>
 #include "Messaging/ECXMessenger.h"
@@ -111,7 +113,6 @@ namespace ScriptAPI
             cmd.type = ECXCommandType::GraphicsToggleDebug;
             messenger->publish(cmd);
 		}
-
         void loadScene(const std::string& alias) {
             if (game) game->loadScene(alias);
         }
@@ -122,6 +123,94 @@ namespace ScriptAPI
 
         void activateScene(const std::string& alias) {
             if (game) game->activateScene(alias);
+        }
+
+        void setUIText(unsigned int entityID, const std::string& text) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Text>(entity)) return;
+            mgr.getComponent<EC_UI_Text>(entity).text = text;
+        }
+
+        void setUITextColour(unsigned int entityID, float r, float g, float b, float a) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Text>(entity)) return;
+            mgr.getComponent<EC_UI_Text>(entity).colour = glm::vec4(r, g, b, a);
+        }
+
+        void setUIPanelColour(unsigned int entityID, float r, float g, float b, float a) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Panel>(entity)) return;
+            mgr.getComponent<EC_UI_Panel>(entity).colour = glm::vec4(r, g, b, a);
+        }
+
+        void setUIVisible(unsigned int entityID, bool visible) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Element>(entity)) return;
+            mgr.getComponent<EC_UI_Element>(entity).visible = visible;
+        }
+
+        void setUIPosition(unsigned int entityID, float x, float y) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Element>(entity)) return;
+            mgr.getComponent<EC_UI_Element>(entity).position = glm::vec2(x, y);
+        }
+
+        void setUISize(unsigned int entityID, float w, float h) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Element>(entity)) return;
+            mgr.getComponent<EC_UI_Element>(entity).size = glm::vec2(w, h);
+        }
+
+        void setUILayer(unsigned int entityID, int layer) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = static_cast<EntityID>(entityID);
+            if (!mgr.isAlive(entity) || !mgr.hasComponent<EC_UI_Element>(entity)) return;
+            mgr.getComponent<EC_UI_Element>(entity).layer = layer;
+        }
+
+        unsigned int createUIElement(float x, float y, float w, float h, int layer) {
+            auto& mgr = EC_DOD_EntityManager::getInstance();
+            EntityID entity = mgr.createEntity();
+            EC_UI_Element element;
+            element.position = glm::vec2(x, y);
+            element.size = glm::vec2(w, h);
+            element.layer = layer;
+            mgr.addComponent(entity, element);
+            return entity;
+        }
+
+        float getFPS() {
+            if (!game) return 0.0f;
+            return game->getFPS();
+        }
+
+        float getMSPF() {
+            if (!game) return 0.0f;
+            return game->getMSPF();
+        }
+
+        int getRecentLogCount() {
+            return static_cast<int>(LOGGING::ECX_Logger::GetInstance()->GetRecentPlainLogs(200).size());
+        }
+
+        std::string getRecentLog(int index) {
+            auto logs = LOGGING::ECX_Logger::GetInstance()->GetRecentPlainLogs(200);
+            if (index < 0 || static_cast<size_t>(index) >= logs.size()) return "";
+            return logs[index];
+        }
+
+        void setMouseCaptured(bool captured) {
+            if (game) game->setMouseCaptured(captured);
+        }
+
+        void log(const std::string& message) {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(message, LOGGING::LogLevel::INFORMATION);
         }
     private:
         void updateDepth(EntityID entity, uint32_t depth) {

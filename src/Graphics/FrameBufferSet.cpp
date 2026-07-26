@@ -111,7 +111,8 @@ void FrameBufferSet::PostProcessPass()
 
 void FrameBufferSet::UIPass()
 {
-	//TO:DO
+	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+	glViewport(0, 0, m_Width, m_Height);
 }
 
 void FrameBufferSet::ExemptShadowPass()

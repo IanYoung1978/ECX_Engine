@@ -55,6 +55,11 @@ public:
             ECXEventType::mouse_down,
             ECXEventType::mouse_held,
             ECXEventType::mouse_move,
+            ECXEventType::mouse_enter,
+            ECXEventType::mouse_leave,
+            ECXEventType::select,
+            ECXEventType::unselect,
+            ECXEventType::click,
             ECXEventType::world_loaded,
             ECXEventType::entity_loaded,
             ECXEventType::config_loaded,
@@ -139,6 +144,12 @@ public:
             if (isCollision && entity != participantA && entity != participantB)
                 continue;
 
+            // Targeted dispatch (UI interaction events): only the named entity's handler
+            // fires. Unset (INVALID_ENTITY, every other event type) preserves the existing
+            // broadcast-to-all-subscribers behavior below.
+            if (event.targetEntity != INVALID_ENTITY && entity != event.targetEntity)
+                continue;
+
             const char* funcName = getEventFunctionName(event.type);
             if (funcName) {
                 std::lock_guard<std::mutex> lock(m_LuaMutex);
@@ -175,6 +186,11 @@ private:
         case ECXEventType::mouse_up:                     return "onMouseUp";
         case ECXEventType::mouse_held:                   return "onMouseHeld";
         case ECXEventType::mouse_move:                   return "onMouseMove";
+        case ECXEventType::mouse_enter:                  return "onMouseEnter";
+        case ECXEventType::mouse_leave:                  return "onMouseLeave";
+        case ECXEventType::select:                       return "onSelect";
+        case ECXEventType::unselect:                     return "onUnSelect";
+        case ECXEventType::click:                        return "onClick";
         case ECXEventType::world_loaded:                 return "onWorldLoaded";
         case ECXEventType::config_loaded:                return "onConfigLoaded";
         case ECXEventType::system_update:                return "onSystemUpdate";
@@ -348,6 +364,20 @@ private:
             .addFunction("loadScene", &ScriptAPI::GameAPI::loadScene)
             .addFunction("unloadScene", &ScriptAPI::GameAPI::unloadScene)
             .addFunction("activateScene", &ScriptAPI::GameAPI::activateScene)
+            .addFunction("setUIText", &ScriptAPI::GameAPI::setUIText)
+            .addFunction("setUITextColour", &ScriptAPI::GameAPI::setUITextColour)
+            .addFunction("setUIPanelColour", &ScriptAPI::GameAPI::setUIPanelColour)
+            .addFunction("setUIVisible", &ScriptAPI::GameAPI::setUIVisible)
+            .addFunction("setUIPosition", &ScriptAPI::GameAPI::setUIPosition)
+            .addFunction("setUISize", &ScriptAPI::GameAPI::setUISize)
+            .addFunction("setUILayer", &ScriptAPI::GameAPI::setUILayer)
+            .addFunction("createUIElement", &ScriptAPI::GameAPI::createUIElement)
+            .addFunction("getFPS", &ScriptAPI::GameAPI::getFPS)
+            .addFunction("getMSPF", &ScriptAPI::GameAPI::getMSPF)
+            .addFunction("getRecentLogCount", &ScriptAPI::GameAPI::getRecentLogCount)
+            .addFunction("getRecentLog", &ScriptAPI::GameAPI::getRecentLog)
+            .addFunction("setMouseCaptured", &ScriptAPI::GameAPI::setMouseCaptured)
+            .addFunction("log", &ScriptAPI::GameAPI::log)
             .endClass();
 
         luabridge::push(m_luaState, m_game);

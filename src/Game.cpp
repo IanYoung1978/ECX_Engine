@@ -114,6 +114,7 @@ void EC_Game::update(const float& deltaTimeS)
         m_Messenger.flush();
         m_SceneManager.update(deltaTimeS, *this);
         m_Controls->update(deltaTimeS, *this);
+        m_UIInput.update(*this, m_Messenger);
         m_Window->present();
     }
 }
@@ -121,6 +122,21 @@ void EC_Game::update(const float& deltaTimeS)
 KeyState EC_Game::getKeyState(SDL_Scancode key)
 {
     return m_Controls->getKeyState(key);
+}
+
+glm::ivec2 EC_Game::getMousePosition()
+{
+    return m_Controls->getMouse()->getMousePosition();
+}
+
+void EC_Game::setMouseCaptured(bool captured)
+{
+    m_Controls->getMouse()->setFPSMode(captured);
+}
+
+bool EC_Game::isMouseButtonPressed(MouseButton button)
+{
+    return m_Controls->getMouse()->keyPressed(button);
 }
 
 std::shared_ptr<Window> EC_Game::getWindow()

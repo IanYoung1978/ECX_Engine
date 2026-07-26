@@ -13,6 +13,9 @@
 #include "Messaging/ECXRequest.h"
 #include "Messaging/ECXResponse.h"
 #include "SceneManager/EC_GameScene.h"
+#include "UI/EC_UI_Components.h"
+#include <algorithm>
+#include <typeindex>
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
     : m_MSAA(false)
@@ -46,6 +49,7 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     m_RenderConfig = config;
     m_Exposure = config.exposure;
     m_DebugRenderer.init(window);
+    m_UIRenderer.init(window);
     m_SkyboxRenderer.init(window);
 
     glm::vec3 verts[] = {
@@ -150,6 +154,7 @@ void GL_Deferred_Renderer::renderScene(EC_GameScene& scene)
     finalPass();
     skyboxPass(scene);
     debugPass(scene);
+    uiPass(scene);
 }
 
 void GL_Deferred_Renderer::emissivePass()
@@ -961,4 +966,44 @@ void GL_Deferred_Renderer::debugPass(EC_GameScene& scene)
         m_DebugRenderer.render(camera.viewMatrix, projection);
         break;
     }
+}
+
+void GL_Deferred_Renderer::uiPass(EC_GameScene& scene)
+{
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    auto entities = manager.getEntitiesWithComponents({
+        std::type_index(typeid(EC_UI_Element))
+        });
+
+    entities.erase(std::remove_if(entities.begin(), entities.end(),
+        [&manager](EntityID entity) {
+            return !manager.getComponent<EC_UI_Element>(entity).visible;
+        }), entities.end());
+
+    std::sort(entities.begin(), entities.end(),
+        [&manager](EntityID a, EntityID b) {
+            return manager.getComponent<EC_UI_Element>(a).layer < manager.getComponent<EC_UI_Element>(b).layer;
+        });
+
+    m_FrameBuffer.UIPass();
+    m_UIRenderer.beginFrame();
+
+    for (EntityID entity : entities)
+    {
+        const auto& element = manager.getComponent<EC_UI_Element>(entity);
+        glm::vec2 pos = ResolveUIAbsolutePosition(entity);
+
+        if (manager.hasComponent<EC_UI_Panel>(entity))
+        {
+            const auto& panel = manager.getComponent<EC_UI_Panel>(entity);
+            m_UIRenderer.drawQuad(pos.x, pos.y, element.size.x, element.size.y, panel.colour);
+        }
+        if (manager.hasComponent<EC_UI_Text>(entity))
+        {
+            const auto& text = manager.getComponent<EC_UI_Text>(entity);
+            m_UIRenderer.drawText(text.text, pos.x, pos.y, text.colour);
+        }
+    }
+
+    m_UIRenderer.endFrame();
 }

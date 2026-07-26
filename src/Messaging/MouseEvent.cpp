@@ -56,5 +56,6 @@ int MouseEvent::getYMotion()
 
 void MouseEvent::getPosition(int & x, int & y)
 {
-
+	x = m_Xpos;
+	y = m_Ypos;
 }

@@ -115,6 +115,10 @@ namespace XML
 				{
 					settings.graphics_settings = child->FirstAttribute()->Value();
 				}
+				else if (strcmp(child->Value(), "UI") == 0)
+				{
+					settings.ui_file = child->FirstAttribute()->Value();
+				}
 				child = child->NextSiblingElement();
 			}
 			game = game->NextSiblingElement();

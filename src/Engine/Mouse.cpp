@@ -26,22 +26,12 @@ void Mouse::update(ECXMessenger& messenger)
 	{
 		for (int i = 0; i < Num_Mouse_Buttons; i++)
 		{
-			if (m_PressedBuffer[i] == false)
-				m_HeldBuffer[i] = false;
-			else
-				m_HeldBuffer[i] = true;
-
-
+			// Edge-detect against last frame's held state BEFORE syncing it below - matches
+			// Keyboard::update()'s ordering. Syncing first (the old code) meant m_HeldBuffer
+			// always equalled m_PressedBuffer by the time it was checked, so "held"/"up" were
+			// unreachable and any downstream keyPressed(MouseButton) edge check (e.g. UI click
+			// hit-testing) could never see a press.
 			if (m_PressedBuffer[i] && m_HeldBuffer[i])
-			{
-				MouseEvent m(static_cast<MouseButton>(i), m_PressedBuffer[i], m_HeldBuffer[i], m_mouse_position.x, m_mouse_position.y);
-				ECXEvent Event;
-				Event.type = ECXEventType::mouse_down;
-				Event.args[0] = m;
-				messenger.publish(Event);
-			}
-				
-			else if (!m_PressedBuffer[i] && m_HeldBuffer[i])
 			{
 				MouseEvent m(static_cast<MouseButton>(i), m_PressedBuffer[i], m_HeldBuffer[i], m_mouse_position.x, m_mouse_position.y);
 				ECXEvent Event;
@@ -49,7 +39,7 @@ void Mouse::update(ECXMessenger& messenger)
 				Event.args[0] = m;
 				messenger.publish(Event);
 			}
-			else if (m_PressedBuffer[i] && !m_HeldBuffer[i])
+			else if (!m_PressedBuffer[i] && m_HeldBuffer[i])
 			{
 				MouseEvent m(static_cast<MouseButton>(i), m_PressedBuffer[i], m_HeldBuffer[i], m_mouse_position.x, m_mouse_position.y);
 				ECXEvent Event;
@@ -57,6 +47,16 @@ void Mouse::update(ECXMessenger& messenger)
 				Event.args[0] = m;
 				messenger.publish(Event);
 			}
+			else if (m_PressedBuffer[i] && !m_HeldBuffer[i])
+			{
+				MouseEvent m(static_cast<MouseButton>(i), m_PressedBuffer[i], m_HeldBuffer[i], m_mouse_position.x, m_mouse_position.y);
+				ECXEvent Event;
+				Event.type = ECXEventType::mouse_down;
+				Event.args[0] = m;
+				messenger.publish(Event);
+			}
+
+			m_HeldBuffer[i] = m_PressedBuffer[i];
 		}
 
 		if (m_MouseMotion.x != 0 || m_MouseMotion.y != 0)
@@ -115,6 +115,8 @@ void Mouse::handleEvent(SDL_Event & e)
 	{
 		m_MouseMotion.x = e.motion.xrel;
 		m_MouseMotion.y = e.motion.yrel;
+		m_mouse_position.x = e.motion.x;
+		m_mouse_position.y = e.motion.y;
 	}
 }
 

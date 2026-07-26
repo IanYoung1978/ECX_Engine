@@ -10,6 +10,9 @@
 #include <mutex>
 #include "TaskManager/EC_ThreadManager.h"
 #include "Entity/EC_DOD_Types.h"
+#include "Engine/MouseButton.h"
+#include "UI/EC_UI_InputSystem.h"
+#include <glm/glm.hpp>
 
 enum class Game_Error
 {
@@ -28,6 +31,11 @@ public:
     void shutDown();
     void update(const float& deltaTimeS);
     KeyState getKeyState(SDL_Scancode key);
+    glm::ivec2 getMousePosition();
+    void setMouseCaptured(bool captured);
+    bool isMouseButtonPressed(MouseButton button);
+    float getFPS() const { return m_Timer->getFPS(); }
+    float getMSPF() const { return m_Timer->getMSPF(); }
     EntityID getEntityByUID(uint32_t uid) const;
     EntityID getEntityByName(const std::string& name) const;
     void toggleDebug();
@@ -45,6 +53,7 @@ private:
     std::unique_ptr<Timer> m_Timer;
     std::shared_ptr<ControlSystem> m_Controls;
     bool m_Running;
+    EC_UI_InputSystem m_UIInput;
     EC_ThreadManager m_threadmanager;
     std::mutex m_lock;
     void receive(ECXCommand& command) override;

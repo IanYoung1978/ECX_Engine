@@ -570,12 +570,14 @@ void EC_DOD_EntityFactory::resolveHierarchyReferences() {
         }
     }
 
-    auto* hierarchyArray = manager.getComponentArray<EC_DOD_Hierarchy>();
-    if (!hierarchyArray) return;
-
-    for (size_t i = 0; i < hierarchyArray->size(); i++) {
-        EntityID entity = hierarchyArray->getEntity(i);
-        auto& hierarchy = hierarchyArray->getData()[i];
+    // Scoped to this batch's entities only (not the whole EC_DOD_Hierarchy component
+    // array) - entities from earlier scene loads or the UI framework already have a
+    // resolved EntityID in hierarchy.parent by this point, not a raw UID, and must not
+    // be reprocessed here (would wipe or, worse, silently misresolve their parent link
+    // against this batch's unrelated uidToEntity map).
+    for (EntityID entity : s_Entities) {
+        if (!manager.hasComponent<EC_DOD_Hierarchy>(entity)) continue;
+        auto& hierarchy = manager.getComponent<EC_DOD_Hierarchy>(entity);
 
         if (hierarchy.parent == INVALID_ENTITY) continue;
 
