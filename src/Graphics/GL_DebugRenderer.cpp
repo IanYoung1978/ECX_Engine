@@ -15,6 +15,8 @@ GL_DebugRenderer::~GL_DebugRenderer()
     if (m_BoxVAO)    glDeleteVertexArrays(1, &m_BoxVAO);
     if (m_BoxVBO)    glDeleteBuffers(1, &m_BoxVBO);
     if (m_BoxIBO)    glDeleteBuffers(1, &m_BoxIBO);
+    if (m_LineVAO)   glDeleteVertexArrays(1, &m_LineVAO);
+    if (m_LineVBO)   glDeleteBuffers(1, &m_LineVBO);
 }
 
 void GL_DebugRenderer::init(std::shared_ptr<Window> window)
@@ -33,6 +35,15 @@ void GL_DebugRenderer::init(std::shared_ptr<Window> window)
 
     buildSphere(1.0f, 16, 16);
     buildBox(glm::vec3(1.0f));
+
+    glGenVertexArrays(1, &m_LineVAO);
+    glBindVertexArray(m_LineVAO);
+    glGenBuffers(1, &m_LineVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_LineVBO);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glEnableVertexAttribArray(0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void GL_DebugRenderer::buildSphere(float radius, int rings, int sectors)
@@ -174,15 +185,55 @@ void GL_DebugRenderer::renderOBB(const glm::mat4& view, const glm::mat4& project
     drawMesh(m_BoxVAO, m_BoxIndexCount, model, view, projection, COL_OBB);
 }
 
+void GL_DebugRenderer::drawLines(const std::vector<glm::vec3>& points, const glm::vec4& colour,
+    const glm::mat4& view, const glm::mat4& projection)
+{
+    if (points.empty()) return;
+
+    glBindVertexArray(m_LineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_LineVBO);
+    glBufferData(GL_ARRAY_BUFFER, points.size() * sizeof(glm::vec3), points.data(), GL_DYNAMIC_DRAW);
+
+    m_WireShader.setUniform("ModelTransform", glm::mat4(1.0f));
+    m_WireShader.setUniform("ViewTransform", view);
+    m_WireShader.setUniform("ProjTransform", projection);
+    m_WireShader.setUniform("wireColour", colour);
+
+    glDrawArrays(GL_LINES, 0, static_cast<GLsizei>(points.size()));
+    glBindVertexArray(0);
+}
+
+void GL_DebugRenderer::buildConeLines(const glm::vec3& apex, const glm::vec3& dir, float halfAngleRadians,
+    float length, std::vector<glm::vec3>& outLines) const
+{
+    glm::vec3 forward = glm::normalize(dir);
+    glm::vec3 worldUp = (std::abs(forward.y) > 0.99f) ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 right = glm::normalize(glm::cross(forward, worldUp));
+    glm::vec3 up = glm::normalize(glm::cross(right, forward));
+
+    float ringRadius = length * std::tan(halfAngleRadians);
+    glm::vec3 ringCenter = apex + forward * length;
+
+    const int segments = 16;
+    std::vector<glm::vec3> ring(segments);
+    for (int i = 0; i < segments; i++) {
+        float theta = 2.0f * glm::pi<float>() * static_cast<float>(i) / segments;
+        ring[i] = ringCenter + right * (ringRadius * std::cos(theta)) + up * (ringRadius * std::sin(theta));
+    }
+
+    for (int i = 0; i < segments; i++) {
+        outLines.push_back(ring[i]);
+        outLines.push_back(ring[(i + 1) % segments]);
+    }
+    for (int i = 0; i < segments; i += 2) {
+        outLines.push_back(apex);
+        outLines.push_back(ring[i]);
+    }
+}
+
 void GL_DebugRenderer::render(const glm::mat4& view, const glm::mat4& projection)
 {
-    if (!m_Enabled) return;
-
-    auto& manager = EC_DOD_EntityManager::getInstance();
-    auto entities = manager.getEntitiesWithComponents({
-        std::type_index(typeid(EC_DOD_Collider)),
-        std::type_index(typeid(EC_DOD_Transform))
-        });
+    if (!m_Enabled && !m_HasRay && !m_HasCone) return;
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -190,25 +241,44 @@ void GL_DebugRenderer::render(const glm::mat4& view, const glm::mat4& projection
 
     m_WireShader.activate();
 
-    for (EntityID entity : entities) {
-        if (!manager.isAlive(entity)) continue;
+    if (m_Enabled) {
+        auto& manager = EC_DOD_EntityManager::getInstance();
+        auto entities = manager.getEntitiesWithComponents({
+            std::type_index(typeid(EC_DOD_Collider)),
+            std::type_index(typeid(EC_DOD_Transform))
+            });
 
-        const auto& collider = manager.getComponent<EC_DOD_Collider>(entity);
-        const auto& transform = manager.getComponent<EC_DOD_Transform>(entity);
+        for (EntityID entity : entities) {
+            if (!manager.isAlive(entity)) continue;
 
-        switch (collider.type) {
-        case EC_DOD_Collider::Type::Sphere:
-            renderSphere(view, projection, collider, transform);
-            break;
-        case EC_DOD_Collider::Type::AABB:
-            renderAABB(view, projection, collider, transform);
-            break;
-        case EC_DOD_Collider::Type::OBB:
-            renderOBB(view, projection, collider, transform);
-            break;
-        default:
-            break;
+            const auto& collider = manager.getComponent<EC_DOD_Collider>(entity);
+            const auto& transform = manager.getComponent<EC_DOD_Transform>(entity);
+
+            switch (collider.type) {
+            case EC_DOD_Collider::Type::Sphere:
+                renderSphere(view, projection, collider, transform);
+                break;
+            case EC_DOD_Collider::Type::AABB:
+                renderAABB(view, projection, collider, transform);
+                break;
+            case EC_DOD_Collider::Type::OBB:
+                renderOBB(view, projection, collider, transform);
+                break;
+            default:
+                break;
+            }
         }
+    }
+
+    if (m_HasRay) {
+        std::vector<glm::vec3> pts{ m_Ray.origin, m_Ray.origin + m_Ray.direction * m_Ray.maxDistance };
+        drawLines(pts, COL_RAY, view, projection);
+    }
+
+    if (m_HasCone) {
+        std::vector<glm::vec3> pts;
+        buildConeLines(m_Cone.apex, m_Cone.direction, m_Cone.halfAngleRadians, m_Cone.maxDistance, pts);
+        drawLines(pts, COL_CONE, view, projection);
     }
 
     glLineWidth(1.0f);

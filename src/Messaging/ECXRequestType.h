@@ -4,5 +4,6 @@ enum class ECXRequestType
 {
 	FrustumCheck,
 	RayCheck,
-	EntitySearch
+	EntitySearch,
+	ConeCheck
 };
