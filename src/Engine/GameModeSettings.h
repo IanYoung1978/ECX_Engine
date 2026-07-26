@@ -8,4 +8,5 @@ struct GameModeSettings
     std::string controls;
     std::string scenes_file;
     std::string graphics_settings;
+    std::string ui_file;
 };

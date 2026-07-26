@@ -86,10 +86,24 @@ namespace LOGGING
             finalMessage + "</span>"
         );
 
+        // Plain-text version for runtime consumers (debug overlay, etc.) - independent of the
+        // HTML buffer's flush/clear cycle.
+        m_PlainLog.push_back(finalMessage);
+        if (m_PlainLog.size() > kMaxPlainLogEntries)
+            m_PlainLog.pop_front();
+
         // Console output
         std::printf("%s%s%s\n", GetColour(loglevel), finalMessage.c_str(), Reset);
 
 #endif
+    }
+
+    std::deque<std::string> ECX_Logger::GetRecentPlainLogs(size_t maxLines) const
+    {
+        std::scoped_lock<std::mutex> scopedLock(lock);
+        if (maxLines >= m_PlainLog.size())
+            return m_PlainLog;
+        return std::deque<std::string>(m_PlainLog.end() - maxLines, m_PlainLog.end());
     }
 
     void ECX_Logger::printToFile()

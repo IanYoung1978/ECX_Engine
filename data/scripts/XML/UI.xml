@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<UI>
+	<UIElement name="debug_panel" x="10" y="10" width="900" height="260" layer="0" visible="false">
+		<UIPanel colour="0.0,0.0,0.0,0.6"/>
+		<UIElement name="debug_fps_text" x="10" y="10" width="880" height="20" layer="1">
+			<UIText colour="1.0,1.0,1.0,1.0"></UIText>
+		</UIElement>
+		<UIElement name="debug_log_text" x="10" y="35" width="880" height="215" layer="1">
+			<UIText colour="1.0,1.0,1.0,1.0"></UIText>
+		</UIElement>
+	</UIElement>
+
+	<UIElement name="ui_test_button" x="700" y="10" width="150" height="40" layer="0" visible="true">
+		<UIPanel colour="0.2,0.4,0.8,0.8"/>
+		<UIElement name="ui_test_button_label" x="10" y="10" width="130" height="20" layer="1">
+			<UIText colour="1.0,1.0,1.0,1.0">Click me</UIText>
+		</UIElement>
+		<ScriptComponent>
+			<OnMouseEnter filename="data/scripts/LUA/UITestInteraction.lua"/>
+			<OnMouseLeave filename="data/scripts/LUA/UITestInteraction.lua"/>
+			<OnClick filename="data/scripts/LUA/UITestInteraction.lua"/>
+		</ScriptComponent>
+	</UIElement>
+</UI>

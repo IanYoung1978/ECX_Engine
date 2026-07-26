@@ -9,6 +9,7 @@
 #include "Messaging/ECXMessenger.h"
 #include "Messaging/ECXCommand.h"
 #include "Messaging/ECXCommandType.h"
+#include "UI/EC_UI_Factory.h"
 
 namespace
 {
@@ -36,6 +37,8 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     }
 
     m_Engine.init(m_Settings.engine_settings, game, messenger);
+
+    EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
 
     messenger.Subscribe(*this, ECXCommandType::SystemStart);
     messenger.Subscribe(*this, ECXCommandType::SystemShutdown);

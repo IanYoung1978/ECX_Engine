@@ -1,4 +1,8 @@
 function onMouseMove(entity, event)
+    if mouseCaptured == false then
+        return
+    end
+
     local mouseX = event:getMouseMotionX()
     local mouseY = event:getMouseMotionY()
     

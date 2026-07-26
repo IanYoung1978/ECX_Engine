@@ -7,6 +7,7 @@
 #include "Shader.h"
 #include "RenderConfig.h"
 #include "GL_DebugRenderer.h"
+#include "UI/GL_UIRenderer.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include <memory>
 #include <vector>
@@ -67,6 +68,7 @@ private:
     void shadowLightingPass(EC_GameScene& scene);
     void skyboxPass(EC_GameScene& scene);
     void debugPass(EC_GameScene& scene);
+    void uiPass(EC_GameScene& scene);
     void postProcess();
     void glowPass();
     void renderQuad();
@@ -152,4 +154,5 @@ private:
     std::vector<float> m_ShadowPointRadii;
     std::vector<float> m_ShadowSpotRadii;
     GL_DebugRenderer m_DebugRenderer;
+    GL_UIRenderer m_UIRenderer;
 };
