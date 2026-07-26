@@ -1,0 +1,324 @@
+<?xml version="1.0"?>
+<Scene>
+	<!-- Camera -->
+	<Entity uid="0" name="camera01">
+		<Camera>
+			<FOV>60.0</FOV>
+			<DrawDistance>100.0</DrawDistance>
+		</Camera>
+		<Spatial>
+			<Position>0.0,5.0,20.0</Position>
+			<Orientation>0.0,180.0,0.0</Orientation>
+		</Spatial>
+		<ScriptComponent>
+			<OnKeyDown filename="data/scripts/LUA/OnKeyDown.lua"/>
+			<OnKeyUp filename="data/scripts/LUA/OnKeyUp.lua"/>
+			<OnKeyHeld filename="data/scripts/LUA/OnKeyHeld.lua"/>
+			<OnMouseMove filename="data/scripts/LUA/onMouseMove.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<!-- Lighting -->
+	<Entity uid="1" name="directionalLight01">
+		<Light>
+			<Type>Directional</Type>
+			<Direction>1.0,-1.0,0.0,0.0</Direction>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Intensity>10.0</Intensity>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>false</Dynamic>
+		</Light>
+	</Entity>
+
+	<Entity uid="100" name="sphere_red">
+		<Spatial>
+			<Position>-8.0,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>Sphere</Type>
+			<Radius>1.0</Radius>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,0.0,0.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="101" name="sphere_yellow">
+		<Spatial>
+			<Position>15.0,2.0,0.0</Position>
+			<Velocity>-1.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>Sphere</Type>
+			<Radius>1.0</Radius>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,1.0,0.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<!-- Test 2: AABB vs AABB -->
+	<Entity uid="102" name="box_cyan">
+		<Spatial>
+			<Position>-2.0,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>AABB</Type>
+			<Extents>1.0,1.0,1.0</Extents>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,1.0,1.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="103" name="box_yellow">
+		<Spatial>
+			<Position>0.5,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+			<AngularVelocity>0.0,30.0,0.0</AngularVelocity>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>AABB</Type>
+			<Extents>1.0,1.0,1.0</Extents>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,1.0,0.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<!-- Test 3: Sphere vs AABB -->
+	<Entity uid="104" name="sphere_blue">
+		<Spatial>
+			<Position>10.0,2.0,0.0</Position>
+			<Velocity>-1.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>Sphere</Type>
+			<Radius>1.0</Radius>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,0.0,1.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="105" name="box_magenta">
+		<Spatial>
+			<Position>6.0,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>AABB</Type>
+			<Extents>1.0,1.0,1.0</Extents>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,0.0,1.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<!-- Test 4: OBB vs OBB (rotated boxes) -->
+	<Entity uid="106" name="obb_green">
+		<Spatial>
+			<Position>9.0,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,45.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>OBB</Type>
+			<Extents>1.0,1.0,1.0</Extents>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,1.0,0.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="107" name="obb_purple">
+		<Spatial>
+			<Position>11.8,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>0.0,-45.0,0.0</Orientation>
+			<AngularVelocity>0.0,60.0,0.0</AngularVelocity>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>OBB</Type>
+			<Extents>1.0,1.0,1.0</Extents>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.5,0.0,1.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<!-- Test 5: Sphere vs OBB -->
+	<Entity uid="108" name="sphere_white">
+		<Spatial>
+			<Position>-8.0,10.0,0.0</Position>
+			<Velocity>0.0,-0.5,0.0</Velocity>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>Sphere</Type>
+			<Radius>0.75</Radius>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="109" name="obb_green">
+		<Spatial>
+			<Position>-8.0,2.0,0.0</Position>
+			<Velocity>0.0,0.0,0.0</Velocity>
+			<Orientation>45.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>OBB</Type>
+			<Extents>1.0,1.0,1.0</Extents>
+			<Layer>1</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.0,1.0,0.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<!-- Ground plane -->
+	<Entity uid="200" name="ground">
+		<Spatial>
+			<Position>0.0,0.0,0.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>30.0,0.1,10.0</Scale>
+		</Transform>
+		<Collider>
+			<Type>AABB</Type>
+			<Extents>30.0,0.1,10.0</Extents>
+			<Layer>2</Layer>
+			<Mask>0xFFFFFFFF</Mask>
+		</Collider>
+		<Gfx>
+			<Model>data/assets/models/crate.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+		</Gfx>
+		<ScriptComponent>
+			<OnCollisionBegin filename="data/scripts/LUA/OnCollisionBeginChangeColour.lua"/>
+			<OnCollisionEnd filename="data/scripts/LUA/OnCollisionEndChangeColour.lua"/>
+		</ScriptComponent>
+	</Entity>
+</Scene>

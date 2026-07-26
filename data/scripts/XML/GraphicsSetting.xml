@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<GraphicsSettings>
+	<Exposure>0.75</Exposure>
+	<EmissiveIntensity>2.0</EmissiveIntensity>
+	<BloomMipLevels>6</BloomMipLevels>
+	<ShadowAtlas size="4096" tileSize="1024"/>
+	<PointShadowPool size="6" faceSize="1024"/>
+</GraphicsSettings>

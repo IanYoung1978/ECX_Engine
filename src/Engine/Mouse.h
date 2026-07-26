@@ -22,6 +22,7 @@ public:
 	void setFPSMode(bool toggle = true);
 	virtual ControllerType getControllerType() override;
 	glm::ivec2 getMouseMovement();
+	glm::ivec2 getMousePosition() const { return m_mouse_position; }
 	virtual bool changed() override;
 	virtual KeyState getKeyState(SDL_Scancode key) override;
 private:

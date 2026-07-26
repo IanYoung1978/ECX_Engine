@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2.5)
+cmake_minimum_required(VERSION 3.5)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 # attach to vcpkg's cmake configuration for project dependencies
@@ -7,7 +7,7 @@ if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_POLICY_DEFAULT_CMP0074 NEW)
 endif()
 
-project(ECX)
+project(ECX LANGUAGES CXX)
 
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
@@ -19,7 +19,7 @@ message("searching ${SOURCE_DIR} for source files")
 
 file(GLOB_RECURSE ECX_SOURCE ${SOURCE_DIR}/*.*)
 
-add_executable(ECX ${ECX_SOURCE})
+add_executable(ECX ${ECX_SOURCE} "src/Engine/Subsystems/CollisionSystems/EC_CollisionShapes.h")
 
 set_property(TARGET ECX PROPERTY CXX_STANDARD 17)
 
@@ -105,6 +105,14 @@ else()
     message("Lua not found: vcpkg install Lua" FATAL_ERROR)
 endif()
 
+find_package(Stb REQUIRED)
+if (Stb_FOUND)
+    set(INCLUDE_DIRS ${INCLUDE_DIRS} ${Stb_INCLUDE_DIR})
+    message("Stb found at: ${Stb_INCLUDE_DIR}")
+else()
+    message("Stb not found: vcpkg install stb" FATAL_ERROR)
+endif()
+
 find_path(LUABRIDGE3_INCLUDE_DIRS "luabridge3/LuaBridge/Array.h")
 message(${LUABRIDGE3_INCLUDE_DIRS})
 set(INCLUDE_DIRS ${INCLUDE_DIRS} ${LUABRIDGE3_INCLUDE_DIRS})
@@ -117,3 +125,9 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_SOURCE_DIR}/data
                 ${CMAKE_CURRENT_BINARY_DIR}/data)
+add_custom_command(
+        TARGET ECX PRE_LINK
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                ${CMAKE_CURRENT_SOURCE_DIR}/data
+                ${CMAKE_CURRENT_BINARY_DIR}/data
+        COMMENT "Copying data files...")

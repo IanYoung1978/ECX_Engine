@@ -14,6 +14,7 @@ void MeshManager::loadObjModel(const std::string & fname)
 		auto m = std::make_shared<ObjModel>();
 		if (m->loadModel(fname))
 		{
+			std::lock_guard<std::mutex> lock(m_Mutex);
 			m_models.emplace(fname, m);
 		}
 		else
@@ -30,6 +31,7 @@ std::shared_ptr<ObjModel> MeshManager::getObjModel(const std::string & fname)
 
 void MeshManager::finaliseModels()
 {
+	std::lock_guard<std::mutex> lock(m_Mutex);
 	for (auto model : m_models)
 	{
 		model.second->initialise();
@@ -56,6 +58,7 @@ MeshManager::~MeshManager()
 
 std::shared_ptr<ObjModel> MeshManager::findObjModel(const std::string & fname)
 {
+	std::lock_guard<std::mutex> lock(m_Mutex);
 	auto model = m_models.find(fname);
 	if (model != m_models.end())
 	{

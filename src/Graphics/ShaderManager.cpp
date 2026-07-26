@@ -12,6 +12,7 @@ ShaderManager::ShaderManager()
 
 void ShaderManager::loadShader(const std::string & vert, const std::string & frag)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	auto dat = findShader(vert, frag);
 	if (dat.flength == 0 || dat.vlength == 0)
 	{
@@ -31,10 +32,11 @@ void ShaderManager::loadShader(const std::string & vert, const std::string & fra
 		dat.fs = fs;
 		m_ShaderData.emplace(std::make_pair(vert,frag), dat);
 	}
-}	
+}
 
 std::shared_ptr<Shader> ShaderManager::getShader(const std::string & vert, const std::string & frag)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	auto shader = m_Shaders.find(std::make_pair(vert, frag));
 	if (shader != m_Shaders.end())
 	{
@@ -45,10 +47,11 @@ std::shared_ptr<Shader> ShaderManager::getShader(const std::string & vert, const
 
 void ShaderManager::finaliseShaders()
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	LOGGING::ECX_Logger::GetInstance()->LogMessage("Finalising shaders...", LOGGING::LogLevel::INFORMATION);
 	for (auto &s : m_ShaderData)
 	{
-		if (getShader(s.second.vs, s.second.fs) == nullptr)
+		if (getShader(s.first.first, s.first.second) == nullptr)
 		{
 			auto shader = std::make_shared<Shader>();
 
@@ -78,6 +81,7 @@ void ShaderManager::finaliseShaders()
 
 std::shared_ptr<Shader> ShaderManager::finaliseShader(const std::string& vert, const std::string& frag)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	// if this is being called then data should have been loaded from file
 	// if find shader == false create shader
 	// if find shader data == false log error
@@ -132,6 +136,7 @@ char * ShaderManager::loadFile(const std::string & filename, int & size)
 
 ShaderData ShaderManager::findShader(const std::string & vert, const std::string & frag)
 {
+	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	auto data = m_ShaderData.find(std::make_pair(vert, frag));
 	if (data == m_ShaderData.end())
 	{

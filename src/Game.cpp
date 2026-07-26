@@ -3,171 +3,160 @@
 #include "xml/XML.h"
 #include "Engine/Keyboard.h"
 #include "Engine/Config.h"
-#include "Engine/GameMode.h"
 #include "Logging/ECX_Logging.h"
 #include "Components/EC_DOD_Components.h"
 
-EC_Game::EC_Game() :m_Running(true)
-{
-	m_CurrentMode = 0;
-	m_Accumulator = 0.0f;
-}
+EC_Game::EC_Game() : m_Running(true) {}
 
 Game_Error EC_Game::init(const std::string& configurationFilename)
 {
-	//Load Game config file
-	GameSettings game_settings;
-	LOGGING::ECX_Logger::GetInstance()->setOutputFilename("log.html");
-	if (!XML::loadGameConfig(configurationFilename, game_settings))
-	{
-		LOGGING::ECX_Logger::GetInstance()->LogMessage("Config error", LOGGING::LogLevel::CRITICAL);
-		return Game_Error::CONFIG_ERROR;
-	}
-	//load window/opengl settings from xml file
-	WindowSettings settings;
-	if (!XML::createWindowSettings(game_settings.window_settings_file, settings))
-	{
-		LOGGING::ECX_Logger::GetInstance()->LogMessage("Config error", LOGGING::LogLevel::CRITICAL);
-		return Game_Error::CONFIG_ERROR;
-	}
-	//create window based on loaded settings
-	m_Window = std::make_shared<SDL_GL_Window>();
-	if (!m_Window->init(settings))
-	{
-		LOGGING::ECX_Logger::GetInstance()->LogMessage("Window error", LOGGING::LogLevel::CRITICAL);
-		return Game_Error::WINDOW_ERROR;
-	}
-		
-	//create a controller
-	m_Controls = std::make_shared<ControlSystem>();
-	m_Controls->init(m_Messenger,*this);
-	for (auto &s : game_settings.GameModes)
-	{
-		//create game modes
-		auto mode = std::make_unique<EC_GameMode>();
-		m_Modes.push_back(std::move(mode));
-		m_Modes.back()->init(*this, s, m_Messenger);
-	}
+    GameSettings game_settings;
+    LOGGING::ECX_Logger::GetInstance()->setOutputFilename("log.html");
+    if (!XML::loadGameConfig(configurationFilename, game_settings))
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("Config error", LOGGING::LogLevel::CRITICAL);
+        return Game_Error::CONFIG_ERROR;
+    }
 
-	//init m_Controls
-	m_Timer = std::make_unique<Timer>();
-	m_threadmanager.init(8);
-	m_Running = true;
-	m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
-	LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
-	return Game_Error::NO_ERROR;
+    WindowSettings settings;
+    if (!XML::createWindowSettings(game_settings.window_settings_file, settings))
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("Config error", LOGGING::LogLevel::CRITICAL);
+        return Game_Error::CONFIG_ERROR;
+    }
+
+    m_Window = std::make_shared<SDL_GL_Window>();
+    if (!m_Window->init(settings))
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("Window error", LOGGING::LogLevel::CRITICAL);
+        return Game_Error::WINDOW_ERROR;
+    }
+
+    m_Controls = std::make_shared<ControlSystem>();
+    m_Controls->init(m_Messenger, *this);
+
+    for (auto& s : game_settings.GameModes)
+        m_SceneManager.init(*this, s, m_Messenger);
+
+    m_Timer = std::make_unique<Timer>();
+    m_threadmanager.init(8);
+    m_Running = true;
+    m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
+    LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
+    return Game_Error::NO_ERROR;
 }
 
 Game_Error EC_Game::run()
 {
-	int timer = 0;
-	SDL_Event e;
-	m_CurrentMode = 0;
-	ECXCommand command;
-	command.type = ECXCommandType::SystemStart;
-	m_Messenger.publish(command);
-	while (m_Running)
-	{
-		//poll input events
-		while (SDL_PollEvent(&e))
-		{
-			if (e.type == SDL_QUIT)
-				m_Running = false;
-			//use controllers to store input data
-			m_Controls->handleEvent(e);
-		}
-		//update
-		m_Timer->update(*this);
-	}
-	m_Window->close();
-	LOGGING::ECX_Logger::GetInstance()->LogMessage("Shutting down", LOGGING::LogLevel::INFORMATION);
-	LOGGING::ECX_Logger::GetInstance()->printToFile();
-	return Game_Error::NO_ERROR;
+    SDL_Event e;
+    ECXCommand command;
+    command.type = ECXCommandType::SystemStart;
+    m_Messenger.publish(command);
+
+    while (m_Running)
+    {
+        while (SDL_PollEvent(&e))
+        {
+            if (e.type == SDL_QUIT)
+                m_Running = false;
+            m_Controls->handleEvent(e);
+        }
+        m_Timer->update(*this);
+    }
+
+    m_Window->close();
+    LOGGING::ECX_Logger::GetInstance()->LogMessage("Shutting down", LOGGING::LogLevel::INFORMATION);
+    LOGGING::ECX_Logger::GetInstance()->printToFile();
+    return Game_Error::NO_ERROR;
 }
 
-void EC_Game::addEntity(std::shared_ptr<GameEntity> e)
+EntityID EC_Game::getEntityByUID(uint32_t uid) const
 {
-	std::scoped_lock<std::mutex> lock(m_lock);
+    return m_SceneManager.getEntityByUID(uid);
 }
 
-void EC_Game::removeEntity(unsigned int gameEntityID)
+EntityID EC_Game::getEntityByName(const std::string& name) const
 {
-	std::scoped_lock<std::mutex> lock(m_lock);
+    return m_SceneManager.getEntityByName(name);
 }
 
-EntityID EC_Game::getEntityByName(const std::string & eName)
+void EC_Game::toggleDebug()
 {
-	std::scoped_lock<std::mutex> lock(m_lock);
-	//find the first entity with specified name
-	auto entities = EC_DOD_EntityManager::getInstance().getEntitiesWithComponent(std::type_index(typeid(EC_DOD_EntityInfo)));
-	for (auto entity : entities)
-	{
-		auto& info = EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entity);
-		if (info.name == eName)
-		{
-			return entity;
-		}
-	}
-	return INVALID_ENTITY;
+    m_SceneManager.toggleDebug();
 }
 
-void EC_Game::clearEntities()
+void EC_Game::loadScene(const std::string& alias)
 {
-	//EntityManager::getInstance().clearEntities();
+    m_SceneManager.loadScene(alias);
+}
+
+void EC_Game::unloadScene(const std::string& alias)
+{
+    m_SceneManager.unloadScene(alias);
+}
+
+void EC_Game::activateScene(const std::string& alias)
+{
+    m_SceneManager.activateScene(alias);
 }
 
 void EC_Game::shutDown()
 {
-	ECXCommand command;
-	command.type = ECXCommandType::SystemShutdown;
-	m_Messenger.publish(command);
+    ECXCommand command;
+    command.type = ECXCommandType::SystemShutdown;
+    m_Messenger.publish(command);
 }
 
-void EC_Game::update(const float & deltaTimeS)
+void EC_Game::update(const float& deltaTimeS)
 {
-	if (m_Running)
-	{
-		m_Messenger.flush();
-		m_Modes[m_CurrentMode]->update(deltaTimeS, *this);
-		m_Controls->update(deltaTimeS, *this);
-		m_Window->present();
-	}
-}
-
-EC_Game::~EC_Game()
-{
-}
-
-void EC_Game::changeMode(Game_Mode mode)
-{
-	m_CurrentMode = (size_t)mode;
+    if (m_Running)
+    {
+        m_Messenger.flush();
+        m_SceneManager.update(deltaTimeS, *this);
+        m_Controls->update(deltaTimeS, *this);
+        m_UIInput.update(*this, m_Messenger);
+        m_Window->present();
+    }
 }
 
 KeyState EC_Game::getKeyState(SDL_Scancode key)
 {
-	return m_Controls->getKeyState(key);
+    return m_Controls->getKeyState(key);
 }
 
-void EC_Game::startGame()
+glm::ivec2 EC_Game::getMousePosition()
 {
+    return m_Controls->getMouse()->getMousePosition();
+}
+
+void EC_Game::setMouseCaptured(bool captured)
+{
+    m_Controls->getMouse()->setFPSMode(captured);
+}
+
+bool EC_Game::isMouseButtonPressed(MouseButton button)
+{
+    return m_Controls->getMouse()->keyPressed(button);
 }
 
 std::shared_ptr<Window> EC_Game::getWindow()
 {
-	return m_Window;
+    return m_Window;
 }
 
 std::shared_ptr<ControlSystem> EC_Game::getControls()
 {
-	return m_Controls;
+    return m_Controls;
 }
 
 void EC_Game::receive(ECXCommand& command)
 {
-	if (command.type == ECXCommandType::SystemShutdown)
-	{
-		m_Running = false;
-		m_Controls->shutdown();
-		m_threadmanager.stop();
-	}
+    if (command.type == ECXCommandType::SystemShutdown)
+    {
+        m_Running = false;
+        m_Controls->shutdown();
+        m_threadmanager.stop();
+    }
 }
+
+EC_Game::~EC_Game() {}

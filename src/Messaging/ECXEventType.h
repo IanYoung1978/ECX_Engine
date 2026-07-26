@@ -20,9 +20,15 @@ enum class ECXEventType
 	mouse_down,
 	mouse_held,
 	mouse_move,
+	mouse_enter,
+	mouse_leave,
+	select,
+	unselect,
+	click,
 	world_loaded,
 	entity_loaded,
 	config_loaded,
 	system_update,
+	None,
 	ALL
 };

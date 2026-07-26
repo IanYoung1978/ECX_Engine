@@ -2,25 +2,90 @@
 #include "Components/EC_DOD_Components.h"
 #include "Logging/ECX_Logging.h"
 #include <sstream>
+#include <unordered_map>
+#include <cmath>
 #include <glm/gtc/constants.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include "Graphics/ObjModel.h"
 #include "Graphics/Shader.h"
 #include "Graphics/ADS_TextureSet.h"
 #include "Graphics/PBR_TextureSet.h"
 #include "Components/EC_ScriptComponent.h"
+#include "Components/EC_CollisionLayers.h"
 
 TextureManager EC_DOD_EntityFactory::s_TexManager;
 MeshManager EC_DOD_EntityFactory::s_MeshManager;
 ShaderManager EC_DOD_EntityFactory::s_ShaderManager;
+CubemapManager EC_DOD_EntityFactory::s_CubemapManager;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Cameras;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Entities;
 std::vector<EntityID> EC_DOD_EntityFactory::s_Lights;
+std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_HDRAliases;
+std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_MeshAliases;
+std::unordered_map<std::string, EC_DOD_EntityFactory::ShaderPaths> EC_DOD_EntityFactory::s_ShaderAliases;
+std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_ScriptAliases;
+std::unordered_map<std::string, TiXmlElement*> EC_DOD_EntityFactory::s_MaterialElements;
+TiXmlDocument EC_DOD_EntityFactory::s_ManifestDoc;
 
 EC_DOD_EntityFactory::EC_DOD_EntityFactory() {
     s_TexManager.init();
 }
 
 EC_DOD_EntityFactory::~EC_DOD_EntityFactory() {
+}
+
+void EC_DOD_EntityFactory::parseManifest(TiXmlElement* manifestElem)
+{
+    if (!manifestElem) return;
+
+    auto child = manifestElem->FirstChildElement();
+    while (child)
+    {
+        const char* alias = child->Attribute("alias");
+        if (!alias) { child = child->NextSiblingElement(); continue; }
+
+        if (strcmp(child->Value(), "HDR") == 0 && child->GetText())
+        {
+            s_HDRAliases[alias] = child->GetText();
+            s_CubemapManager.loadHDR(child->GetText());
+        }
+        else if (strcmp(child->Value(), "Model") == 0 && child->GetText())
+        {
+            s_MeshAliases[alias] = child->GetText();
+            s_MeshManager.loadObjModel(child->GetText());
+        }
+        else if (strcmp(child->Value(), "Shader") == 0)
+        {
+            const char* vert = child->Attribute("vertex");
+            const char* frag = child->Attribute("fragment");
+            if (vert && frag)
+            {
+                s_ShaderAliases[alias] = { vert, frag };
+                s_ShaderManager.loadShader(vert, frag);
+            }
+        }
+        else if (strcmp(child->Value(), "LuaScript") == 0 && child->GetText())
+        {
+            s_ScriptAliases[alias] = child->GetText();
+        }
+        else if (strcmp(child->Value(), "PBRMaterial") == 0)
+        {
+            TiXmlElement* copy = static_cast<TiXmlElement*>(child->Clone());
+            s_ManifestDoc.LinkEndChild(copy);
+            s_MaterialElements[alias] = copy;
+
+            auto texChild = child->FirstChildElement();
+            while (texChild)
+            {
+                if (strcmp(texChild->Value(), "ParallaxScale") != 0 &&
+                    strcmp(texChild->Value(), "ParallaxBias") != 0 &&
+                    texChild->GetText())
+                    s_TexManager.loadTexture(texChild->GetText());
+                texChild = texChild->NextSiblingElement();
+            }
+        }
+        child = child->NextSiblingElement();
+    }
 }
 
 EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
@@ -43,16 +108,21 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
         att = att->Next();
     }
 
-    if (!uidSet) {
+    if (!uidSet)
         info.uid = static_cast<uint32_t>(s_Entities.size());
-    }
 
     manager.addComponent(entity, info);
+
+    bool hasGraphics = false;
+    bool hasSpatial = false;
+    bool hasTransform = false;
+    bool hasCollider = false;
 
     auto elem = descriptor.FirstChildElement();
     while (elem != nullptr) {
         if (strcmp(elem->Value(), "Spatial") == 0) {
             parseSpatial(elem, entity);
+            hasSpatial = true;
         }
         else if (strcmp(elem->Value(), "Camera") == 0) {
             parseCamera(elem, entity);
@@ -60,19 +130,61 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
         }
         else if (strcmp(elem->Value(), "Gfx") == 0) {
             parseGraphics(elem, entity);
+            hasGraphics = true;
         }
         else if (strcmp(elem->Value(), "Transform") == 0) {
             parseTransform(elem, entity);
+            hasTransform = true;
         }
         else if (strcmp(elem->Value(), "Light") == 0) {
             parseLight(elem, entity);
             s_Lights.push_back(entity);
         }
-        else if (strcmp(elem->Value(), "ScriptComponent") == 0) {
+        else if (strcmp(elem->Value(), "ScriptComponent") == 0)
             parseScript(elem, entity);
+        else if (strcmp(elem->Value(), "Collider") == 0) {
+            parseCollider(elem, entity);
+            hasCollider = true;
         }
-
+        else if (strcmp(elem->Value(), "Hierarchy") == 0)
+            parseHierarchy(elem, entity);
+        else if (strcmp(elem->Value(), "Skybox") == 0)
+            parseSkybox(elem, entity);
+        else if (strcmp(elem->Value(), "Template") == 0)
+            ;
+        else
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Unknown component type: " + std::string(elem->Value()),
+                LOGGING::LogLevel::WARNING);
         elem = elem->NextSiblingElement();
+    }
+
+    // Any renderable entity needs to be discoverable by spatial queries (camera
+    // frustum, light influence radius) serviced by EC_BroadPhase, which only ever
+    // iterates entities with EC_DOD_Collider + EC_DOD_Spatial. Rather than requiring
+    // every renderable entity to author a <Collider> just to be found, tag it with
+    // the reserved Renderable layer bit automatically - existing scene XML needs no
+    // changes.
+    if (hasGraphics && hasSpatial) {
+        if (!hasCollider) {
+            EC_DOD_Collider autoCollider;
+            autoCollider.type = EC_DOD_Collider::Type::AABB;
+            autoCollider.extents = hasTransform
+                ? manager.getComponent<EC_DOD_Transform>(entity).scale
+                : glm::vec3(1.0f);
+            autoCollider.collisionLayer = CollisionLayers::Renderable;
+            // Mask of 0 means this never forms a gameplay collision pair with anything
+            // (canCollide requires both sides' layer&mask to be non-zero) - it only
+            // exists to be spatially indexed.
+            autoCollider.collisionMask = 0;
+            manager.addComponent(entity, autoCollider);
+        }
+        else {
+            // Entity authored its own <Collider> for gameplay purposes - OR in the
+            // Renderable bit so it's still discoverable by spatial queries without
+            // disturbing whatever layer/mask semantics the author set for gameplay.
+            manager.getComponent<EC_DOD_Collider>(entity).collisionLayer |= CollisionLayers::Renderable;
+        }
     }
 
     s_Entities.push_back(entity);
@@ -92,16 +204,12 @@ EntityID EC_DOD_EntityFactory::constructCamera(TiXmlElement& descriptor) {
 
     auto elem = descriptor.FirstChildElement();
     while (elem) {
-        if (strcmp(elem->Value(), "Spatial") == 0) {
+        if (strcmp(elem->Value(), "Spatial") == 0)
             parseSpatial(elem, entity);
-        }
-        else if (strcmp(elem->Value(), "FOV") == 0) {
+        else if (strcmp(elem->Value(), "FOV") == 0)
             camera.fov = std::stof(elem->GetText());
-        }
-        else if (strcmp(elem->Value(), "DrawDistance") == 0) {
+        else if (strcmp(elem->Value(), "DrawDistance") == 0)
             camera.farPlane = std::stof(elem->GetText());
-        }
-
         elem = elem->NextSiblingElement();
     }
     camera.isActive = true;
@@ -112,12 +220,17 @@ EntityID EC_DOD_EntityFactory::constructCamera(TiXmlElement& descriptor) {
 }
 
 void EC_DOD_EntityFactory::performPostLoadActions() {
-    // First, finalize all resources (creates OpenGL objects)
     s_TexManager.finalizeTextures();
     s_MeshManager.finaliseModels();
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Starting cubemap finalization...",
+        LOGGING::LogLevel::INFORMATION);
+    s_CubemapManager.finalizeAll();
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Cubemap finalization complete",
+        LOGGING::LogLevel::INFORMATION);
     s_ShaderManager.finaliseShaders();
 
-    // NOW update all graphics components with the finalized resources
     auto& manager = EC_DOD_EntityManager::getInstance();
     auto* gfxArray = manager.getComponentArray<EC_DOD_GraphicsData>();
 
@@ -128,37 +241,64 @@ void EC_DOD_EntityFactory::performPostLoadActions() {
         for (size_t i = 0; i < gfxComponents.size(); i++) {
             auto& gfx = gfxComponents[i];
 
-            // NOW retrieve the finalized resources
             if (!gfx.modelName.empty()) {
                 gfx.model = s_MeshManager.getObjModel(gfx.modelName);
-                if (!gfx.model) {
+                if (!gfx.model)
                     LOGGING::ECX_Logger::GetInstance()->LogMessage(
                         "Failed to get model: " + gfx.modelName,
-                        LOGGING::LogLevel::SEVERE
-                    );
-                }
+                        LOGGING::LogLevel::SEVERE);
+                else
+                    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                        "Got model: " + gfx.modelName,
+                        LOGGING::LogLevel::INFORMATION);
             }
 
             if (!gfx.vertShader.empty() && !gfx.fragShader.empty()) {
                 gfx.shader = s_ShaderManager.getShader(gfx.vertShader, gfx.fragShader);
-                if (!gfx.shader) {
+                if (!gfx.shader)
                     LOGGING::ECX_Logger::GetInstance()->LogMessage(
                         "Failed to get shader: " + gfx.vertShader + ", " + gfx.fragShader,
-                        LOGGING::LogLevel::SEVERE
-                    );
-                }
+                        LOGGING::LogLevel::SEVERE);
             }
 
-            // Finalize texture handles
-            if (gfx.hasTextures && gfx.textureSet) {
+            if (gfx.hasTextures && gfx.textureSet)
                 gfx.textureSet->setTextureHandles(s_TexManager);
-            }
         }
     }
+
+    resolveHierarchyReferences();
 
     s_Entities.clear();
     s_Cameras.clear();
     s_Lights.clear();
+}
+
+void EC_DOD_EntityFactory::finalizePendingGraphics(size_t maxPerCall) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    auto* gfxArray = manager.getComponentArray<EC_DOD_GraphicsData>();
+    if (!gfxArray) return;
+
+    size_t resolved = 0;
+    std::unique_lock lock(gfxArray->getMutex());
+    auto& gfxComponents = gfxArray->getData();
+
+    for (size_t i = 0; i < gfxComponents.size() && resolved < maxPerCall; i++) {
+        auto& gfx = gfxComponents[i];
+
+        bool needsModel = !gfx.model && !gfx.modelName.empty();
+        bool needsShader = !gfx.shader && !gfx.vertShader.empty() && !gfx.fragShader.empty();
+        if (!needsModel && !needsShader)
+            continue;
+
+        if (needsModel)
+            gfx.model = s_MeshManager.finaliseModel(gfx.modelName);
+        if (needsShader)
+            gfx.shader = s_ShaderManager.finaliseShader(gfx.vertShader, gfx.fragShader);
+        if (gfx.hasTextures && gfx.textureSet)
+            gfx.textureSet->setTextureHandles(s_TexManager);
+
+        resolved++;
+    }
 }
 
 const std::vector<EntityID>& EC_DOD_EntityFactory::getCameras() const {
@@ -196,29 +336,24 @@ void EC_DOD_EntityFactory::parseSpatial(TiXmlElement* elem, EntityID entity) {
 
     auto child = elem->FirstChildElement();
     while (child != nullptr) {
-        if (strcmp(child->Value(), "Position") == 0) {
+        if (strcmp(child->Value(), "Position") == 0)
             spatial.position = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Velocity") == 0) {
+        else if (strcmp(child->Value(), "Velocity") == 0)
             spatial.velocity = parseVec3(child->GetText());
-        }
         else if (strcmp(child->Value(), "Orientation") == 0) {
             glm::vec3 orient = parseVec3(child->GetText());
             spatial.orientation = glm::vec3(
                 glm::radians(orient.x),
                 glm::radians(orient.y),
-                glm::radians(orient.z)
-            );
+                glm::radians(orient.z));
         }
         else if (strcmp(child->Value(), "AngularVelocity") == 0) {
             glm::vec3 angVel = parseVec3(child->GetText());
             spatial.angVelocity = glm::vec3(
                 glm::radians(angVel.x),
                 glm::radians(angVel.y),
-                glm::radians(angVel.z)
-            );
+                glm::radians(angVel.z));
         }
-
         child = child->NextSiblingElement();
     }
 
@@ -231,13 +366,10 @@ void EC_DOD_EntityFactory::parseCamera(TiXmlElement* elem, EntityID entity) {
 
     auto child = elem->FirstChildElement();
     while (child) {
-        if (strcmp(child->Value(), "FOV") == 0) {
+        if (strcmp(child->Value(), "FOV") == 0)
             camera.fov = std::stof(child->GetText());
-        }
-        else if (strcmp(child->Value(), "DrawDistance") == 0) {
+        else if (strcmp(child->Value(), "DrawDistance") == 0)
             camera.farPlane = std::stof(child->GetText());
-        }
-
         child = child->NextSiblingElement();
     }
 
@@ -255,18 +387,35 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
     auto child = elem->FirstChildElement();
     while (child != nullptr) {
         if (strcmp(child->Value(), "Model") == 0) {
-            modelName = child->GetText();
-            s_MeshManager.loadObjModel(modelName);
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_MeshAliases.find(aliasAttr);
+                if (it != s_MeshAliases.end())
+                    modelName = it->second;
+            }
+            else if (child->GetText()) {
+                modelName = child->GetText();
+                s_MeshManager.loadObjModel(modelName);
+            }
         }
         else if (strcmp(child->Value(), "Shader") == 0) {
-            auto vertex = child->FirstAttribute();
-            if (vertex) {
-                vertShader = vertex->Value();
-                auto frag = vertex->Next();
-                if (frag && !vertShader.empty()) {
-                    fragShader = frag->Value();
-                    if (!fragShader.empty()) {
-                        s_ShaderManager.loadShader(vertShader, fragShader);
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_ShaderAliases.find(aliasAttr);
+                if (it != s_ShaderAliases.end()) {
+                    vertShader = it->second.vert;
+                    fragShader = it->second.frag;
+                }
+            }
+            else {
+                auto vertex = child->FirstAttribute();
+                if (vertex) {
+                    vertShader = vertex->Value();
+                    auto frag = vertex->Next();
+                    if (frag && !vertShader.empty()) {
+                        fragShader = frag->Value();
+                        if (!fragShader.empty())
+                            s_ShaderManager.loadShader(vertShader, fragShader);
                     }
                 }
             }
@@ -280,64 +429,98 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                 std::string texName = child1->GetText();
                 s_TexManager.loadTexture(texName);
 
-                if (strcmp(child1->Value(), "Diffuse") == 0) {
+                if (strcmp(child1->Value(), "Diffuse") == 0)
                     gfx.textureSet->setTexture(TextureID::Diffuse, texName);
-                }
-                else if (strcmp(child1->Value(), "Normal") == 0) {
+                else if (strcmp(child1->Value(), "Normal") == 0)
                     gfx.textureSet->setTexture(TextureID::Normal, texName);
-                }
-                else if (strcmp(child1->Value(), "Specular") == 0) {
+                else if (strcmp(child1->Value(), "Specular") == 0)
                     gfx.textureSet->setTexture(TextureID::Specular, texName);
-                }
-                else if (strcmp(child1->Value(), "Height") == 0) {
+                else if (strcmp(child1->Value(), "Height") == 0)
                     gfx.textureSet->setTexture(TextureID::Parallax, texName);
-                }
-                else if (strcmp(child1->Value(), "Emissive") == 0) {
+                else if (strcmp(child1->Value(), "Emissive") == 0)
                     gfx.textureSet->setTexture(TextureID::Glow, texName);
-                }
 
                 child1 = child1->NextSiblingElement();
             }
         }
         else if (strcmp(child->Value(), "PBRMaterial") == 0) {
-            gfx.textureSet = std::make_shared<PBR_TextureSet>();
-            gfx.hasTextures = true;
+            const char* aliasAttr = child->Attribute("alias");
+            TiXmlElement* materialElem = aliasAttr
+                ? (s_MaterialElements.count(aliasAttr) ? s_MaterialElements[aliasAttr] : nullptr)
+                : child;
 
-            auto child1 = child->FirstChildElement();
-            while (child1 != nullptr) {
-                std::string texName = child1->GetText();
-                s_TexManager.loadTexture(texName);
+            if (materialElem) {
+                auto pbrSet = std::make_shared<PBR_TextureSet>();
+                gfx.textureSet = pbrSet;
+                gfx.hasTextures = true;
 
-                if (strcmp(child1->Value(), "Albedo") == 0) {
-                    gfx.textureSet->setTexture(TextureID::Albedo, texName);
+                auto child1 = materialElem->FirstChildElement();
+                while (child1 != nullptr) {
+                    if (strcmp(child1->Value(), "Albedo") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Albedo, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Normal") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Normal, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Smoothness") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Smoothness, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Height") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Parallax, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Emissive") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Glow, texName);
+                    }
+                    else if (strcmp(child1->Value(), "Metallic") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::Metallic, texName);
+                    }
+                    else if (strcmp(child1->Value(), "AO") == 0 && child1->GetText()) {
+                        std::string texName = child1->GetText();
+                        s_TexManager.loadTexture(texName);
+                        gfx.textureSet->setTexture(TextureID::AO, texName);
+                    }
+                    else if (strcmp(child1->Value(), "ParallaxScale") == 0 && child1->GetText())
+                        pbrSet->setParallaxScale(std::stof(child1->GetText()));
+                    else if (strcmp(child1->Value(), "ParallaxBias") == 0 && child1->GetText())
+                        pbrSet->setParallaxBias(std::stof(child1->GetText()));
+                    child1 = child1->NextSiblingElement();
                 }
-                else if (strcmp(child1->Value(), "Normal") == 0) {
-                    gfx.textureSet->setTexture(TextureID::Normal, texName);
-                }
-                else if (strcmp(child1->Value(), "Smoothness") == 0) {
-                    gfx.textureSet->setTexture(TextureID::Smoothness, texName);
-                }
-                else if (strcmp(child1->Value(), "Height") == 0) {
-                    gfx.textureSet->setTexture(TextureID::Parallax, texName);
-                }
-                else if (strcmp(child1->Value(), "Emissive") == 0) {
-                    gfx.textureSet->setTexture(TextureID::Glow, texName);
-                }
-                else if (strcmp(child1->Value(), "Metallic") == 0) {
-                    gfx.textureSet->setTexture(TextureID::Metallic, texName);
-                }
-                else if (strcmp(child1->Value(), "AO") == 0) {
-                    gfx.textureSet->setTexture(TextureID::AO, texName);
-                }
-
-                child1 = child1->NextSiblingElement();
             }
         }
-
+        else if (strcmp(child->Value(), "Colour") == 0 || strcmp(child->Value(), "Color") == 0) {
+            std::string color = child->GetText();
+            sscanf(color.c_str(), "%f,%f,%f,%f",
+                &gfx.colour.r, &gfx.colour.g, &gfx.colour.b, &gfx.colour.a);
+        }
+        else if (strcmp(child->Value(), "CastsShadow") == 0 && child->GetText()) {
+            gfx.castsShadow = (strcmp(child->GetText(), "true") == 0);
+        }
+        else if (strcmp(child->Value(), "ReceivesShadow") == 0 && child->GetText()) {
+            gfx.receivesShadow = (strcmp(child->GetText(), "true") == 0);
+        }
+        else if (strcmp(child->Value(), "EmissiveIntensity") == 0 && child->GetText()) {
+            gfx.emissiveIntensity = std::stof(child->GetText());
+        }
+        else {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Unknown graphics property: " + std::string(child->Value()),
+                LOGGING::LogLevel::WARNING);
+        }
         child = child->NextSiblingElement();
     }
 
-    // Store resource names
     gfx.modelName = modelName;
     gfx.vertShader = vertShader;
     gfx.fragShader = fragShader;
@@ -351,35 +534,151 @@ void EC_DOD_EntityFactory::parseTransform(TiXmlElement* elem, EntityID entity) {
 
     auto child = elem->FirstChildElement();
     while (child) {
-        if (strcmp(child->Value(), "Scale") == 0) {
-            glm::vec3 scale = parseVec3(child->GetText());
-            transform.localTransform = glm::scale(glm::mat4(1.0f), scale);
-        }
-
+        if (strcmp(child->Value(), "Scale") == 0)
+            transform.scale = parseVec3(child->GetText());
         child = child->NextSiblingElement();
     }
 
     manager.addComponent(entity, transform);
 }
 
+void EC_DOD_EntityFactory::parseHierarchy(TiXmlElement* elem, EntityID entity) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    EC_DOD_Hierarchy hierarchy;
+
+    auto child = elem->FirstChildElement();
+    while (child != nullptr) {
+        if (strcmp(child->Value(), "Parent") == 0) {
+            auto idAttr = child->Attribute("uid");
+            if (idAttr)
+                hierarchy.parent = static_cast<EntityID>(atoi(idAttr));
+        }
+        child = child->NextSiblingElement();
+    }
+
+    manager.addComponent(entity, hierarchy);
+}
+
+void EC_DOD_EntityFactory::resolveHierarchyReferences() {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+
+    std::unordered_map<uint32_t, EntityID> uidToEntity;
+    for (EntityID entity : s_Entities) {
+        if (manager.hasComponent<EC_DOD_EntityInfo>(entity)) {
+            uint32_t uid = manager.getComponent<EC_DOD_EntityInfo>(entity).uid;
+            uidToEntity[uid] = entity;
+        }
+    }
+
+    // Scoped to this batch's entities only (not the whole EC_DOD_Hierarchy component
+    // array) - entities from earlier scene loads or the UI framework already have a
+    // resolved EntityID in hierarchy.parent by this point, not a raw UID, and must not
+    // be reprocessed here (would wipe or, worse, silently misresolve their parent link
+    // against this batch's unrelated uidToEntity map).
+    for (EntityID entity : s_Entities) {
+        if (!manager.hasComponent<EC_DOD_Hierarchy>(entity)) continue;
+        auto& hierarchy = manager.getComponent<EC_DOD_Hierarchy>(entity);
+
+        if (hierarchy.parent == INVALID_ENTITY) continue;
+
+        uint32_t parentUID = static_cast<uint32_t>(hierarchy.parent);
+        auto it = uidToEntity.find(parentUID);
+        if (it != uidToEntity.end()) {
+            EntityID parentEntity = it->second;
+            hierarchy.parent = parentEntity;
+
+            if (!manager.hasComponent<EC_DOD_Hierarchy>(parentEntity))
+                manager.addComponent(parentEntity, EC_DOD_Hierarchy{});
+
+            auto& parentHierarchy = manager.getComponent<EC_DOD_Hierarchy>(parentEntity);
+            parentHierarchy.children.push_back(entity);
+            hierarchy.depth = parentHierarchy.depth + 1;
+        }
+        else {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Hierarchy: could not resolve parent UID " + std::to_string(parentUID),
+                LOGGING::LogLevel::WARNING);
+            hierarchy.parent = INVALID_ENTITY;
+        }
+    }
+}
 
 void EC_DOD_EntityFactory::parseScript(TiXmlElement* elem, EntityID entity) {
     auto& manager = EC_DOD_EntityManager::getInstance();
     EC_DOD_ScriptData script;
-    script.enabled = true;
 
-    auto attr = elem->Attribute("file");
-    if (attr != nullptr) {
-        script.scriptFile = std::string(attr);
-    }
-    else {
-        LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "ScriptComponent defined without a script file!",
-            LOGGING::LogLevel::WARNING
-        );
+    auto child = elem->FirstChildElement();
+    while (child != nullptr) {
+        std::string handlerName = child->Value();
+        ECXEventType eventType = getEventTypeFromHandlerName(handlerName);
+
+        if (eventType != ECXEventType::None) {
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_ScriptAliases.find(aliasAttr);
+                if (it != s_ScriptAliases.end())
+                    script.handlers[eventType] = it->second;
+            }
+            else {
+                const char* filenameAttr = child->Attribute("filename");
+                if (filenameAttr)
+                    script.handlers[eventType] = filenameAttr;
+            }
+        }
+        child = child->NextSiblingElement();
     }
 
     manager.addComponent(entity, script);
+}
+
+ECXEventType EC_DOD_EntityFactory::getEventTypeFromHandlerName(const std::string& name) {
+    static const std::unordered_map<std::string, ECXEventType> handlerMap = {
+        {"OnCollisionBegin", ECXEventType::CollisionBeginEvent},
+        {"OnCollisionEnd",   ECXEventType::CollisionEndEvent},
+        {"OnKeyDown",        ECXEventType::key_down},
+        {"OnKeyUp",          ECXEventType::key_up},
+        {"OnKeyHeld",        ECXEventType::key_held},
+        {"OnMouseDown",      ECXEventType::mouse_down},
+        {"OnMouseUp",        ECXEventType::mouse_up},
+        {"OnMouseHeld",      ECXEventType::mouse_held},
+        {"OnMouseMove",      ECXEventType::mouse_move},
+        {"OnEntityCreate",   ECXEventType::EntityCreate},
+        {"OnEntityDestroy",  ECXEventType::EntityDestroy},
+        {"OnWorldLoaded",    ECXEventType::world_loaded},
+        {"OnUpdate",         ECXEventType::system_update},
+    };
+
+    auto it = handlerMap.find(name);
+    return (it != handlerMap.end()) ? it->second : ECXEventType::None;
+}
+
+namespace {
+    // Distance at which this light's intensity, attenuated per the standard
+    // 1/(Kc + Kl*d + Kq*d^2) falloff, drops below 1/256 - the smallest step an
+    // 8-bit colour channel can represent. Solves Kq*d^2 + Kl*d + (Kc - intensity*256) = 0.
+    float computeLightCutoffRadius(float intensity, const glm::vec3& attenuation) {
+        const float Kc = attenuation.x;
+        const float Kl = attenuation.y;
+        const float Kq = attenuation.z;
+        const float threshold = intensity * 256.0f;
+
+        if (Kq > 0.0f) {
+            const float discriminant = Kl * Kl - 4.0f * Kq * (Kc - threshold);
+            if (discriminant > 0.0f) {
+                const float d = (-Kl + std::sqrt(discriminant)) / (2.0f * Kq);
+                if (d > 0.0f) return d;
+            }
+        }
+        else if (Kl > 0.0f) {
+            const float d = (threshold - Kc) / Kl;
+            if (d > 0.0f) return d;
+        }
+
+        // No quadratic/linear falloff term (or a degenerate one) - the light
+        // doesn't naturally attenuate to imperceptibility, so fall back to a
+        // generous fixed radius rather than treating it as infinite.
+        return 100.0f;
+    }
 }
 
 void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
@@ -390,44 +689,106 @@ void EC_DOD_EntityFactory::parseLight(TiXmlElement* elem, EntityID entity) {
     while (child != nullptr) {
         if (strcmp(child->Value(), "Type") == 0) {
             std::string type = child->GetText();
-            if (type == "Directional") {
+            if (type == "Directional")
                 light.type = EC_DOD_Light::Type::Directional;
-            }
-            else if (type == "Spotlight") {
+            else if (type == "Spotlight")
                 light.type = EC_DOD_Light::Type::Spot;
-            }
-            else if (type == "Point") {
+            else if (type == "Point")
                 light.type = EC_DOD_Light::Type::Point;
-            }
         }
-        else if (strcmp(child->Value(), "Position") == 0) {
+        else if (strcmp(child->Value(), "Position") == 0)
             light.position = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Colour") == 0) {
+        else if (strcmp(child->Value(), "Colour") == 0)
             light.colour = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Direction") == 0) {
-            glm::vec3 dir = parseVec3(child->GetText());
-            light.direction = glm::normalize(dir);
-        }
-        else if (strcmp(child->Value(), "Intensity") == 0) {
+        else if (strcmp(child->Value(), "Direction") == 0)
+            light.direction = glm::normalize(parseVec3(child->GetText()));
+        else if (strcmp(child->Value(), "Intensity") == 0)
             light.intensity = std::stof(child->GetText());
-        }
-        else if (strcmp(child->Value(), "Cutoff") == 0) {
+        else if (strcmp(child->Value(), "Cutoff") == 0)
             light.cutoffAngle = glm::radians(std::stof(child->GetText()) / 2.0f);
-        }
-        else if (strcmp(child->Value(), "Attenuation") == 0) {
+        else if (strcmp(child->Value(), "Attenuation") == 0)
             light.attenuation = parseVec3(child->GetText());
-        }
-        else if (strcmp(child->Value(), "CastsShadow") == 0) {
+        else if (strcmp(child->Value(), "CastsShadow") == 0)
             light.castsShadow = (strcmp(child->GetText(), "true") == 0);
-        }
-        else if (strcmp(child->Value(), "Dynamic") == 0) {
+        else if (strcmp(child->Value(), "Dynamic") == 0)
             light.dynamic = (strcmp(child->GetText(), "true") == 0);
-        }
-
         child = child->NextSiblingElement();
     }
 
+    light.cutoffRadius = (light.type != EC_DOD_Light::Type::Directional)
+        ? computeLightCutoffRadius(light.intensity, light.attenuation)
+        : 0.0f;
+
     manager.addComponent(entity, light);
+}
+
+void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    EC_DOD_Collider collider;
+
+    auto typeElem = elem->FirstChildElement("Type");
+    if (typeElem && typeElem->GetText()) {
+        std::string type = typeElem->GetText();
+        if (type == "Sphere")        collider.type = EC_DOD_Collider::Type::Sphere;
+        else if (type == "AABB")     collider.type = EC_DOD_Collider::Type::AABB;
+        else if (type == "OBB")      collider.type = EC_DOD_Collider::Type::OBB;
+        else if (type == "Capsule")  collider.type = EC_DOD_Collider::Type::Capsule;
+        else if (type == "Cylinder") collider.type = EC_DOD_Collider::Type::Cylinder;
+        else if (type == "Frustum")  collider.type = EC_DOD_Collider::Type::Frustum;
+        else if (type == "Plane")    collider.type = EC_DOD_Collider::Type::Plane;
+    }
+
+    auto radiusElem = elem->FirstChildElement("Radius");
+    if (radiusElem && radiusElem->GetText())
+        collider.radius = static_cast<float>(atof(radiusElem->GetText()));
+
+    auto extentsElem = elem->FirstChildElement("Extents");
+    if (extentsElem && extentsElem->GetText())
+        sscanf(extentsElem->GetText(), "%f,%f,%f",
+            &collider.extents.x, &collider.extents.y, &collider.extents.z);
+
+    auto heightElem = elem->FirstChildElement("Height");
+    if (heightElem && heightElem->GetText())
+        collider.height = static_cast<float>(atof(heightElem->GetText()));
+
+    auto centerElem = elem->FirstChildElement("Center");
+    if (centerElem && centerElem->GetText())
+        sscanf(centerElem->GetText(), "%f,%f,%f",
+            &collider.center.x, &collider.center.y, &collider.center.z);
+
+    auto layerElem = elem->FirstChildElement("Layer");
+    if (layerElem && layerElem->GetText())
+        collider.collisionLayer = static_cast<uint32_t>(atoi(layerElem->GetText()));
+
+    auto maskElem = elem->FirstChildElement("Mask");
+    if (maskElem && maskElem->GetText())
+        collider.collisionMask = static_cast<uint32_t>(strtoul(maskElem->GetText(), nullptr, 0));
+
+    manager.addComponent(entity, collider);
+}
+
+void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    EC_DOD_Skybox skybox;
+
+    auto child = elem->FirstChildElement();
+    while (child) {
+        if (strcmp(child->Value(), "HDR") == 0) {
+            const char* aliasAttr = child->Attribute("alias");
+            if (aliasAttr) {
+                auto it = s_HDRAliases.find(aliasAttr);
+                if (it != s_HDRAliases.end()) {
+                    skybox.hdrPath = it->second;
+                    s_CubemapManager.loadHDR(skybox.hdrPath);
+                }
+            }
+            else if (child->GetText()) {
+                skybox.hdrPath = child->GetText();
+                s_CubemapManager.loadHDR(skybox.hdrPath);
+            }
+        }
+        child = child->NextSiblingElement();
+    }
+
+    manager.addComponent(entity, skybox);
 }

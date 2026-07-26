@@ -22,6 +22,8 @@ enum class ECXCommandType
 	GameSaveState,
 	GameSaveWorld,
 	GameLoadWorld,
+	GraphicsChangeHDRExposure,
+	GraphicsToggleDebug,
 	EntityAnimationStart,
 	EntityAnimationStop,
 	EntityChangeAnimation,

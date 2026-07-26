@@ -18,6 +18,8 @@
 				<Emissive>data/assets/Images/Crate/Crate_E.png</Emissive>
 				<AO>data/assets/Images/Crate/crate_ao.png</AO>
 				<Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness>
+				<ParallaxScale>0.02</ParallaxScale>
+				<ParallaxBias>0.001</ParallaxBias>
 			</PBRMaterial>
 			<Model>data/assets/models/crate.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>

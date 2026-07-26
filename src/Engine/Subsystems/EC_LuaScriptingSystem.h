@@ -19,16 +19,23 @@ public:
     EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr) {}
 
     ~EC_LuaScriptSystem() {
+        m_shuttingDown = true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
         std::lock_guard<std::mutex> lock(m_LuaMutex);
-        if (m_luaState) lua_close(m_luaState);
-        delete m_game;
-        m_game = nullptr;
+        if (m_luaState) {
+            lua_close(m_luaState);
+            m_luaState = nullptr;
+        }
+        if (m_game) {
+            delete m_game;
+            m_game = nullptr;
+        }
     }
 
     void init(ECXMessenger& messenger, EC_Game& game) override {
         std::lock_guard<std::mutex> lock(m_LuaMutex);
 
-        // Subscribe to ALL events
         std::vector<ECXEventType> allTypes{
             ECXEventType::EntityCreate,
             ECXEventType::EntityKill,
@@ -48,6 +55,11 @@ public:
             ECXEventType::mouse_down,
             ECXEventType::mouse_held,
             ECXEventType::mouse_move,
+            ECXEventType::mouse_enter,
+            ECXEventType::mouse_leave,
+            ECXEventType::select,
+            ECXEventType::unselect,
+            ECXEventType::click,
             ECXEventType::world_loaded,
             ECXEventType::entity_loaded,
             ECXEventType::config_loaded,
@@ -55,12 +67,12 @@ public:
         };
         messenger.Subscribe(*this, allTypes);
 
-        m_game = new ScriptAPI::GameAPI(&game);
+        m_game = new ScriptAPI::GameAPI(&game, messenger);
 
-        // Create shared Lua state
         m_luaState = luaL_newstate();
         luaL_openlibs(m_luaState);
         registerAPI();
+
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "Scripting system initialised",
             LOGGING::LogLevel::INFORMATION
@@ -68,6 +80,7 @@ public:
     }
 
     void update(const float& deltaTimeS, EC_Game& game) override {
+        if (m_shuttingDown) return;
         auto& manager = EC_DOD_EntityManager::getInstance();
 
         auto entities = manager.getEntitiesWithComponent(
@@ -81,18 +94,42 @@ public:
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
 
-            // Lock for Lua access
+            auto it = script.handlers.find(ECXEventType::system_update);
+            if (it == script.handlers.end()) continue;
+
             std::lock_guard<std::mutex> lock(m_LuaMutex);
-            callLuaFunction(script.scriptFile, "update", entity, deltaTimeS);
+            callLuaFunction(it->second, "update", entity, deltaTimeS);
         }
     }
 
     void receive(ECXEvent& event) override {
-        auto& manager = EC_DOD_EntityManager::getInstance();
+        if (m_shuttingDown) return;
 
+        auto& manager = EC_DOD_EntityManager::getInstance();
         auto entities = manager.getEntitiesWithComponent(
             std::type_index(typeid(EC_DOD_ScriptData))
         );
+
+        EntityID participantA = INVALID_ENTITY;
+        EntityID participantB = INVALID_ENTITY;
+        bool isCollision = false;
+
+        if (event.type == ECXEventType::CollisionBeginEvent) {
+            try {
+                participantA = std::any_cast<uint32_t>(event.args[1]);
+                participantB = std::any_cast<uint32_t>(event.args[2]);
+                isCollision = true;
+            }
+            catch (const std::bad_any_cast&) {}
+        }
+        else if (event.type == ECXEventType::CollisionEndEvent) {
+            try {
+                participantA = std::any_cast<uint32_t>(event.args[0]);
+                participantB = std::any_cast<uint32_t>(event.args[1]);
+                isCollision = true;
+            }
+            catch (const std::bad_any_cast&) {}
+        }
 
         for (EntityID entity : entities) {
             if (!manager.isAlive(entity)) continue;
@@ -101,52 +138,66 @@ public:
             const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
             if (!script.enabled) continue;
 
-            // Route event to appropriate Lua function
+            auto it = script.handlers.find(event.type);
+            if (it == script.handlers.end()) continue;
+
+            if (isCollision && entity != participantA && entity != participantB)
+                continue;
+
+            // Targeted dispatch (UI interaction events): only the named entity's handler
+            // fires. Unset (INVALID_ENTITY, every other event type) preserves the existing
+            // broadcast-to-all-subscribers behavior below.
+            if (event.targetEntity != INVALID_ENTITY && entity != event.targetEntity)
+                continue;
+
             const char* funcName = getEventFunctionName(event.type);
             if (funcName) {
-                // Lock for Lua access
                 std::lock_guard<std::mutex> lock(m_LuaMutex);
-                callLuaEvent(script.scriptFile, funcName, entity, event);
+                callLuaEvent(it->second, funcName, entity, event);
             }
         }
     }
 
 private:
+    std::atomic<bool> m_shuttingDown{ false };
     lua_State* m_luaState;
     ScriptAPI::GameAPI* m_game;
     std::unordered_map<std::string, bool> m_loadedScripts;
     std::mutex m_LuaMutex;
 
-    // Map event types to Lua function names
     const char* getEventFunctionName(ECXEventType type) {
         switch (type) {
-        case ECXEventType::EntityCreate:    return "onEntityCreate";
-        case ECXEventType::EntityKill:      return "onEntityKill";
-        case ECXEventType::EntityDestroy:   return "onEntityDestroy";
-        case ECXEventType::entity_loaded:   return "onEntityLoaded";
+        case ECXEventType::EntityCreate:                 return "onEntityCreate";
+        case ECXEventType::EntityKill:                   return "onEntityKill";
+        case ECXEventType::EntityDestroy:                return "onEntityDestroy";
+        case ECXEventType::entity_loaded:                return "onEntityLoaded";
         case ECXEventType::EntityStopRotation:           return "onStopRotation";
         case ECXEventType::EntityStopMotion:             return "onStopMotion";
         case ECXEventType::EntityChangePosition:         return "onPositionChanged";
         case ECXEventType::EntityChangeOrientation:      return "onOrientationChanged";
         case ECXEventType::EntityChangeAngularVelocity:  return "onAngularVelocityChanged";
         case ECXEventType::EntityChangeVelocity:         return "onVelocityChanged";
-        case ECXEventType::CollisionBeginEvent: return "onCollisionBegin";
-        case ECXEventType::CollisionEndEvent:   return "onCollisionEnd";
-        case ECXEventType::key_down:    return "onKeyDown";
-        case ECXEventType::key_up:      return "onKeyUp";
-        case ECXEventType::key_held:    return "onKeyHeld";
-        case ECXEventType::mouse_down:  return "onMouseDown";
-        case ECXEventType::mouse_up:    return "onMouseUp";
-        case ECXEventType::mouse_held:  return "onMouseHeld";
-        case ECXEventType::mouse_move:  return "onMouseMove";
-        case ECXEventType::world_loaded:    return "onWorldLoaded";
-        case ECXEventType::config_loaded:   return "onConfigLoaded";
-        case ECXEventType::system_update:   return "onSystemUpdate";
+        case ECXEventType::CollisionBeginEvent:          return "onCollisionBegin";
+        case ECXEventType::CollisionEndEvent:            return "onCollisionEnd";
+        case ECXEventType::key_down:                     return "onKeyDown";
+        case ECXEventType::key_up:                       return "onKeyUp";
+        case ECXEventType::key_held:                     return "onKeyHeld";
+        case ECXEventType::mouse_down:                   return "onMouseDown";
+        case ECXEventType::mouse_up:                     return "onMouseUp";
+        case ECXEventType::mouse_held:                   return "onMouseHeld";
+        case ECXEventType::mouse_move:                   return "onMouseMove";
+        case ECXEventType::mouse_enter:                  return "onMouseEnter";
+        case ECXEventType::mouse_leave:                  return "onMouseLeave";
+        case ECXEventType::select:                       return "onSelect";
+        case ECXEventType::unselect:                     return "onUnSelect";
+        case ECXEventType::click:                        return "onClick";
+        case ECXEventType::world_loaded:                 return "onWorldLoaded";
+        case ECXEventType::config_loaded:                return "onConfigLoaded";
+        case ECXEventType::system_update:                return "onSystemUpdate";
         default: return nullptr;
         }
     }
 
-    // NOTE: Caller must hold m_LuaMutex
     bool loadScript(const std::string& filename) {
         if (m_loadedScripts[filename]) return true;
 
@@ -176,7 +227,6 @@ private:
         return true;
     }
 
-    // NOTE: Caller must hold m_LuaMutex
     void callLuaFunction(const std::string& scriptFile, const char* funcName,
         EntityID entity, float deltaTime) {
         if (!loadScript(scriptFile)) return;
@@ -186,7 +236,6 @@ private:
             if (func.isFunction()) {
                 ScriptAPI::EntityAPI entityAPI(entity);
                 auto result = func(entityAPI, deltaTime);
-
                 if (!result) {
                     LOGGING::ECX_Logger::GetInstance()->LogMessage(
                         "Error in " + std::string(funcName) + ": " + result.errorMessage(),
@@ -203,7 +252,6 @@ private:
         }
     }
 
-    // NOTE: Caller must hold m_LuaMutex
     void callLuaEvent(const std::string& scriptFile, const char* funcName,
         EntityID entity, ECXEvent& event) {
         if (!loadScript(scriptFile)) return;
@@ -212,9 +260,8 @@ private:
             luabridge::LuaRef func = luabridge::getGlobal(m_luaState, funcName);
             if (func.isFunction()) {
                 ScriptAPI::EntityAPI entityAPI(entity);
-                ScriptAPI::EventAPI eventAPI(event, m_game->game);
+                ScriptAPI::EventAPI eventAPI(event, m_game->game, entity);
                 auto result = func(entityAPI, eventAPI);
-
                 if (!result) {
                     LOGGING::ECX_Logger::GetInstance()->LogMessage(
                         "Error in " + std::string(funcName) + ": " + result.errorMessage(),
@@ -236,6 +283,7 @@ private:
             .beginClass<ScriptAPI::EntityAPI>("Entity")
             .addFunction("getName", &ScriptAPI::EntityAPI::getName)
             .addFunction("getUID", &ScriptAPI::EntityAPI::getUID)
+            .addFunction("getID", &ScriptAPI::EntityAPI::getID)
             .addFunction("isActive", &ScriptAPI::EntityAPI::isActive)
             .addFunction("activate", &ScriptAPI::EntityAPI::activate)
             .addFunction("deactivate", &ScriptAPI::EntityAPI::deactivate)
@@ -261,6 +309,13 @@ private:
             .addFunction("getFloat", &ScriptAPI::EntityAPI::getFloat)
             .addFunction("setString", &ScriptAPI::EntityAPI::setString)
             .addFunction("getString", &ScriptAPI::EntityAPI::getString)
+            .addFunction("getColour", &ScriptAPI::EntityAPI::getColour)
+            .addFunction("setColour", &ScriptAPI::EntityAPI::setColour)
+            .addFunction("hasParent", &ScriptAPI::EntityAPI::hasParent)
+            .addFunction("getParentID", &ScriptAPI::EntityAPI::getParentID)
+            .addFunction("getDepth", &ScriptAPI::EntityAPI::getDepth)
+            .addFunction("getBlendFactor", &ScriptAPI::EntityAPI::getBlendFactor)
+            .addFunction("setBlendFactor", &ScriptAPI::EntityAPI::setBlendFactor)
             .endClass()
 
             .beginClass<ScriptAPI::EventAPI>("Event")
@@ -274,11 +329,12 @@ private:
             .addFunction("mouseButtonPressed", &ScriptAPI::EventAPI::mouseButtonPressed)
             .addFunction("mouseButtonHeld", &ScriptAPI::EventAPI::mouseButtonHeld)
             .addFunction("mouseButtonReleased", &ScriptAPI::EventAPI::mouseButtonReleased)
-            .addFunction("getOtherEntityUID", &ScriptAPI::EventAPI::getOtherEntityUID)
             .addFunction("getNewPosition", &ScriptAPI::EventAPI::getNewPosition)
             .addFunction("getNewOrientation", &ScriptAPI::EventAPI::getNewOrientation)
             .addFunction("getNewVelocity", &ScriptAPI::EventAPI::getNewVelocity)
             .addFunction("getNewAngularVelocity", &ScriptAPI::EventAPI::getNewAngularVelocity)
+            .addFunction("getCollisionEntityA", &ScriptAPI::EventAPI::getCollisionEntityA)
+            .addFunction("getCollisionEntityB", &ScriptAPI::EventAPI::getCollisionEntityB)
             .endClass()
 
             .beginClass<glm::vec3>("vec3")
@@ -288,13 +344,42 @@ private:
             .addProperty("z", &glm::vec3::z)
             .endClass()
 
+            .beginClass<glm::vec4>("vec4")
+            .addConstructor<void(*)(float, float, float, float)>()
+            .addProperty("x", &glm::vec4::x)
+            .addProperty("y", &glm::vec4::y)
+            .addProperty("z", &glm::vec4::z)
+            .addProperty("w", &glm::vec4::w)
+            .endClass()
+
             .beginClass<ScriptAPI::GameAPI>("game")
-            .addFunction("getEntity", &ScriptAPI::GameAPI::getEntity)
+            .addFunction("getEntityByName", &ScriptAPI::GameAPI::getEntityByName)
+            .addFunction("getEntityIDByUID", &ScriptAPI::GameAPI::getEntityIDByUID)
             .addFunction("getKeyState", &ScriptAPI::GameAPI::getKeyState)
             .addFunction("shutdown", &ScriptAPI::GameAPI::shutdown)
+            .addFunction("setParent", &ScriptAPI::GameAPI::setParent)
+            .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
+            .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
+            .addFunction("setExposure", &ScriptAPI::GameAPI::setExposure)
+            .addFunction("loadScene", &ScriptAPI::GameAPI::loadScene)
+            .addFunction("unloadScene", &ScriptAPI::GameAPI::unloadScene)
+            .addFunction("activateScene", &ScriptAPI::GameAPI::activateScene)
+            .addFunction("setUIText", &ScriptAPI::GameAPI::setUIText)
+            .addFunction("setUITextColour", &ScriptAPI::GameAPI::setUITextColour)
+            .addFunction("setUIPanelColour", &ScriptAPI::GameAPI::setUIPanelColour)
+            .addFunction("setUIVisible", &ScriptAPI::GameAPI::setUIVisible)
+            .addFunction("setUIPosition", &ScriptAPI::GameAPI::setUIPosition)
+            .addFunction("setUISize", &ScriptAPI::GameAPI::setUISize)
+            .addFunction("setUILayer", &ScriptAPI::GameAPI::setUILayer)
+            .addFunction("createUIElement", &ScriptAPI::GameAPI::createUIElement)
+            .addFunction("getFPS", &ScriptAPI::GameAPI::getFPS)
+            .addFunction("getMSPF", &ScriptAPI::GameAPI::getMSPF)
+            .addFunction("getRecentLogCount", &ScriptAPI::GameAPI::getRecentLogCount)
+            .addFunction("getRecentLog", &ScriptAPI::GameAPI::getRecentLog)
+            .addFunction("setMouseCaptured", &ScriptAPI::GameAPI::setMouseCaptured)
+            .addFunction("log", &ScriptAPI::GameAPI::log)
             .endClass();
 
-        // Global game reference (as pointer)
         luabridge::push(m_luaState, m_game);
         lua_setglobal(m_luaState, "game");
     }

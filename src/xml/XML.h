@@ -4,6 +4,7 @@
 #include "Window/WindowSettings.h"
 #include "Engine/Config.h"
 #include "Engine/GameModeSettings.h"
+#include "Graphics/RenderConfig.h"
 #include <string>
 #include <map>
 #include <SDL.h>
@@ -11,6 +12,41 @@
 
 namespace XML
 {
+	struct SceneDescriptor
+	{
+		std::string alias;
+		std::string filename;
+		bool precache = false;
+		bool unloadOnDeactivate = true;
+	};
+
+	inline bool loadScenesFile(const std::string& file, std::vector<SceneDescriptor>& scenes)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root || strcmp(root->Value(), "Scenes") != 0)
+			return false;
+
+		auto child = root->FirstChildElement("Scene");
+		while (child)
+		{
+			SceneDescriptor desc;
+			const char* alias = child->Attribute("alias");
+			if (alias) desc.alias = alias;
+			const char* precache = child->Attribute("precache");
+			if (precache) desc.precache = (strcmp(precache, "true") == 0);
+			const char* unload = child->Attribute("unloadondeactivate");
+			if (unload) desc.unloadOnDeactivate = (strcmp(unload, "true") == 0);
+
+			if (child->GetText()) desc.filename = child->GetText();
+			scenes.push_back(desc);
+			child = child->NextSiblingElement("Scene");
+		}
+		return true;
+	}
+
 	inline bool loadKeyMapping(const std::string& file, std::map<SDL_Scancode, std::string>& mappings)
 	{
 		TiXmlDocument doc(file.c_str());
@@ -70,10 +106,18 @@ namespace XML
 					//game controls data
 					settings.controls = child->FirstAttribute()->Value();
 				}
-				else if (strcmp(child->Value(), "GameWorlds") == 0)
+				else if (strcmp(child->Value(), "Scenes") == 0)
 				{
 					//game world data
-					settings.game_world_data = child->FirstAttribute()->Value();
+					settings.scenes_file = child->FirstAttribute()->Value();
+				}
+				else if (strcmp(child->Value(), "GraphicsSettings") == 0)
+				{
+					settings.graphics_settings = child->FirstAttribute()->Value();
+				}
+				else if (strcmp(child->Value(), "UI") == 0)
+				{
+					settings.ui_file = child->FirstAttribute()->Value();
 				}
 				child = child->NextSiblingElement();
 			}
@@ -161,6 +205,47 @@ namespace XML
 				}
 				child = child->NextSiblingElement();
 			}
+		}
+		return true;
+	}
+	inline bool loadRenderConfig(const std::string& file, RenderConfig& settings)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+		auto child = root->FirstChildElement();
+		while (child)
+		{
+			if (strcmp(child->Value(), "Exposure") == 0 && child->GetText())
+			{
+				settings.exposure = std::stof(child->GetText());
+			}
+			else if (strcmp(child->Value(), "EmissiveIntensity") == 0 && child->GetText())
+			{
+				settings.emissiveIntensity = std::stof(child->GetText());
+			}
+			else if (strcmp(child->Value(), "BloomMipLevels") == 0 && child->GetText())
+			{
+				settings.bloomMipLevels = std::stoi(child->GetText());
+			}
+			else if (strcmp(child->Value(), "ShadowAtlas") == 0)
+			{
+				const char* size = child->Attribute("size");
+				if (size) settings.shadowAtlasSize = std::stoi(size);
+				const char* tileSize = child->Attribute("tileSize");
+				if (tileSize) settings.shadowAtlasTileSize = std::stoi(tileSize);
+			}
+			else if (strcmp(child->Value(), "PointShadowPool") == 0)
+			{
+				const char* size = child->Attribute("size");
+				if (size) settings.pointShadowPoolSize = std::stoi(size);
+				const char* faceSize = child->Attribute("faceSize");
+				if (faceSize) settings.pointShadowFaceSize = std::stoi(faceSize);
+			}
+			child = child->NextSiblingElement();
 		}
 		return true;
 	}

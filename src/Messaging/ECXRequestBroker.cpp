@@ -11,10 +11,13 @@ void ECXRequestBroker::Subscribe(IRequestResponder& responder, ECXRequestType ty
 
 void ECXRequestBroker::publish(ECXRequest& Request, ECXResponse& Response)
 {
-	auto responder = requestListeners[Request.type];
-	if (responder != nullptr)
+	auto it = requestListeners.find(Request.type);
+	if (it != requestListeners.end() && it->second != nullptr)
 	{
-		Response = responder->receive(Request);
+		Response = it->second->receive(Request);
 	}
-	Response.response = ECXResponseType::Unsupported;
+	else
+	{
+		Response.response = ECXResponseType::Unsupported;
+	}
 }

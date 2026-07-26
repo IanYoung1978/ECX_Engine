@@ -12,11 +12,13 @@
 		<Gfx>
 			<PBRMaterial>
 				<Albedo>data/assets/Images/Wood_floor/Wood_floor_albedo.png</Albedo>
-				<Normal>data/assets/Images/Wood_floor/Wood_floor_normal.png</Normal>
+				<Normal>data/assets/Images/Wood_floor/Wood_floor_normal-ogl.png</Normal>
 				<Smoothness>data/assets/Images/Wood_floor/Wood_floor_smoothness.png</Smoothness>
 				<Height>data/assets/Images/Wood_floor/Wood_floor_height.png</Height>
 				<Metallic>data/assets/Images/Wood_floor/Wood_floor_metallic.png</Metallic>
 				<AO>data/assets/Images/Wood_floor/Wood_floor_ao.png</AO>
+				<ParallaxScale>0.05</ParallaxScale>
+				<ParallaxBias>0.001</ParallaxBias>
 			</PBRMaterial>
 			<Model>data/assets/models/plane.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
