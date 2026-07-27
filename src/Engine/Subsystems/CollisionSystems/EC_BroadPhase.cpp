@@ -36,6 +36,17 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
             localAABBs.reserve(entities.size());
 
             for (uint32_t entityId : entities) {
+                // A deactivated scene's entities (EC_GameScene::deactivate(), on
+                // switching scenes) must drop out of the spatial index entirely - this
+                // is the single point rendering (via queryVisibleEntities), gameplay
+                // collision, and ray/cone queries all read from, so filtering here is
+                // what actually stops a deactivated scene's geometry from continuing to
+                // render/collide/hit-test after a scene switch. EC_DOD_EntityInfo::active
+                // was previously written by scene activation but never read anywhere.
+                if (EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_EntityInfo>(entityId) &&
+                    !EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entityId).active)
+                    continue;
+
                 // Lock and get components (get() has its own locking)
                 EC_DOD_Collider collider;
                 EC_DOD_Spatial spatial;
