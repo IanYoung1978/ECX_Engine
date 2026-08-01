@@ -9,6 +9,26 @@
 	</Collision>
 	<Physics>
 		<TimeStep seconds="0.016"></TimeStep>
+		<!-- How many times Collision+Physics re-run per visual tick, each
+		     against a proportionally smaller timestep (tick/Substeps) -
+		     re-detecting collisions against whatever the previous substep
+		     just integrated instead of once per visual frame. This is the
+		     standard fix modern engines (Box2D v3's TGS Soft, Rapier) use
+		     for stacking stability: a body only marginally destabilized
+		     (e.g. a stack nudged just past its tipping point) otherwise
+		     shows a slow, unrealistic "creep" before visibly toppling,
+		     because gravity/torque integration at one big low-frequency
+		     step per frame tracks the true continuous-time dynamics poorly
+		     near a near-balanced equilibrium. 4 is a common default; 1
+		     disables substepping entirely (original behaviour). -->
+		<Substeps>4</Substeps>
+		<!-- Logs every tick's total system mechanical energy (kinetic +
+		     gravitational potential, summed across every awake dynamic body)
+		     via ECX_Logger, tagged "[ENERGY]". Off by default - meant for
+		     diagnosing solver bugs (a real bug shows as a sustained
+		     increase; kinetic energy alone isn't a useful signal here since
+		     it legitimately grows anytime something is simply falling). -->
+		<Debug><LogEnergy>false</LogEnergy></Debug>
 	</Physics>
 	
 </EngineSettings>

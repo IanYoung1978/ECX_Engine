@@ -25,6 +25,7 @@ std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_MeshAliases
 std::unordered_map<std::string, EC_DOD_EntityFactory::ShaderPaths> EC_DOD_EntityFactory::s_ShaderAliases;
 std::unordered_map<std::string, std::string> EC_DOD_EntityFactory::s_ScriptAliases;
 std::unordered_map<std::string, TiXmlElement*> EC_DOD_EntityFactory::s_MaterialElements;
+std::unordered_map<std::string, EC_DOD_EntityFactory::PhysicsMaterial> EC_DOD_EntityFactory::s_PhysicsMaterials;
 TiXmlDocument EC_DOD_EntityFactory::s_ManifestDoc;
 
 EC_DOD_EntityFactory::EC_DOD_EntityFactory() {
@@ -68,6 +69,45 @@ void EC_DOD_EntityFactory::parseManifest(TiXmlElement* manifestElem)
         {
             s_ScriptAliases[alias] = child->GetText();
         }
+        else if (strcmp(child->Value(), "PhysicsMaterial") == 0)
+        {
+            PhysicsMaterial material;
+
+            auto massElem = child->FirstChildElement("Mass");
+            if (massElem && massElem->GetText())
+                material.mass = static_cast<float>(atof(massElem->GetText()));
+
+            auto restitutionElem = child->FirstChildElement("Restitution");
+            if (restitutionElem && restitutionElem->GetText())
+                material.restitution = static_cast<float>(atof(restitutionElem->GetText()));
+
+            auto frictionElem = child->FirstChildElement("Friction");
+            if (frictionElem && frictionElem->GetText())
+                material.friction = static_cast<float>(atof(frictionElem->GetText()));
+            // Defaults to the kinetic value above (no distinct static
+            // regime) unless the material explicitly overrides it - must
+            // come after the Friction parse above so it picks up whatever
+            // that just set.
+            material.staticFriction = material.friction;
+
+            auto staticFrictionElem = child->FirstChildElement("StaticFriction");
+            if (staticFrictionElem && staticFrictionElem->GetText())
+                material.staticFriction = static_cast<float>(atof(staticFrictionElem->GetText()));
+
+            auto rollingFrictionElem = child->FirstChildElement("RollingFriction");
+            if (rollingFrictionElem && rollingFrictionElem->GetText())
+                material.rollingFriction = static_cast<float>(atof(rollingFrictionElem->GetText()));
+
+            auto linearDampingElem = child->FirstChildElement("LinearDamping");
+            if (linearDampingElem && linearDampingElem->GetText())
+                material.linearDamping = static_cast<float>(atof(linearDampingElem->GetText()));
+
+            auto angularDampingElem = child->FirstChildElement("AngularDamping");
+            if (angularDampingElem && angularDampingElem->GetText())
+                material.angularDamping = static_cast<float>(atof(angularDampingElem->GetText()));
+
+            s_PhysicsMaterials[alias] = material;
+        }
         else if (strcmp(child->Value(), "PBRMaterial") == 0)
         {
             TiXmlElement* copy = static_cast<TiXmlElement*>(child->Clone());
@@ -86,6 +126,26 @@ void EC_DOD_EntityFactory::parseManifest(TiXmlElement* manifestElem)
         }
         child = child->NextSiblingElement();
     }
+}
+
+bool EC_DOD_EntityFactory::loadManifestFile(const std::string& filename)
+{
+    if (filename.empty()) return false;
+
+    TiXmlDocument doc(filename.c_str());
+    if (!doc.LoadFile())
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Failed to load manifest file: " + filename,
+            LOGGING::LogLevel::SEVERE);
+        return false;
+    }
+
+    TiXmlElement* root = doc.FirstChildElement();
+    if (!root || strcmp(root->Value(), "Manifest") != 0) return false;
+
+    parseManifest(root);
+    return true;
 }
 
 EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
@@ -146,6 +206,8 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
             parseCollider(elem, entity);
             hasCollider = true;
         }
+        else if (strcmp(elem->Value(), "RigidBody") == 0)
+            parseRigidBody(elem, entity);
         else if (strcmp(elem->Value(), "Hierarchy") == 0)
             parseHierarchy(elem, entity);
         else if (strcmp(elem->Value(), "Skybox") == 0)
@@ -765,6 +827,81 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
         collider.collisionMask = static_cast<uint32_t>(strtoul(maskElem->GetText(), nullptr, 0));
 
     manager.addComponent(entity, collider);
+}
+
+void EC_DOD_EntityFactory::parseRigidBody(TiXmlElement* elem, EntityID entity) {
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    EC_DOD_RigidBody rigidBody;
+
+    // A named material seeds mass/restitution as defaults; explicit
+    // <Mass>/<Restitution> tags below still override it per-entity.
+    const char* materialAttr = elem->Attribute("material");
+    if (materialAttr)
+    {
+        auto it = s_PhysicsMaterials.find(materialAttr);
+        if (it != s_PhysicsMaterials.end())
+        {
+            rigidBody.mass = it->second.mass;
+            rigidBody.restitution = it->second.restitution;
+            rigidBody.friction = it->second.friction;
+            rigidBody.staticFriction = it->second.staticFriction;
+            rigidBody.rollingFriction = it->second.rollingFriction;
+            rigidBody.linearDamping = it->second.linearDamping;
+            rigidBody.angularDamping = it->second.angularDamping;
+        }
+        else
+        {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "RigidBody: unknown material '" + std::string(materialAttr) + "'",
+                LOGGING::LogLevel::WARNING);
+        }
+    }
+
+    auto massElem = elem->FirstChildElement("Mass");
+    if (massElem && massElem->GetText())
+        rigidBody.mass = static_cast<float>(atof(massElem->GetText()));
+
+    auto restitutionElem = elem->FirstChildElement("Restitution");
+    if (restitutionElem && restitutionElem->GetText())
+        rigidBody.restitution = static_cast<float>(atof(restitutionElem->GetText()));
+
+    auto frictionElem = elem->FirstChildElement("Friction");
+    if (frictionElem && frictionElem->GetText())
+        rigidBody.friction = static_cast<float>(atof(frictionElem->GetText()));
+
+    auto staticFrictionElem = elem->FirstChildElement("StaticFriction");
+    if (staticFrictionElem && staticFrictionElem->GetText())
+        rigidBody.staticFriction = static_cast<float>(atof(staticFrictionElem->GetText()));
+
+    auto rollingFrictionElem = elem->FirstChildElement("RollingFriction");
+    if (rollingFrictionElem && rollingFrictionElem->GetText())
+        rigidBody.rollingFriction = static_cast<float>(atof(rollingFrictionElem->GetText()));
+
+    auto linearDampingElem = elem->FirstChildElement("LinearDamping");
+    if (linearDampingElem && linearDampingElem->GetText())
+        rigidBody.linearDamping = static_cast<float>(atof(linearDampingElem->GetText()));
+
+    auto angularDampingElem = elem->FirstChildElement("AngularDamping");
+    if (angularDampingElem && angularDampingElem->GetText())
+        rigidBody.angularDamping = static_cast<float>(atof(angularDampingElem->GetText()));
+
+    auto staticElem = elem->FirstChildElement("Static");
+    if (staticElem && staticElem->GetText())
+        rigidBody.isStatic = (strcmp(staticElem->GetText(), "true") == 0);
+
+    // Lets an author start a body already asleep (motionless, no gravity)
+    // rather than waiting for it to settle down naturally - e.g. a stack
+    // placed already at rest, which should stay perfectly still until
+    // actually disturbed instead of drifting through its initial settle.
+    auto sleepingElem = elem->FirstChildElement("Sleeping");
+    if (sleepingElem && sleepingElem->GetText())
+        rigidBody.isSleeping = (strcmp(sleepingElem->GetText(), "true") == 0);
+
+    manager.addComponent(entity, rigidBody);
+    // Every RigidBody needs somewhere for collision resolution to cache its
+    // per-tick momentum contributions; without this the physics system's
+    // hasComponent<EC_DOD_ImpulseAccumulator> check silently drops them.
+    manager.addComponent(entity, EC_DOD_ImpulseAccumulator{});
 }
 
 void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {

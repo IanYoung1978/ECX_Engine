@@ -9,6 +9,7 @@
 #include "Components/EC_DOD_Components.h"
 #include "EC_CollisionShapes.h"
 #include "Spatial/EC_SpatialGrid.h"
+#include "Spatial/RayQueryHit.h"
 
 class EC_Game;
 class ECXMessenger;
@@ -30,11 +31,33 @@ private:
 		AABB worldAABB;
 		uint32_t collisionLayer;
 		uint32_t collisionMask;
+		// Raw collider/spatial (not just the derived AABB) so ray/cone queries can run a
+		// precise per-shape test entirely from this mutex-protected snapshot, instead of
+		// reading live component arrays from another thread at request time.
+		EC_DOD_Collider collider;
+		EC_DOD_Spatial spatial;
 	};
+
+	// castsShadow (EC_DOD_GraphicsData::castsShadow) is looked up live, on demand, only for
+	// candidates that already survived the coarse spatial/angle filters in castRay/
+	// handleConeCheck - NOT cached per-entity in broadPhaseCollisionDetection()'s per-tick
+	// snapshot. That loop runs on the physics thread's unthrottled busy-spin
+	// (EC_PhysicsThreadTask::execute() has no sleep), so adding a second component-array
+	// lookup there for every collider entity, every tick, regardless of whether anything is
+	// even querying, was measurable unwanted overhead on a hot path - not worth it for a
+	// property only ray/cone queries ever consult.
+	bool entityCastsShadow(EntityID entity) const;
 
 	AABB computeWorldAABB(const EC_DOD_Collider& collider, const EC_DOD_Spatial& spatial);
 	ECXResponse handleFrustumCheck(ECXRequest& request);
 	ECXResponse handleEntitySearch(ECXRequest& request);
+	ECXResponse handleRayCheck(ECXRequest& request);
+	ECXResponse handleConeCheck(ECXRequest& request);
+	// Shared broad+precise ray logic used directly by handleRayCheck and, for the
+	// "unobstructed line-of-sight to apex" test, by handleConeCheck - the code-level link
+	// satisfying Issue #29's stated dependency on Issue #30.
+	std::vector<RayQueryHit> castRay(const glm::vec3& origin, const glm::vec3& dir, float maxDistance,
+		uint32_t layerMask, bool requireCastsShadow, bool firstHitOnly);
 
 	EC_PairManager m_PairManager;
 

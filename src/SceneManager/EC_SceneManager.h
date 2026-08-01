@@ -54,4 +54,5 @@ private:
     std::unordered_set<size_t> m_LoadingScenes;
     EC_Game* m_Game = nullptr;
     std::mutex m_Lock;
+    bool m_InitialPauseDone = false;
 };

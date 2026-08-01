@@ -66,3 +66,8 @@ EC_CollisionPair& EC_PairManager::getNextPair()
 	return s_Pairs[s_CurrentPairIndex++];
 }
 
+std::vector<EC_CollisionPair>& EC_PairManager::getAllPairs()
+{
+	return s_Pairs;
+}
+

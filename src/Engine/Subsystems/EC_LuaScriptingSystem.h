@@ -357,6 +357,8 @@ private:
             .addFunction("getEntityIDByUID", &ScriptAPI::GameAPI::getEntityIDByUID)
             .addFunction("getKeyState", &ScriptAPI::GameAPI::getKeyState)
             .addFunction("shutdown", &ScriptAPI::GameAPI::shutdown)
+            .addFunction("pauseGame", &ScriptAPI::GameAPI::pauseGame)
+            .addFunction("resumeGame", &ScriptAPI::GameAPI::resumeGame)
             .addFunction("setParent", &ScriptAPI::GameAPI::setParent)
             .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
             .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
@@ -378,6 +380,17 @@ private:
             .addFunction("getRecentLog", &ScriptAPI::GameAPI::getRecentLog)
             .addFunction("setMouseCaptured", &ScriptAPI::GameAPI::setMouseCaptured)
             .addFunction("log", &ScriptAPI::GameAPI::log)
+            .addFunction("rayQuery", &ScriptAPI::GameAPI::rayQuery)
+            .addFunction("getRayHitEntity", &ScriptAPI::GameAPI::getRayHitEntity)
+            .addFunction("getRayHitPosition", &ScriptAPI::GameAPI::getRayHitPosition)
+            .addFunction("getRayHitNormal", &ScriptAPI::GameAPI::getRayHitNormal)
+            .addFunction("getRayHitDistance", &ScriptAPI::GameAPI::getRayHitDistance)
+            .addFunction("coneQuery", &ScriptAPI::GameAPI::coneQuery)
+            .addFunction("getConeHitEntity", &ScriptAPI::GameAPI::getConeHitEntity)
+            .addFunction("getConeHitPosition", &ScriptAPI::GameAPI::getConeHitPosition)
+            .addFunction("getConeHitDistance", &ScriptAPI::GameAPI::getConeHitDistance)
+            .addFunction("showDebugRay", &ScriptAPI::GameAPI::showDebugRay)
+            .addFunction("showDebugCone", &ScriptAPI::GameAPI::showDebugCone)
             .endClass();
 
         luabridge::push(m_luaState, m_game);

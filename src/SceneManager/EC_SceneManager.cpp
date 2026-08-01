@@ -39,9 +39,12 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     m_Engine.init(m_Settings.engine_settings, game, messenger);
 
     EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
+    EC_DOD_EntityFactory::loadManifestFile(m_Settings.physics_materials_file);
 
     messenger.Subscribe(*this, ECXCommandType::SystemStart);
     messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
+    messenger.Subscribe(*this, ECXCommandType::GamePause);
+    messenger.Subscribe(*this, ECXCommandType::GameResume);
 
     RenderConfig renderConfig;
     if (!XML::loadRenderConfig(m_Settings.graphics_settings, renderConfig))
@@ -125,6 +128,19 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "Load complete!",
             LOGGING::LogLevel::INFORMATION);
+
+        if (!m_InitialPauseDone)
+        {
+            // First scene load has finished - all its entities (and their
+            // Transform components) now exist. Bake a correct initial
+            // transform/camera state once, synchronously, then pause so
+            // that first frame (rather than an identity-matrix/origin frame,
+            // or several seconds of unwatched physics) is what's shown until
+            // the player resumes.
+            m_Engine.stepOnce(1.0f / 60.0f);
+            m_Engine.pause();
+            m_InitialPauseDone = true;
+        }
     }
 
     if (m_Loader->isLoading())
@@ -272,5 +288,13 @@ void EC_SceneManager::receive(ECXCommand& command)
     if (command.type == ECXCommandType::SystemStart)
     {
         m_Engine.start();
+    }
+    if (command.type == ECXCommandType::GamePause)
+    {
+        m_Engine.pause();
+    }
+    if (command.type == ECXCommandType::GameResume)
+    {
+        m_Engine.resume();
     }
 }

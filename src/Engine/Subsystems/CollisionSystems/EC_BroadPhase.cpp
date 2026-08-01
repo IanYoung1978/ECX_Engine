@@ -4,8 +4,12 @@
 #include "Messaging/ECXResponse.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include "EC_CollisionShapes.h"
+#include "EC_RayIntersection.h"
+#include "EC_GJK.h"
+#include "EC_ConvexSupport.h"
 #include "Spatial/EC_Frustum.h"
 #include <limits>
+#include <cmath>
 
 void EC_BroadPhase::broadPhaseCollisionDetection()
 {
@@ -32,6 +36,17 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
             localAABBs.reserve(entities.size());
 
             for (uint32_t entityId : entities) {
+                // A deactivated scene's entities (EC_GameScene::deactivate(), on
+                // switching scenes) must drop out of the spatial index entirely - this
+                // is the single point rendering (via queryVisibleEntities), gameplay
+                // collision, and ray/cone queries all read from, so filtering here is
+                // what actually stops a deactivated scene's geometry from continuing to
+                // render/collide/hit-test after a scene switch. EC_DOD_EntityInfo::active
+                // was previously written by scene activation but never read anywhere.
+                if (EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_EntityInfo>(entityId) &&
+                    !EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entityId).active)
+                    continue;
+
                 // Lock and get components (get() has its own locking)
                 EC_DOD_Collider collider;
                 EC_DOD_Spatial spatial;
@@ -47,8 +62,10 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
 
                 // Compute world-space AABB from collider bounds
                 AABB worldAABB = computeWorldAABB(collider, spatial);
+
                 localIndex[entityId] = localAABBs.size();
-                localAABBs.push_back({ entityId, worldAABB, collider.collisionLayer, collider.collisionMask });
+                localAABBs.push_back({ entityId, worldAABB, collider.collisionLayer, collider.collisionMask,
+                    collider, spatial });
                 localGrid.insert(entityId, worldAABB);
             }
 
@@ -110,6 +127,8 @@ void EC_BroadPhase::init(ECXMessenger& messenger)
 {
 	messenger.Subscribe(*this, ECXRequestType::FrustumCheck);
 	messenger.Subscribe(*this, ECXRequestType::EntitySearch);
+	messenger.Subscribe(*this, ECXRequestType::RayCheck);
+	messenger.Subscribe(*this, ECXRequestType::ConeCheck);
 }
 
 ECXResponse EC_BroadPhase::receive(ECXRequest& request)
@@ -120,6 +139,10 @@ ECXResponse EC_BroadPhase::receive(ECXRequest& request)
 		return handleFrustumCheck(request);
 	case ECXRequestType::EntitySearch:
 		return handleEntitySearch(request);
+	case ECXRequestType::RayCheck:
+		return handleRayCheck(request);
+	case ECXRequestType::ConeCheck:
+		return handleConeCheck(request);
 	default:
 	{
 		ECXResponse response;
@@ -226,6 +249,231 @@ ECXResponse EC_BroadPhase::handleEntitySearch(ECXRequest& request)
 
 	response.response = ECXResponseType::Success;
 	response.responseData.push_back(result);
+	return response;
+}
+
+// castsShadow (EC_DOD_GraphicsData::castsShadow) is only ever consulted by ray/cone
+// queries, so it's looked up live here rather than cached per-entity in
+// broadPhaseCollisionDetection()'s per-tick snapshot - that loop runs on the physics
+// thread's unthrottled busy-spin (EC_PhysicsThreadTask::execute()), so paying this cost
+// for every collider entity on every tick, regardless of whether anyone is even
+// querying, is wasted work on a hot path. Entities with no graphics component (pure
+// trigger volumes etc.) default to true so they don't silently disappear from ray
+// queries that don't care about shadows.
+bool EC_BroadPhase::entityCastsShadow(EntityID entity) const
+{
+	auto& manager = EC_DOD_EntityManager::getInstance();
+	if (!manager.hasComponent<EC_DOD_GraphicsData>(entity))
+		return true;
+	return manager.getComponent<EC_DOD_GraphicsData>(entity).castsShadow;
+}
+
+// Shared broad+precise ray logic (Issue #30) used directly by handleRayCheck, and by
+// handleConeCheck for its "unobstructed line-of-sight to apex" occlusion test - this is
+// the code-level link satisfying Issue #29's stated dependency on #30.
+std::vector<RayQueryHit> EC_BroadPhase::castRay(const glm::vec3& origin, const glm::vec3& dir, float maxDistance,
+	uint32_t layerMask, bool requireCastsShadow, bool firstHitOnly)
+{
+	std::vector<RayQueryHit> hits;
+
+	glm::vec3 end = origin + dir * maxDistance;
+	AABB sweptBounds{ glm::min(origin, end), glm::max(origin, end) };
+
+	bool haveBest = false;
+	RayQueryHit best;
+
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto candidates = m_SpatialGrid.queryAABB(sweptBounds);
+
+		for (EntityID candidate : candidates)
+		{
+			auto it = m_EntityIndex.find(candidate);
+			if (it == m_EntityIndex.end())
+				continue;
+			const EntityAABB& entry = m_EntityAABBs[it->second];
+			if ((entry.collisionLayer & layerMask) == 0)
+				continue;
+			if (requireCastsShadow && !entityCastsShadow(candidate))
+				continue;
+
+			RayIntersectionResult result = EC_RayIntersection::rayVsCollider(origin, dir, entry.collider, entry.spatial);
+			if (!result.hit || result.distance > maxDistance)
+				continue;
+
+			RayQueryHit hit{ candidate, result.position, result.normal, result.distance };
+
+			if (firstHitOnly)
+			{
+				if (!haveBest || hit.distance < best.distance)
+				{
+					best = hit;
+					haveBest = true;
+				}
+			}
+			else
+			{
+				hits.push_back(hit);
+			}
+		}
+	}
+
+	if (firstHitOnly)
+	{
+		if (haveBest)
+			hits.push_back(best);
+		return hits;
+	}
+
+	std::sort(hits.begin(), hits.end(), [](const RayQueryHit& a, const RayQueryHit& b) {
+		return a.distance < b.distance;
+		});
+	return hits;
+}
+
+ECXResponse EC_BroadPhase::handleRayCheck(ECXRequest& request)
+{
+	ECXResponse response;
+	glm::vec3 origin, direction;
+	float maxDistance = 0.0f;
+	uint32_t layerMask = 0xFFFFFFFFu;
+	bool firstHitOnly = false;
+
+	try {
+		origin = std::any_cast<glm::vec3>(request.args[0]);
+		direction = std::any_cast<glm::vec3>(request.args[1]);
+		maxDistance = std::any_cast<float>(request.args[2]);
+		if (request.args[3].has_value())
+			layerMask = std::any_cast<uint32_t>(request.args[3]);
+		if (request.args[4].has_value())
+			firstHitOnly = std::any_cast<bool>(request.args[4]);
+	}
+	catch (const std::bad_any_cast&) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+
+	if (glm::dot(direction, direction) < 1e-8f) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+	direction = glm::normalize(direction);
+
+	std::vector<RayQueryHit> hits = castRay(origin, direction, maxDistance, layerMask,
+		/*requireCastsShadow*/ false, firstHitOnly);
+
+	response.response = ECXResponseType::Success;
+	response.responseData.push_back(hits);
+	return response;
+}
+
+ECXResponse EC_BroadPhase::handleConeCheck(ECXRequest& request)
+{
+	ECXResponse response;
+	glm::vec3 apex, direction;
+	float halfAngleRadians = 0.0f;
+	float maxDistance = 0.0f;
+	uint32_t layerMask = 0xFFFFFFFFu;
+	bool castsShadowOnly = true;
+	bool checkOcclusion = false;
+
+	try {
+		apex = std::any_cast<glm::vec3>(request.args[0]);
+		direction = std::any_cast<glm::vec3>(request.args[1]);
+		halfAngleRadians = std::any_cast<float>(request.args[2]);
+		maxDistance = std::any_cast<float>(request.args[3]);
+		if (request.args[4].has_value())
+			layerMask = std::any_cast<uint32_t>(request.args[4]);
+		if (request.args[5].has_value())
+			castsShadowOnly = std::any_cast<bool>(request.args[5]);
+		if (request.args[6].has_value())
+			checkOcclusion = std::any_cast<bool>(request.args[6]);
+	}
+	catch (const std::bad_any_cast&) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+
+	if (glm::dot(direction, direction) < 1e-8f) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+	direction = glm::normalize(direction);
+
+	// Broad-phase candidates: bounding box of a sphere of radius maxDistance around the
+	// apex (simpler than a tight cone bound, and cheap since the grid query itself is
+	// coarse - the exact GJK cone-vs-shape test below does the real filtering).
+	AABB queryRegion{ apex - glm::vec3(maxDistance), apex + glm::vec3(maxDistance) };
+
+	// Support function for the cone itself (apex + a finite base disk of radius
+	// maxDistance*tan(halfAngle) at distance maxDistance) - the convex hull of a point
+	// and a disk. Paired with EC_RayIntersection::colliderSupport() via EC_GJK::intersects,
+	// this is an exact geometric cone-vs-shape test (not a bounding-sphere/corner
+	// approximation), consistent with the debug wireframe drawn for the same cone.
+	// EC_ConvexSupport::coneSupport is the same function EC_GJK_Tests.cpp exercises in
+	// isolation.
+	EC_GJK::SupportFn coneSupport = [&apex, &direction, halfAngleRadians, maxDistance](const glm::vec3& dir) {
+		return EC_ConvexSupport::coneSupport(apex, direction, halfAngleRadians, maxDistance, dir);
+	};
+
+	std::vector<std::pair<EntityID, glm::vec3>> candidatesInCone;
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto candidates = m_SpatialGrid.queryAABB(queryRegion);
+		for (EntityID candidate : candidates)
+		{
+			auto it = m_EntityIndex.find(candidate);
+			if (it == m_EntityIndex.end())
+				continue;
+			const EntityAABB& entry = m_EntityAABBs[it->second];
+			if ((entry.collisionLayer & layerMask) == 0)
+				continue;
+			if (castsShadowOnly && !entityCastsShadow(candidate))
+				continue;
+			// Plane/Frustum/None have no bounded support function (colliderSupport()'s
+			// degenerate single-point fallback would misrepresent them in a real GJK
+			// test) - not valid cone targets, matching rayVsCollider's exclusion.
+			if (entry.collider.type == EC_DOD_Collider::Type::Plane ||
+				entry.collider.type == EC_DOD_Collider::Type::Frustum ||
+				entry.collider.type == EC_DOD_Collider::Type::None)
+				continue;
+
+			EC_GJK::SupportFn shapeSupport = [&entry](const glm::vec3& dir) {
+				return EC_RayIntersection::colliderSupport(entry.collider, entry.spatial, dir);
+			};
+			if (!EC_GJK::intersects(coneSupport, shapeSupport))
+				continue;
+
+			glm::vec3 candidatePos = entry.spatial.position + entry.collider.center;
+			candidatesInCone.emplace_back(candidate, candidatePos);
+		}
+	}
+
+	// Pure geometric containment by default - every entity whose shape overlaps the
+	// cone. checkOcclusion opts into additionally requiring unobstructed line-of-sight
+	// to the apex (a candidate stacked behind a closer one along the same line is
+	// excluded) - an independent, optional layer on top of containment, not fused into
+	// it, since callers may want either.
+	std::vector<RayQueryHit> results;
+	results.reserve(candidatesInCone.size());
+	for (const auto& [candidateEntity, candidatePos] : candidatesInCone)
+	{
+		float dist = glm::length(candidatePos - apex);
+
+		if (checkOcclusion)
+		{
+			glm::vec3 rayDir = (candidatePos - apex) / dist;
+			std::vector<RayQueryHit> occlusionHits = castRay(apex, rayDir, dist, layerMask,
+				castsShadowOnly, /*firstHitOnly*/ true);
+			if (occlusionHits.empty() || occlusionHits[0].entity != candidateEntity)
+				continue; // nothing hit, or something closer blocks line of sight
+		}
+
+		results.push_back(RayQueryHit{ candidateEntity, candidatePos, glm::vec3(0.0f), dist });
+	}
+
+	response.response = ECXResponseType::Success;
+	response.responseData.push_back(results);
 	return response;
 }
 

@@ -5,6 +5,10 @@
 #include "Engine/Config.h"
 #include "Logging/ECX_Logging.h"
 #include "Components/EC_DOD_Components.h"
+#include "Messaging/ECXRequest.h"
+#include "Messaging/ECXResponse.h"
+#include "Messaging/ECXRequestType.h"
+#include <cmath>
 
 EC_Game::EC_Game() : m_Running(true) {}
 
@@ -107,6 +111,20 @@ void EC_Game::shutDown()
     m_Messenger.publish(command);
 }
 
+void EC_Game::pauseGame()
+{
+    ECXCommand command;
+    command.type = ECXCommandType::GamePause;
+    m_Messenger.publish(command);
+}
+
+void EC_Game::resumeGame()
+{
+    ECXCommand command;
+    command.type = ECXCommandType::GameResume;
+    m_Messenger.publish(command);
+}
+
 void EC_Game::update(const float& deltaTimeS)
 {
     if (m_Running)
@@ -137,6 +155,58 @@ void EC_Game::setMouseCaptured(bool captured)
 bool EC_Game::isMouseButtonPressed(MouseButton button)
 {
     return m_Controls->getMouse()->keyPressed(button);
+}
+
+std::vector<RayQueryHit> EC_Game::queryRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance,
+    bool firstHitOnly, uint32_t layerMask)
+{
+    ECXRequest request;
+    request.type = ECXRequestType::RayCheck;
+    request.args[0] = origin;
+    request.args[1] = direction;
+    request.args[2] = maxDistance;
+    request.args[3] = layerMask;
+    request.args[4] = firstHitOnly;
+
+    ECXResponse response;
+    m_Messenger.publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        return std::any_cast<std::vector<RayQueryHit>>(response.responseData[0]);
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
+}
+
+std::vector<RayQueryHit> EC_Game::queryCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees,
+    float maxDistance, bool castsShadowOnly, bool checkOcclusion, uint32_t layerMask)
+{
+    ECXRequest request;
+    request.type = ECXRequestType::ConeCheck;
+    request.args[0] = apex;
+    request.args[1] = direction;
+    request.args[2] = glm::radians(halfAngleDegrees);
+    request.args[3] = maxDistance;
+    request.args[4] = layerMask;
+    request.args[5] = castsShadowOnly;
+    request.args[6] = checkOcclusion;
+
+    ECXResponse response;
+    m_Messenger.publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        return std::any_cast<std::vector<RayQueryHit>>(response.responseData[0]);
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
 }
 
 std::shared_ptr<Window> EC_Game::getWindow()

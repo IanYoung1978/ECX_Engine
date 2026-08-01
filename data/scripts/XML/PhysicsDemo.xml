@@ -1,0 +1,354 @@
+<?xml version="1.0"?>
+<Scene>
+	<Entity uid="200" name="physicsdemo_skybox">
+		<Skybox>
+			<HDR>data/assets/Images/Skybox/qwantani_moon_noon_puresky_4k.hdr</HDR>
+		</Skybox>
+	</Entity>
+
+	<!-- Camera faces +Z (Orientation 0,0,0), placed further back and higher
+	     than the original single-column demo to fit the current 6-5-4-3-2
+	     pyramid (bottom row spans x=-6..6, apex at y=10) plus the ball's
+	     roll-in along the ground, all in frame from the first frame. -->
+	<Entity uid="201" name="physicsdemo_camera">
+		<Camera>
+			<FOV>60.0</FOV>
+			<DrawDistance>300.0</DrawDistance>
+		</Camera>
+		<Spatial>
+			<Position>0.0,5.0,-26.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<ScriptComponent>
+			<OnKeyDown filename="data/scripts/LUA/OnKeyDown.lua"/>
+			<OnKeyUp filename="data/scripts/LUA/OnKeyUp.lua"/>
+			<OnKeyHeld filename="data/scripts/LUA/OnKeyHeld.lua"/>
+			<OnMouseMove filename="data/scripts/LUA/onMouseMove.lua"/>
+			<OnUpdate filename="data/scripts/LUA/DebugOverlay.lua"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="202" name="physicsdemo_sun">
+		<Light>
+			<Type>Directional</Type>
+			<Direction>0.3,-1.0,0.2,0.0</Direction>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Intensity>0.8</Intensity>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>true</Dynamic>
+		</Light>
+	</Entity>
+
+	<!-- Collision-based impulse physics demo (Issue: cube stack + rolling ball).
+	     Floor is a single entity with both the visible plane mesh and a real
+	     (non-zero mask) AABB collider, so cubes/ball actually rest on it -
+	     unlike auto-generated colliders on purely visual geometry elsewhere,
+	     which default to collisionMask=0 and never form gameplay pairs. -->
+	<Entity name="physicsdemo_floor">
+		<Spatial><Position>0.0,0.0,0.0</Position></Spatial>
+		<Transform><Scale>20.0,1.0,20.0</Scale></Transform>
+		<Collider><Type>AABB</Type><Extents>20.0,0.5,20.0</Extents><Center>0.0,-0.5,0.0</Center></Collider>
+		<Gfx>
+			<PBRMaterial>
+				<Albedo>data/assets/Images/Wood_floor/Wood_floor_albedo.png</Albedo>
+				<Normal>data/assets/Images/Wood_floor/Wood_floor_normal-ogl.png</Normal>
+				<Smoothness>data/assets/Images/Wood_floor/Wood_floor_smoothness.png</Smoothness>
+				<Height>data/assets/Images/Wood_floor/Wood_floor_height.png</Height>
+				<Metallic>data/assets/Images/Wood_floor/Wood_floor_metallic.png</Metallic>
+				<AO>data/assets/Images/Wood_floor/Wood_floor_ao.png</AO>
+				<ParallaxScale>0.05</ParallaxScale>
+				<ParallaxBias>0.001</ParallaxBias>
+			</PBRMaterial>
+			<Model>data/assets/models/plane.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+		</Gfx>
+	</Entity>
+
+	<!-- Boundary walls (west/east/north) so a knocked cube or the ball slides
+	     to a stop instead of running off the finite floor - the floor is
+	     40x40 (extents 20), so walls sit at the +-20 edges. Plain axis-aligned
+	     boxes (cube.obj non-uniformly scaled) - no <Orientation> needed, unlike
+	     the rotated-plane walls elsewhere in the codebase. South side (camera's
+	     side) is left open so the view isn't fenced in. -->
+	<Entity name="physicsdemo_wall_west">
+		<Spatial><Position>-20.0,2.0,0.0</Position></Spatial>
+		<Transform><Scale>0.5,2.0,20.0</Scale></Transform>
+		<Collider><Type>AABB</Type><Extents>0.5,2.0,20.0</Extents></Collider>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.55,0.55,0.6,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_wall_east">
+		<Spatial><Position>20.0,2.0,0.0</Position></Spatial>
+		<Transform><Scale>0.5,2.0,20.0</Scale></Transform>
+		<Collider><Type>AABB</Type><Extents>0.5,2.0,20.0</Extents></Collider>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.55,0.55,0.6,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_wall_north">
+		<Spatial><Position>0.0,2.0,20.0</Position></Spatial>
+		<Transform><Scale>20.0,2.0,0.5</Scale></Transform>
+		<Collider><Type>AABB</Type><Extents>20.0,2.0,0.5</Extents></Collider>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.55,0.55,0.6,1.0</Colour>
+		</Gfx>
+	</Entity>
+
+	<!-- South wall at z=-20, closing the one side previously left open.
+	     Sits behind the camera (camera is at z=-18, facing +Z) so it never
+	     enters view - without it, a cube given any residual southward
+	     velocity eventually crosses the floor's edge and falls through the
+	     world entirely, since the floor is a single finite AABB with
+	     nothing past its extents. -->
+	<Entity name="physicsdemo_wall_south">
+		<Spatial><Position>0.0,2.0,-20.0</Position></Spatial>
+		<Transform><Scale>20.0,2.0,0.5</Scale></Transform>
+		<Collider><Type>AABB</Type><Extents>20.0,2.0,0.5</Extents></Collider>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.55,0.55,0.6,1.0</Colour>
+		</Gfx>
+	</Entity>
+
+	<Entity name="physicsdemo_cube_0">
+		<Spatial><Position>-5.0,1.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_1">
+		<Spatial><Position>-3.0,1.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_2">
+		<Spatial><Position>-1.0,1.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_3">
+		<Spatial><Position>1.0,1.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_4">
+		<Spatial><Position>3.0,1.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_5">
+		<Spatial><Position>5.0,1.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_6">
+		<Spatial><Position>-4.0,3.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_7">
+		<Spatial><Position>-2.0,3.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_8">
+		<Spatial><Position>0.0,3.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_9">
+		<Spatial><Position>2.0,3.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_10">
+		<Spatial><Position>4.0,3.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_11">
+		<Spatial><Position>-3.0,5.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_12">
+		<Spatial><Position>-1.0,5.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_13">
+		<Spatial><Position>1.0,5.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_14">
+		<Spatial><Position>3.0,5.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_15">
+		<Spatial><Position>-2.0,7.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_16">
+		<Spatial><Position>0.0,7.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_17">
+		<Spatial><Position>2.0,7.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_18">
+		<Spatial><Position>-1.0,9.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+	<Entity name="physicsdemo_cube_19">
+		<Spatial><Position>1.0,9.0,0.0</Position></Spatial>
+		<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+		<Collider><Type>OBB</Type><Extents>1.0,1.0,1.0</Extents></Collider>
+		<RigidBody material="Wood"><Sleeping>true</Sleeping></RigidBody>
+		<Gfx>
+			<Model>data/assets/models/cube.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.9,0.6,0.2,1.0</Colour>
+		</Gfx>
+	</Entity>
+
+	<Entity name="physicsdemo_ball">
+		<Spatial><Position>-1.0,1.5,-12.0</Position><Velocity>0.0,4.0,25.0</Velocity></Spatial>
+		<Transform><Scale>1.5,1.5,1.5</Scale></Transform>
+		<Collider><Type>Sphere</Type><Radius>1.5</Radius></Collider>
+		<RigidBody material="Metal"/>
+		<Gfx>
+			<Model>data/assets/models/icosphere.obj</Model>
+			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+			<Colour>0.2,0.4,0.9,1.0</Colour>
+		</Gfx>
+	</Entity>
+
+</Scene>
