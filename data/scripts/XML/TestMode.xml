@@ -5,4 +5,5 @@
 	<Scenes filename="data/scripts/XML/Scenes.xml"></Scenes>
 	<GraphicsSettings filename="data/scripts/XML/GraphicsSetting.xml"/>
 	<UI filename="data/scripts/XML/UI.xml"/>
+	<PhysicsMaterials filename="data/scripts/XML/PhysicsMaterials.xml"/>
 </GameMode>

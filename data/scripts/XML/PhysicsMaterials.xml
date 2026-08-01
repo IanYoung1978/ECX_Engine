@@ -1,0 +1,94 @@
+<?xml version="1.0"?>
+<!-- Named rigid-body presets, loaded once at startup (see TestMode.xml's
+     <PhysicsMaterials> entry) and shared by every scene. Referenced from an
+     entity via <RigidBody material="Alias">...</RigidBody> - any <Mass>/
+     <Restitution>/<Friction>/<StaticFriction>/<RollingFriction>/
+     <LinearDamping>/<AngularDamping> tags authored on that entity still
+     override the preset. Edit this file directly; no rebuild needed, only
+     a relaunch.
+
+     Friction is the KINETIC (sliding) coefficient - it caps the friction
+     impulse once a contact is already slipping. StaticFriction is the
+     separate, normally higher threshold a contact's tangential impulse must
+     exceed before it's allowed to start slipping at all (see
+     EC_PhysicsResolution::accumulateContactPoint) - real materials are
+     almost always harder to START sliding than to KEEP sliding (e.g. wood
+     on wood: ~0.5 static vs ~0.3 kinetic in reality; the values below are
+     tuned for this engine's demo scenes rather than lab measurements, but
+     keep that same static > kinetic relationship). Omitting StaticFriction
+     defaults it to match Friction (no distinct static regime).
+
+     RollingFriction is a SEPARATE, much smaller coefficient resisting
+     ROLLING (not sliding) at a contact - the standard fix (Bullet calls it
+     the same thing) for a box balanced on an edge/corner, or a ball/
+     cylinder, rotating indefinitely with zero tangential slip at its
+     contact point, which ordinary sliding friction can never arrest since
+     rolling-without-slipping satisfies the no-slip condition perfectly.
+     Keep this an order of magnitude below Friction/StaticFriction for
+     EVERY material, not just Metal - it's evaluated fresh against
+     whatever angular velocity exists at the START of each tick, so a
+     coefficient anywhere near sliding-friction scale can fully cancel a
+     genuine gravity-driven topple's angular velocity increment before it
+     has a chance to build up (the impulse needed to arrest a SMALL,
+     just-starting angular velocity is itself small, well within a large
+     coefficient's budget against a loaded contact's normal impulse) -
+     that reads as a large, obviously-unstable overhang crawling over
+     several real seconds instead of toppling in a fraction of one. A
+     genuinely settled near-zero roll only ever needs a tiny nudge to
+     fully stop, so a small coefficient is still enough to kill it -
+     0.005-0.02 across the board here.
+
+     AngularDamping in particular models real energy loss to air resistance
+     and micro-deformation at the contact patch (see EC_PhysicsSystem) -
+     typical range 0.05-0.20/s. Ice is the deliberate low outlier (it
+     genuinely shouldn't settle quickly); everything else sits inside that
+     range so a knocked/rolling body actually comes to rest instead of
+     coasting indefinitely once it reaches a no-slip roll (a state ordinary
+     Coulomb contact friction cannot decelerate on its own). -->
+<Manifest>
+	<PhysicsMaterial alias="Wood">
+		<Mass>1.0</Mass>
+		<Restitution>0.3</Restitution>
+		<Friction>0.6</Friction>
+		<StaticFriction>0.8</StaticFriction>
+		<RollingFriction>0.008</RollingFriction>
+		<LinearDamping>0.05</LinearDamping>
+		<AngularDamping>0.18</AngularDamping>
+	</PhysicsMaterial>
+	<PhysicsMaterial alias="Metal">
+		<Mass>4.0</Mass>
+		<Restitution>0.1</Restitution>
+		<Friction>0.3</Friction>
+		<StaticFriction>0.4</StaticFriction>
+		<RollingFriction>0.015</RollingFriction>
+		<LinearDamping>0.03</LinearDamping>
+		<AngularDamping>0.1</AngularDamping>
+	</PhysicsMaterial>
+	<PhysicsMaterial alias="Rubber">
+		<Mass>0.8</Mass>
+		<Restitution>0.8</Restitution>
+		<Friction>0.75</Friction>
+		<StaticFriction>0.9</StaticFriction>
+		<RollingFriction>0.02</RollingFriction>
+		<LinearDamping>0.06</LinearDamping>
+		<AngularDamping>0.2</AngularDamping>
+	</PhysicsMaterial>
+	<PhysicsMaterial alias="Ice">
+		<Mass>0.9</Mass>
+		<Restitution>0.05</Restitution>
+		<Friction>0.015</Friction>
+		<StaticFriction>0.02</StaticFriction>
+		<RollingFriction>0.005</RollingFriction>
+		<LinearDamping>0.002</LinearDamping>
+		<AngularDamping>0.01</AngularDamping>
+	</PhysicsMaterial>
+	<PhysicsMaterial alias="Stone">
+		<Mass>3.0</Mass>
+		<Restitution>0.15</Restitution>
+		<Friction>0.6</Friction>
+		<StaticFriction>0.8</StaticFriction>
+		<RollingFriction>0.006</RollingFriction>
+		<LinearDamping>0.05</LinearDamping>
+		<AngularDamping>0.15</AngularDamping>
+	</PhysicsMaterial>
+</Manifest>

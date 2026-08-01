@@ -30,6 +30,8 @@ public:
     Game_Error init(const std::string& configurationFilename);
     Game_Error run();
     void shutDown();
+    void pauseGame();
+    void resumeGame();
     void update(const float& deltaTimeS);
     KeyState getKeyState(SDL_Scancode key);
     glm::ivec2 getMousePosition();

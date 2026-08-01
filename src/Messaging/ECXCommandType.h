@@ -17,6 +17,7 @@ enum class ECXCommandType
 	GameStart,
 	GameStop,
 	GamePause,
+	GameResume,
 	GameClear,
 	GameLoadSavedState,
 	GameSaveState,

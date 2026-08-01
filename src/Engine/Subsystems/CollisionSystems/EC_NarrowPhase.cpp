@@ -3,6 +3,7 @@
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Components/EC_DOD_Components.h"
 #include "EC_CollisionChecks.h"
+#include "EC_PhysicsResolution.h"
 #include "Messaging/ECXEvent.h"
 #include "Messaging/ECXMessenger.h"
 #include <functional>
@@ -13,6 +14,11 @@ void EC_NarrowPhase::init(ECXMessenger& messenger)
     initCollisionDispatchTable();  // Add this line
 }
 
+// Purely geometric: detects overlap and caches the resulting manifold
+// (contact points, normal, penetration depth) on the pair for the physics
+// system to consume later this tick. Computes no impulses/forces at all -
+// that's entirely the physics system's job (see EC_PhysicsSystem), which
+// iterates the same pairs afterward via EC_PairManager::getAllPairs().
 void EC_NarrowPhase::narrowPhaseCollisionDetection()
 {
     // For each pair in the pair manager, perform narrow phase collision detection
@@ -53,14 +59,20 @@ void EC_NarrowPhase::narrowPhaseCollisionDetection()
         // Update pair collision status
         pair.m_Colliding = collisionDetected;
 
-        // If collision detected, store contact points
+        // If collision detected, cache the geometric manifold on the pair -
+        // contact points, normal, and penetration depth - for the physics
+        // system to read afterward. No eligibility/force decisions here.
         if (collisionDetected)
         {
             pair.m_CollisionPoints = manifold.contactPoints;
+            pair.m_ContactNormal = manifold.contactNormal;
+            pair.m_PenetrationDepth = manifold.penetrationDepth;
         }
         else
         {
             pair.m_CollisionPoints.clear();
+            pair.m_ContactNormal = glm::vec3(0.0f);
+            pair.m_PenetrationDepth = 0.0f;
         }
     }
 }
@@ -94,9 +106,14 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // Sphere vs AABB
         {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::AABB),
             [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
-                return EC_CollisionChecks::SphereVsAABB(
+                bool hit = EC_CollisionChecks::SphereVsAABB(
                     Sphere{a.center, a.radius}, sa.position,
                     AABB{b.center - b.extents, b.center + b.extents}, sb.position, m);
+                // SphereVsAABB's normal points toward the sphere (param A here); flip
+                // so contactNormal consistently points body_A -> body_B like every
+                // other dispatch entry.
+                if (hit) m.contactNormal = -m.contactNormal;
+                return hit;
             }},
 
         // AABB vs Sphere (swap parameters)
@@ -121,15 +138,43 @@ void EC_NarrowPhase::initCollisionDispatchTable()
                     OBB{b.center, b.extents, orientB}, sb.position, m);
             }},
 
+        // OBB vs AABB (AABB never rotates, so treat it as an identity-oriented
+        // OBB and reuse the same SAT manifold code - OBBVsOBB already
+        // self-orients its normal body_A -> body_B, no extra sign-flip needed
+        // here unlike the Sphere pairs above).
+        {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::AABB),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
+                                             glm::normalize(sa.up),
+                                             glm::normalize(sa.direction));
+                return EC_CollisionChecks::OBBVsOBB(
+                    OBB{a.center, a.extents, orientA}, sa.position,
+                    OBB{b.center, b.extents, glm::mat3(1.0f)}, sb.position, m);
+            }},
+
+        // AABB vs OBB (swap parameters)
+        {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::OBB),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::mat3 orientB = glm::mat3(glm::normalize(sb.right),
+                                             glm::normalize(sb.up),
+                                             glm::normalize(sb.direction));
+                return EC_CollisionChecks::OBBVsOBB(
+                    OBB{a.center, a.extents, glm::mat3(1.0f)}, sa.position,
+                    OBB{b.center, b.extents, orientB}, sb.position, m);
+            }},
+
         // Sphere vs OBB
         {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::OBB),
             [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
                 glm::mat3 orientB = glm::mat3(glm::normalize(sb.right),
                                              glm::normalize(sb.up),
                                              glm::normalize(sb.direction));
-                return EC_CollisionChecks::SphereVsOBB(
+                bool hit = EC_CollisionChecks::SphereVsOBB(
                     Sphere{a.center, a.radius}, sa.position,
                     OBB{b.center, b.extents, orientB}, sb.position, m);
+                // Same fix as Sphere vs AABB above: flip to body_A -> body_B convention.
+                if (hit) m.contactNormal = -m.contactNormal;
+                return hit;
             }},
 
         // OBB vs Sphere (swap parameters)
@@ -201,6 +246,13 @@ void EC_NarrowPhase::handleCollisionStateChange(
     // Collision ended
     if (pair.m_Colliding && !collisionDetected)
     {
+        // Either side may have been sleeping while resting against the
+        // other (e.g. a cube asleep on top of one that just got knocked
+        // away) - losing that contact needs to wake it back up rather than
+        // leaving it frozen mid-air with nothing left holding it up.
+        EC_PhysicsResolution::wakeIfSleeping(pair.body_A);
+        EC_PhysicsResolution::wakeIfSleeping(pair.body_B);
+
         ECXEvent msg;
         msg.type = ECXEventType::CollisionEndEvent;
         msg.args[0] = pair.body_A;

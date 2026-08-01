@@ -1,6 +1,7 @@
 #include "Graphics/GL_DebugRenderer.h"
 #include "Window/Window.h"
 #include "Logging/ECX_Logging.h"
+#include "Engine/Subsystems/CollisionSystems/EC_PairManager.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <GL/glew.h>
 #include <cmath>
@@ -231,6 +232,30 @@ void GL_DebugRenderer::buildConeLines(const glm::vec3& apex, const glm::vec3& di
     }
 }
 
+void GL_DebugRenderer::buildCrossLines(const glm::vec3& point, float halfSize, std::vector<glm::vec3>& outLines) const
+{
+    outLines.push_back(point - glm::vec3(halfSize, 0.0f, 0.0f));
+    outLines.push_back(point + glm::vec3(halfSize, 0.0f, 0.0f));
+    outLines.push_back(point - glm::vec3(0.0f, halfSize, 0.0f));
+    outLines.push_back(point + glm::vec3(0.0f, halfSize, 0.0f));
+    outLines.push_back(point - glm::vec3(0.0f, 0.0f, halfSize));
+    outLines.push_back(point + glm::vec3(0.0f, 0.0f, halfSize));
+}
+
+void GL_DebugRenderer::renderContactPoints(const glm::mat4& view, const glm::mat4& projection)
+{
+    constexpr float kCrossHalfSize = 0.1f;
+
+    std::vector<glm::vec3> lines;
+    for (const EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
+        if (!pair.m_Colliding) continue;
+        for (const glm::vec3& point : pair.m_CollisionPoints) {
+            buildCrossLines(point, kCrossHalfSize, lines);
+        }
+    }
+    drawLines(lines, COL_CONTACT, view, projection);
+}
+
 void GL_DebugRenderer::render(const glm::mat4& view, const glm::mat4& projection)
 {
     if (!m_Enabled && !m_HasRay && !m_HasCone) return;
@@ -268,6 +293,8 @@ void GL_DebugRenderer::render(const glm::mat4& view, const glm::mat4& projection
                 break;
             }
         }
+
+        renderContactPoints(view, projection);
     }
 
     if (m_HasRay) {

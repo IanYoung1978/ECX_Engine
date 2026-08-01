@@ -36,6 +36,14 @@ namespace ScriptAPI
             if (game) game->shutDown();
         }
 
+        void pauseGame() {
+            if (game) game->pauseGame();
+        }
+
+        void resumeGame() {
+            if (game) game->resumeGame();
+        }
+
         int getKeyState(const std::string& key) {
             if (!game) return 0;
             SDL_Scancode scancode = SDL_GetScancodeFromName(key.c_str());

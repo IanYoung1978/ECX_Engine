@@ -4,8 +4,10 @@
 #include "Engine/Subsystems/EC_CameraSystem.h"
 #include "Engine/Subsystems/EC_LuaScriptingSystem.h"
 #include "Engine/Subsystems/CollisionSystems/EC_CollisionSystem.h"
+#include "Engine/Subsystems/EC_PhysicsSystem.h"
 #include "TaskManager/EC_PhysicsThreadTask.h"
 #include "TaskManager/EC_ScriptingTask.h"
+#include "xml/XML.h"
 
 EC_Engine::EC_Engine()
 {
@@ -21,6 +23,7 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	m_Systems[(size_t)EC_SystemType::Transform] = std::make_shared<EC_TransformSystem>();
 	m_Systems[(size_t)EC_SystemType::Camera] = std::make_shared<EC_CameraSystem>();
 	m_Systems[(size_t)EC_SystemType::Collision] = std::make_shared<EC_CollisionSystem>();
+	m_Systems[(size_t)EC_SystemType::Physics] = std::make_shared<EC_PhysicsSystem>();
 	m_Systems[(size_t)EC_SystemType::Scripting] = std::make_shared<EC_LuaScriptSystem>();
 
 	for (auto s : m_Systems)
@@ -31,13 +34,34 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 		}
 	}
 
+	// Physics reads collision manifolds cached on the pair manager
+	// EC_CollisionSystem's broad/narrow phase populate - wire it once here,
+	// after both systems exist, so it never has to guess at the instance.
+	auto* physicsSystem = static_cast<EC_PhysicsSystem*>(m_Systems[(size_t)EC_SystemType::Physics].get());
+	physicsSystem->setPairManager(
+		&static_cast<EC_CollisionSystem*>(m_Systems[(size_t)EC_SystemType::Collision].get())->getPairManager());
+
+	bool logEnergy = false;
+	int substeps = 1;
+	XML::loadPhysicsDebugSettings(config, logEnergy);
+	XML::loadPhysicsSubstepCount(config, substeps);
+	physicsSystem->setLogEnergy(logEnergy);
+
 	auto task = std::make_shared<EC_PhysicsThreadTask>();
 	task->addGameRef(*m_game);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Spatial]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Transform]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Camera]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Scripting]);
-	task->addSystem(m_Systems[(size_t)EC_SystemType::Collision]);
+	// Collision + Physics are substepped instead - see
+	// EC_PhysicsThreadTask::setSubstepCount for why (stacking stability:
+	// the same fix Box2D v3/Rapier use for marginal-equilibrium creep).
+	// Must stay in this relative order (Collision before Physics) within
+	// each substep, since Physics consumes the manifolds Collision just
+	// cached that same substep.
+	task->addSubsteppedSystem(m_Systems[(size_t)EC_SystemType::Collision]);
+	task->addSubsteppedSystem(m_Systems[(size_t)EC_SystemType::Physics]);
+	task->setSubstepCount(substeps);
 	task->setTimeStep(1.0f / 60);
 	m_tasks.push_back(task);
 
@@ -75,6 +99,17 @@ void EC_Engine::resume()
 	for (auto t : m_tasks)
 	{
 		t->resume();
+	}
+}
+
+void EC_Engine::stepOnce(float deltaTimeS)
+{
+	for (auto s : m_Systems)
+	{
+		if (s != nullptr)
+		{
+			s->update(deltaTimeS, *m_game);
+		}
 	}
 }
 

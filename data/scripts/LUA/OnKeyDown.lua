@@ -1,4 +1,5 @@
 mouseCaptured = true
+gamePaused = true
 
 function onKeyDown(entity, event)
     local key = event:getKey()
@@ -12,5 +13,13 @@ function onKeyDown(entity, event)
 	if key == "F4" then
 	    mouseCaptured = not mouseCaptured
 	    game:setMouseCaptured(mouseCaptured)
+	end
+	if key == "P" then
+	    gamePaused = not gamePaused
+	    if gamePaused then
+	        game:pauseGame()
+	    else
+	        game:resumeGame()
+	    end
 	end
 end
