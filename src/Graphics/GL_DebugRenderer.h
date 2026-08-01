@@ -36,6 +36,14 @@ private:
         const EC_DOD_Collider& collider, const EC_DOD_Transform& transform);
     void renderOBB(const glm::mat4& view, const glm::mat4& projection,
         const EC_DOD_Collider& collider, const EC_DOD_Transform& transform);
+    // Draws a small 3-axis cross marker at every contact point of every
+    // currently-colliding pair (EC_PairManager::getAllPairs()) - the same
+    // manifold points EC_PhysicsResolution actually resolves against, so
+    // this is a direct visual check of what the narrow phase is generating
+    // (point count, position, clustering) rather than just the coarse
+    // collider wireframes above. Tied to the same m_Enabled toggle.
+    void renderContactPoints(const glm::mat4& view, const glm::mat4& projection);
+    void buildCrossLines(const glm::vec3& point, float halfSize, std::vector<glm::vec3>& outLines) const;
 
     void buildSphere(float radius, int rings, int sectors);
     void buildBox(const glm::vec3& extents);
@@ -84,4 +92,5 @@ private:
     static constexpr glm::vec4 COL_AABB = glm::vec4(0.0f, 1.0f, 1.0f, 1.0f);
     static constexpr glm::vec4 COL_OBB = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
     static constexpr glm::vec4 COL_SPHERE = glm::vec4(1.0f, 0.5f, 0.0f, 1.0f);
+    static constexpr glm::vec4 COL_CONTACT = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
 };

@@ -13,6 +13,13 @@ EC_SpatialSystem::~EC_SpatialSystem() {
 void EC_SpatialSystem::init(ECXMessenger& messenger, EC_Game& game) {
 }
 
+// Handles simple, non-physics spatial movement only (camera, script-driven
+// entities via entity:setPosition/moveForward etc.) - anything with an
+// EC_DOD_RigidBody is skipped entirely and is fully owned by the two-stage
+// rigid-body pipeline instead: EC_PhysicsResolution (collision resolution,
+// caches impulses) followed by EC_PhysicsSystem (gravity + damping +
+// consuming those cached impulses + integration), which runs later this
+// same tick. Handling a RigidBody entity here too would double-integrate it.
 void EC_SpatialSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
     auto* spatialArray = manager.getComponentArray<EC_DOD_Spatial>();
@@ -26,6 +33,11 @@ void EC_SpatialSystem::update(const float& deltaTimeS, EC_Game& game) {
 
     for (size_t i = 0; i < spatials.size(); i++) {
         auto& spatial = spatials[i];
+
+        EntityID entity = spatialArray->getEntity(i);
+        if (manager.hasComponent<EC_DOD_RigidBody>(entity)) {
+            continue;
+        }
 
         spatial.position += spatial.velocity * deltaTimeS;
         spatial.orientation += spatial.angVelocity * deltaTimeS;

@@ -111,6 +111,20 @@ void EC_Game::shutDown()
     m_Messenger.publish(command);
 }
 
+void EC_Game::pauseGame()
+{
+    ECXCommand command;
+    command.type = ECXCommandType::GamePause;
+    m_Messenger.publish(command);
+}
+
+void EC_Game::resumeGame()
+{
+    ECXCommand command;
+    command.type = ECXCommandType::GameResume;
+    m_Messenger.publish(command);
+}
+
 void EC_Game::update(const float& deltaTimeS)
 {
     if (m_Running)

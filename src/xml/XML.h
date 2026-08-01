@@ -7,6 +7,8 @@
 #include "Graphics/RenderConfig.h"
 #include <string>
 #include <map>
+#include <algorithm>
+#include <cstdlib>
 #include <SDL.h>
 #include "Logging/ECX_Logging.h"
 
@@ -119,10 +121,68 @@ namespace XML
 				{
 					settings.ui_file = child->FirstAttribute()->Value();
 				}
+				else if (strcmp(child->Value(), "PhysicsMaterials") == 0)
+				{
+					settings.physics_materials_file = child->FirstAttribute()->Value();
+				}
 				child = child->NextSiblingElement();
 			}
 			game = game->NextSiblingElement();
 		}
+		return true;
+	}
+
+	// Parses EngineConfig.xml's <Physics><Debug> flags - currently just
+	// LogEnergy (see EC_PhysicsSystem::setLogEnergy). Missing file/section/
+	// tag all quietly default to false rather than failing, since these are
+	// optional debug toggles, not required settings.
+	inline bool loadPhysicsDebugSettings(const std::string& file, bool& outLogEnergy)
+	{
+		outLogEnergy = false;
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto physics = root->FirstChildElement("Physics");
+		if (!physics)
+			return true;
+		auto debug = physics->FirstChildElement("Debug");
+		if (!debug)
+			return true;
+		auto logEnergy = debug->FirstChildElement("LogEnergy");
+		if (logEnergy && logEnergy->GetText())
+			outLogEnergy = (strcmp(logEnergy->GetText(), "true") == 0);
+
+		return true;
+	}
+
+	// Parses EngineConfig.xml's <Physics><Substeps> - how many times
+	// Collision+Physics re-run per visual tick (see
+	// EC_PhysicsThreadTask::setSubstepCount). Missing file/section/tag
+	// default to 1 (no substepping, original behaviour) rather than
+	// failing.
+	inline bool loadPhysicsSubstepCount(const std::string& file, int& outSubsteps)
+	{
+		outSubsteps = 1;
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto physics = root->FirstChildElement("Physics");
+		if (!physics)
+			return true;
+		auto substeps = physics->FirstChildElement("Substeps");
+		if (substeps && substeps->GetText())
+			outSubsteps = std::max(1, atoi(substeps->GetText()));
+
 		return true;
 	}
 

@@ -25,6 +25,10 @@ public:
     const std::vector<EntityID>& getLights() const;
 
     static void parseManifest(TiXmlElement* manifestElem);
+    // Loads a standalone <Manifest> data file (e.g. physics material presets)
+    // independent of any scene, so it's shared across all scenes and can be
+    // edited without a rebuild.
+    static bool loadManifestFile(const std::string& filename);
 
     static TextureManager s_TexManager;
     static ShaderManager s_ShaderManager;
@@ -33,6 +37,10 @@ public:
 
 private:
     struct ShaderPaths { std::string vert; std::string frag; };
+    // Named rigid-body presets (e.g. "Wood", "Rubber") authored once in a
+    // scene's <Manifest> and referenced from <RigidBody material="..."> to
+    // avoid repeating the same mass/restitution numbers across entities.
+    struct PhysicsMaterial { float mass = 1.0f; float restitution = 0.3f; float friction = 0.5f; float staticFriction = 0.5f; float rollingFriction = 0.05f; float linearDamping = 0.01f; float angularDamping = 0.05f; };
 
     glm::vec3 parseVec3(const std::string& text);
     glm::vec4 parseVec4(const std::string& text);
@@ -43,6 +51,7 @@ private:
     void parseLight(TiXmlElement* elem, EntityID entity);
     void parseScript(TiXmlElement* elem, EntityID entity);
     void parseCollider(TiXmlElement* elem, EntityID entity);
+    void parseRigidBody(TiXmlElement* elem, EntityID entity);
     void parseHierarchy(TiXmlElement* elem, EntityID entity);
     void parseSkybox(TiXmlElement* elem, EntityID entity);
     void resolveHierarchyReferences();
@@ -57,5 +66,6 @@ private:
     static std::unordered_map<std::string, ShaderPaths> s_ShaderAliases;
     static std::unordered_map<std::string, std::string> s_ScriptAliases;
     static std::unordered_map<std::string, TiXmlElement*> s_MaterialElements;
+    static std::unordered_map<std::string, PhysicsMaterial> s_PhysicsMaterials;
     static TiXmlDocument s_ManifestDoc;
 };

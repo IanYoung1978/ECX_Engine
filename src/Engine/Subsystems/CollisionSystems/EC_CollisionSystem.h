@@ -17,6 +17,11 @@ class EC_CollisionSystem
 	// Inherited via EC_System
 	virtual void init(ECXMessenger& messenger, EC_Game& game) override;
 	virtual void update(const float& deltaTimeS, EC_Game& game) override;
+
+	// Exposes the same pair manager broad/narrow phase populate, so
+	// EC_PhysicsSystem can be wired to it once at startup and iterate the
+	// cached collision manifolds after this system's update() has run.
+	EC_PairManager& getPairManager() { return m_PairManager; }
 private:
 	std::unique_ptr<EC_BroadPhase> m_BroadPhase;
 	std::unique_ptr<EC_NarrowPhase> m_NarrowPhase;

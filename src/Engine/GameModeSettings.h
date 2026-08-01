@@ -9,4 +9,5 @@ struct GameModeSettings
     std::string scenes_file;
     std::string graphics_settings;
     std::string ui_file;
+    std::string physics_materials_file;
 };
