@@ -51,6 +51,13 @@ struct EC_DOD_Spatial {
     glm::vec3 direction{ 0.0f, 0.0f, -1.0f };
     glm::vec3 up{ 0.0f, 1.0f, 0.0f };
     glm::vec3 right{ 1.0f, 0.0f, 0.0f };
+    // Real 3-axis rotation state for rigid bodies (see EC_PhysicsSystem's
+    // integration step) - orientation/right/up/direction above are kept in
+    // sync FROM this every physics tick, not the other way round. Bodies
+    // without an EC_DOD_RigidBody (camera, script-driven entities via
+    // EC_SpatialSystem) never touch this field and keep using orientation/
+    // angVelocity directly, same as always.
+    glm::quat orientationQuat{ 1.0f, 0.0f, 0.0f, 0.0f };
 };
 
 struct EC_DOD_RigidBody {
