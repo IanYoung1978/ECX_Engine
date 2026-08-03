@@ -1,0 +1,38 @@
+name: Unit Tests
+
+on:
+  pull_request:
+    branches: [ develop ]
+  push:
+    branches: [ develop ]
+
+jobs:
+  unit-tests:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Only glm + Catch2 are needed here (see CMakeLists.txt's ECX_BUILD_ENGINE
+      # option) - the full engine's SDL2/GLEW/assimp/Lua/OpenGL/Stb toolchain is
+      # skipped entirely so this stays fast. windows-latest ships vcpkg
+      # pre-installed at C:\vcpkg, matching the toolchain file CMakeLists.txt
+      # already points at.
+      - name: Cache vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.LOCALAPPDATA }}\vcpkg\archives
+          key: vcpkg-archives-x64-windows-glm-catch2-v1
+
+      - name: Install dependencies (glm, Catch2)
+        run: C:\vcpkg\vcpkg.exe install glm:x64-windows catch2:x64-windows
+
+      - name: Configure (tests only, engine build skipped)
+        run: cmake -S . -B build -DECX_BUILD_ENGINE=OFF
+
+      - name: Build ECX_UnitTests
+        run: cmake --build build --config Debug --target ECX_UnitTests
+
+      - name: Run tests
+        run: .\build\Debug\ECX_UnitTests.exe

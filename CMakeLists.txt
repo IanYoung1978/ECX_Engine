@@ -11,9 +11,18 @@ project(ECX LANGUAGES CXX)
 
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
+# Off in CI (unit-test workflow): skips the main ECX target and its heavy
+# SDL2/GLEW/assimp/Lua/OpenGL/Stb dependencies entirely, so `cmake --build
+# --target ECX_UnitTests` only needs glm + Catch2 to configure.
+option(ECX_BUILD_ENGINE "Build the main ECX game target (requires SDL2/GLEW/assimp/Lua/OpenGL/Stb)" ON)
 
 set(CMAKE_GENERATOR_PLATFORM x64)
 set(CMAKE_BUILD_TYPE Debug)
+
+find_package(GLM CONFIG REQUIRED)
+find_package(Catch2 CONFIG REQUIRED)
+
+if(ECX_BUILD_ENGINE)
 
 message("searching ${SOURCE_DIR} for source files")
 
@@ -31,7 +40,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOG_ENABLED")
 find_package(SDL2 CONFIG REQUIRED)
 find_package(SDL2_image CONFIG REQUIRED)
 find_package(GLEW CONFIG REQUIRED)
-find_package(GLM CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(Lua REQUIRED)
 find_package(OpenGL REQUIRED)
@@ -132,14 +140,29 @@ add_custom_command(
                 ${CMAKE_CURRENT_BINARY_DIR}/data
         COMMENT "Copying data files...")
 
-# Standalone unit tests for the GJK collision math (Issues #30/#29) - deliberately
-# isolated from the main ECX target: only depends on glm, not SDL/GLEW/assimp/Lua/the
-# ECS, so it builds fast and can run headless without a graphics context.
-add_executable(ECX_GJK_Tests
+endif() # ECX_BUILD_ENGINE
+
+# Catch2-based unit tests for the pure-logic collision/spatial modules (Tier 1 of
+# the testability review): GJK/ConvexSupport, CollisionChecks, VClip, PairManager,
+# SpatialGrid, Frustum. Deliberately isolated from the main ECX target: only
+# depends on glm + Catch2, not SDL/GLEW/assimp/Lua/the ECS, so it builds fast and
+# can run headless without a graphics context.
+
+add_executable(ECX_UnitTests
     tests/EC_GJK_Tests.cpp
+    tests/EC_CollisionChecks_Tests.cpp
+    tests/EC_VClip_Tests.cpp
+    tests/EC_PairManager_Tests.cpp
+    tests/EC_SpatialGrid_Tests.cpp
+    tests/EC_Frustum_Tests.cpp
     src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
     src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_CollisionChecks.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_VClip.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_PairManager.cpp
+    src/Spatial/EC_SpatialGrid.cpp
+    src/Spatial/EC_Frustum.cpp
 )
-set_property(TARGET ECX_GJK_Tests PROPERTY CXX_STANDARD 17)
-target_include_directories(ECX_GJK_Tests PRIVATE ${SOURCE_DIR} glm::glm)
-target_link_libraries(ECX_GJK_Tests glm::glm)
+set_property(TARGET ECX_UnitTests PROPERTY CXX_STANDARD 17)
+target_include_directories(ECX_UnitTests PRIVATE ${SOURCE_DIR})
+target_link_libraries(ECX_UnitTests PRIVATE glm::glm Catch2::Catch2WithMain)
