@@ -35,4 +35,4 @@ jobs:
         run: cmake --build build --config Debug --target ECX_UnitTests
 
       - name: Run tests
-        run: .\build\Debug\ECX_UnitTests.exe
+        run: .\build\Debug\ECX_UnitTests.exe --success --durations yes -v high
