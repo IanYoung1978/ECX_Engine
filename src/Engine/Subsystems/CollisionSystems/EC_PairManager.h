@@ -40,11 +40,40 @@ struct EC_CollisionPair
 	std::vector<EC_ContactImpulseCache> m_ContactCache;
 	EC_CollisionPair() :body_A(0), body_B(0), m_Colliding(false) {}
 };
+// All state below is physics-thread-only working data - collision pairs are
+// produced and consumed entirely within one tick of the collision/physics
+// pipeline (EC_BroadPhase -> EC_NarrowPhase -> EC_CollisionSystem ->
+// EC_PhysicsSystem), all of which run sequentially on the same thread. It is
+// NOT safe to read from any other thread (e.g. the render thread) - there is
+// no synchronization, by design, because nothing outside this pipeline is
+// meant to touch it. Debug rendering gets contact-point data via
+// EC_DOD_DebugContacts instead (published once per tick as component data by
+// EC_PhysicsSystem) rather than reading this class directly - see
+// GL_DebugRenderer::renderContactPoints. The methods below are private and
+// friended to exactly the classes that make up that pipeline, to keep it that
+// way rather than relying on convention.
+class EC_BroadPhase;
+class EC_NarrowPhase;
+class EC_CollisionSystem;
+class EC_PhysicsSystem;
+// Test-only accessor (see tests/EC_PairManager_Tests.cpp) - lets the Catch2
+// suite exercise addPair/update/hasPairs/getNextPair/getAllPairs directly
+// without opening those up to the rest of the engine.
+class EC_PairManagerTestHelper;
+
 class EC_PairManager
 {
 public:
 	EC_PairManager();
 	~EC_PairManager();
+
+private:
+	friend class EC_BroadPhase;
+	friend class EC_NarrowPhase;
+	friend class EC_CollisionSystem;
+	friend class EC_PhysicsSystem;
+	friend class EC_PairManagerTestHelper;
+
 	void addPair(uint32_t id_a, uint32_t id_b);
 	void update();
 	bool hasPairs();
@@ -55,7 +84,7 @@ public:
 	// drained the cursor this tick. Mutable (not just read-only) so physics
 	// can update each pair's m_ContactCache for next tick's warm start.
 	static std::vector<EC_CollisionPair>& getAllPairs();
-private:
+
 	static std::vector<EC_CollisionPair> s_Pairs;
 	static size_t s_CurrentPairIndex;
 };
