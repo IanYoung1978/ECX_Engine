@@ -10,7 +10,6 @@
 #include "Graphics/Shader.h"
 #include "Graphics/ADS_TextureSet.h"
 #include "Graphics/PBR_TextureSet.h"
-#include "Components/EC_ScriptComponent.h"
 #include "Components/EC_CollisionLayers.h"
 
 TextureManager EC_DOD_EntityFactory::s_TexManager;
