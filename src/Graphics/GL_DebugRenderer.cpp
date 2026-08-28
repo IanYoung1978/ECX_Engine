@@ -1,7 +1,6 @@
 #include "Graphics/GL_DebugRenderer.h"
 #include "Window/Window.h"
 #include "Logging/ECX_Logging.h"
-#include "Engine/Subsystems/CollisionSystems/EC_PairManager.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <GL/glew.h>
 #include <cmath>
@@ -246,10 +245,16 @@ void GL_DebugRenderer::renderContactPoints(const glm::mat4& view, const glm::mat
 {
     constexpr float kCrossHalfSize = 0.1f;
 
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    auto entities = manager.getEntitiesWithComponents({
+        std::type_index(typeid(EC_DOD_DebugContacts))
+        });
+
     std::vector<glm::vec3> lines;
-    for (const EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
-        if (!pair.m_Colliding) continue;
-        for (const glm::vec3& point : pair.m_CollisionPoints) {
+    for (EntityID entity : entities) {
+        if (!manager.isAlive(entity)) continue;
+        const auto& debugContacts = manager.getComponent<EC_DOD_DebugContacts>(entity);
+        for (const glm::vec3& point : debugContacts.points) {
             buildCrossLines(point, kCrossHalfSize, lines);
         }
     }

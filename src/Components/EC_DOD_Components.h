@@ -17,6 +17,16 @@ struct ContactPoint {
     float penetration;
 };
 
+// Published once per physics tick by EC_PhysicsSystem (which already computes
+// per-entity contact points for the sleep/stability check) so debug rendering
+// can draw them without ever touching EC_PairManager - contact points reach
+// the render thread through the same shared_mutex-protected component-array
+// path as every other piece of debug-drawable state (colliders, transforms),
+// rather than reading physics-thread-internal collision-pair data directly.
+struct EC_DOD_DebugContacts {
+    std::vector<glm::vec3> points;
+};
+
 struct EC_DOD_Hierarchy {
     EntityID parent = INVALID_ENTITY;
     std::vector<EntityID> children;

@@ -169,6 +169,26 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             pointsB.insert(pointsB.end(), pair.m_CollisionPoints.begin(), pair.m_CollisionPoints.end());
         }
 
+        // Publish this tick's contact points as component data so debug
+        // rendering can draw them via the normal shared_mutex-protected
+        // component-array path, same as it reads colliders/transforms -
+        // instead of reading EC_PairManager (physics-thread-internal) from
+        // the render thread. Only entities actually in bodyContactPoints get
+        // written; anything that had contacts last tick but not this tick
+        // gets explicitly cleared below so stale markers don't linger.
+        std::vector<EntityID> currentContactEntities;
+        currentContactEntities.reserve(bodyContactPoints.size());
+        for (const auto& [entity, points] : bodyContactPoints) {
+            manager.addComponent(entity, EC_DOD_DebugContacts{ points });
+            currentContactEntities.push_back(entity);
+        }
+        for (EntityID entity : m_LastDebugContactEntities) {
+            if (bodyContactPoints.find(entity) == bodyContactPoints.end()) {
+                manager.addComponent(entity, EC_DOD_DebugContacts{});
+            }
+        }
+        m_LastDebugContactEntities = std::move(currentContactEntities);
+
         constexpr int kSolverPasses = 4;
         for (int pass = 0; pass < kSolverPasses; pass++) {
             for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {

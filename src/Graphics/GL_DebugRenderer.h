@@ -37,11 +37,14 @@ private:
     void renderOBB(const glm::mat4& view, const glm::mat4& projection,
         const EC_DOD_Collider& collider, const EC_DOD_Transform& transform);
     // Draws a small 3-axis cross marker at every contact point of every
-    // currently-colliding pair (EC_PairManager::getAllPairs()) - the same
-    // manifold points EC_PhysicsResolution actually resolves against, so
-    // this is a direct visual check of what the narrow phase is generating
-    // (point count, position, clustering) rather than just the coarse
-    // collider wireframes above. Tied to the same m_Enabled toggle.
+    // currently-colliding entity, read via EC_DOD_DebugContacts (published
+    // once per physics tick by EC_PhysicsSystem) - the same manifold points
+    // EC_PhysicsResolution actually resolves against, so this is a direct
+    // visual check of what the narrow phase is generating (point count,
+    // position, clustering) rather than just the coarse collider wireframes
+    // above. Tied to the same m_Enabled toggle. Deliberately does not read
+    // EC_PairManager directly - that's physics-thread-internal state; this
+    // component is the sanctioned cross-thread hand-off.
     void renderContactPoints(const glm::mat4& view, const glm::mat4& projection);
     void buildCrossLines(const glm::vec3& point, float halfSize, std::vector<glm::vec3>& outLines) const;
 

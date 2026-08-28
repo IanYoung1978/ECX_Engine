@@ -1,5 +1,7 @@
 #pragma once
 #include "EC_System.h"
+#include "Entity/EC_DOD_Types.h"
+#include <vector>
 
 class EC_PairManager;
 
@@ -44,4 +46,8 @@ public:
 private:
     EC_PairManager* m_PairManager = nullptr;
     bool m_LogEnergy = false;
+    // Entities that carried an EC_DOD_DebugContacts component last tick -
+    // diffed against this tick's contact set so entities that stop colliding
+    // get their debug contacts cleared instead of showing stale points.
+    std::vector<EntityID> m_LastDebugContactEntities;
 };
