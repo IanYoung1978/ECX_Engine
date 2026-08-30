@@ -393,7 +393,13 @@ private:
             .addFunction("showDebugCone", &ScriptAPI::GameAPI::showDebugCone)
             .endClass();
 
-        luabridge::push(m_luaState, m_game);
+        auto pushResult = luabridge::push(m_luaState, m_game);
+        if (!pushResult) {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Failed to push 'game' global into Lua state: " + pushResult.message(),
+                LOGGING::LogLevel::SEVERE
+            );
+        }
         lua_setglobal(m_luaState, "game");
     }
 };

@@ -143,11 +143,6 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
         }
     }
 
-    if (m_Loader->isLoading())
-    {
-        float progress = m_Loader->getProgress();
-    }
-
     m_Renderer->renderScene(m_Scenes[m_ActiveScene]);
 }
 

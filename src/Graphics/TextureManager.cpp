@@ -36,10 +36,8 @@ int TextureManager::loadTexture(const std::string & filename)
 		LOGGING::ECX_Logger::GetInstance()->LogMessage("image load fail: " + filename, LOGGING::LogLevel::SEVERE);
 		return -1;
 	}
-	int BPP = surface->format->BytesPerPixel;
-
 	//SDL_image loads pixels with incorrect origin for OpenGL, so we must flip the image, around the horizontal axis
-	//flipYpixels(BPP, (char*)surface->pixels, surface->w, surface->h); //pitch is the true image width, including padding
+	//flipYpixels(surface->format->BytesPerPixel, (char*)surface->pixels, surface->w, surface->h); //pitch is the true image width, including padding
 	m_img_data.emplace(filename, surface);
 
 	return 0;

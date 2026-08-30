@@ -562,7 +562,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
         }
         else if (strcmp(child->Value(), "Colour") == 0 || strcmp(child->Value(), "Color") == 0) {
             std::string color = child->GetText();
-            sscanf(color.c_str(), "%f,%f,%f,%f",
+            TIXML_SSCANF(color.c_str(), "%f,%f,%f,%f",
                 &gfx.colour.r, &gfx.colour.g, &gfx.colour.b, &gfx.colour.a);
         }
         else if (strcmp(child->Value(), "CastsShadow") == 0 && child->GetText()) {
@@ -805,7 +805,7 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
 
     auto extentsElem = elem->FirstChildElement("Extents");
     if (extentsElem && extentsElem->GetText())
-        sscanf(extentsElem->GetText(), "%f,%f,%f",
+        TIXML_SSCANF(extentsElem->GetText(), "%f,%f,%f",
             &collider.extents.x, &collider.extents.y, &collider.extents.z);
 
     auto heightElem = elem->FirstChildElement("Height");
@@ -814,7 +814,7 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
 
     auto centerElem = elem->FirstChildElement("Center");
     if (centerElem && centerElem->GetText())
-        sscanf(centerElem->GetText(), "%f,%f,%f",
+        TIXML_SSCANF(centerElem->GetText(), "%f,%f,%f",
             &collider.center.x, &collider.center.y, &collider.center.z);
 
     auto layerElem = elem->FirstChildElement("Layer");
