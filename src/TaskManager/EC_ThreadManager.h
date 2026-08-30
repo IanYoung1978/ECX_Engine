@@ -26,5 +26,5 @@ private:
 	static std::mutex s_Lock;
 	static std::condition_variable s_Flag;
 	static bool s_running;
-	static int s_activeThreads;
+	static size_t s_activeThreads;
 };

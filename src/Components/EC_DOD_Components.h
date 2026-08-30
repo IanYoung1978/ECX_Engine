@@ -178,20 +178,24 @@ struct EC_DOD_Light {
         Point,
         Spot
     };
-    Type type;
-    glm::vec3 position;
-    glm::vec3 direction;
-    glm::vec3 colour;
-    float intensity;
+    Type type = Type::Point;
+    glm::vec3 position{ 0.0f };
+    glm::vec3 direction{ 0.0f, -1.0f, 0.0f };
+    glm::vec3 colour{ 1.0f };
+    float intensity = 1.0f;
     // Distance beyond which this light's contribution falls below a perceptible
     // threshold (1/256, the smallest step an 8-bit colour channel can represent).
     // Computed once at load time (see EC_DOD_EntityFactory::parseLight) from
     // intensity/attenuation - not meaningful for Directional lights (left at 0).
-    float cutoffRadius;
-    float cutoffAngle;
-    glm::vec3 attenuation;
-    bool castsShadow;
-    bool dynamic;
+    float cutoffRadius = 0.0f;
+    float cutoffAngle = glm::radians(45.0f);
+    // Constant-only by default (no linear/quadratic falloff) - this is exactly
+    // the degenerate case computeLightCutoffRadius already falls back to a
+    // fixed radius for, so an XML entry that omits <Attenuation> gets that
+    // designed fallback instead of reading garbage.
+    glm::vec3 attenuation{ 1.0f, 0.0f, 0.0f };
+    bool castsShadow = false;
+    bool dynamic = false;
 };
 
 struct EC_DOD_EntityInfo {

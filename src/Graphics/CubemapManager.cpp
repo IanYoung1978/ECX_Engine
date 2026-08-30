@@ -138,6 +138,12 @@ unsigned int CubemapManager::convertEquirectToCubemap(float* pixels, int width, 
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
     GLenum fboStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fboStatus != GL_FRAMEBUFFER_COMPLETE) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "CubemapManager: equirect-to-cubemap FBO incomplete, status=" + std::to_string(fboStatus),
+            LOGGING::LogLevel::CRITICAL
+        );
+    }
     glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
     glm::mat4 captureViews[] = {
         glm::lookAt(glm::vec3(0), glm::vec3(1, 0, 0), glm::vec3(0,-1, 0)),

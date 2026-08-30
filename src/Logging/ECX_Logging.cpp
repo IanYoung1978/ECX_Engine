@@ -62,7 +62,8 @@ namespace LOGGING
 
         std::stringstream ss;
         auto t = std::time(nullptr);
-        auto tm = *std::localtime(&t);
+        std::tm tm{};
+        localtime_s(&tm, &t);
 
         ss << std::put_time(&tm, "%d-%m-%Y %H:%M:%S") << ": ";
 
@@ -140,7 +141,8 @@ namespace LOGGING
 
         // ===== Session Start =====
         auto startTime = std::time(nullptr);
-        auto startTm = *std::localtime(&startTime);
+        std::tm startTm{};
+        localtime_s(&startTm, &startTime);
 
         out << "<hr>\n";
         out << "<h2>Log Session Start: "
@@ -193,7 +195,8 @@ namespace LOGGING
 
         // ===== Session End =====
         auto endTime = std::time(nullptr);
-        auto endTm = *std::localtime(&endTime);
+        std::tm endTm{};
+        localtime_s(&endTm, &endTime);
 
         out << "<h3>Log Session End: "
             << std::put_time(&endTm, "%d-%m-%Y %H:%M:%S")
