@@ -48,6 +48,7 @@
 		<Spatial><Position>0.0,0.0,0.0</Position></Spatial>
 		<Transform><Scale>20.0,1.0,20.0</Scale></Transform>
 		<Collider><Type>AABB</Type><Extents>20.0,0.5,20.0</Extents><Center>0.0,-0.5,0.0</Center></Collider>
+		<RigidBody material="Wood"><Static>true</Static></RigidBody>
 		<Gfx>
 			<PBRMaterial>
 				<Albedo>data/assets/Images/Wood_floor/Wood_floor_albedo.png</Albedo>
@@ -74,6 +75,7 @@
 		<Spatial><Position>-20.0,2.0,0.0</Position></Spatial>
 		<Transform><Scale>0.5,2.0,20.0</Scale></Transform>
 		<Collider><Type>AABB</Type><Extents>0.5,2.0,20.0</Extents></Collider>
+		<RigidBody material="Stone"><Static>true</Static></RigidBody>
 		<Gfx>
 			<Model>data/assets/models/cube.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
@@ -84,6 +86,7 @@
 		<Spatial><Position>20.0,2.0,0.0</Position></Spatial>
 		<Transform><Scale>0.5,2.0,20.0</Scale></Transform>
 		<Collider><Type>AABB</Type><Extents>0.5,2.0,20.0</Extents></Collider>
+		<RigidBody material="Stone"><Static>true</Static></RigidBody>
 		<Gfx>
 			<Model>data/assets/models/cube.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
@@ -94,6 +97,7 @@
 		<Spatial><Position>0.0,2.0,20.0</Position></Spatial>
 		<Transform><Scale>20.0,2.0,0.5</Scale></Transform>
 		<Collider><Type>AABB</Type><Extents>20.0,2.0,0.5</Extents></Collider>
+		<RigidBody material="Stone"><Static>true</Static></RigidBody>
 		<Gfx>
 			<Model>data/assets/models/cube.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
@@ -111,6 +115,7 @@
 		<Spatial><Position>0.0,2.0,-20.0</Position></Spatial>
 		<Transform><Scale>20.0,2.0,0.5</Scale></Transform>
 		<Collider><Type>AABB</Type><Extents>20.0,2.0,0.5</Extents></Collider>
+		<RigidBody material="Stone"><Static>true</Static></RigidBody>
 		<Gfx>
 			<Model>data/assets/models/cube.obj</Model>
 			<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>

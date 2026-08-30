@@ -41,11 +41,12 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	physicsSystem->setPairManager(
 		&static_cast<EC_CollisionSystem*>(m_Systems[(size_t)EC_SystemType::Collision].get())->getPairManager());
 
-	bool logEnergy = false;
+	XML::PhysicsDebugSettings debugSettings;
 	int substeps = 1;
-	XML::loadPhysicsDebugSettings(config, logEnergy);
+	XML::loadPhysicsDebugSettings(config, debugSettings);
 	XML::loadPhysicsSubstepCount(config, substeps);
-	physicsSystem->setLogEnergy(logEnergy);
+	physicsSystem->setDebugLogging(debugSettings.logEnergy, debugSettings.logVelocity,
+		debugSettings.logAngularVelocity, debugSettings.logFriction);
 
 	auto task = std::make_shared<EC_PhysicsThreadTask>();
 	task->addGameRef(*m_game);

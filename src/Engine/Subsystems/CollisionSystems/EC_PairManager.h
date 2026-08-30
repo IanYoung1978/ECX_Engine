@@ -16,7 +16,9 @@ struct EC_ContactImpulseCache
 {
 	glm::vec3 point{ 0.0f };
 	float normalImpulse = 0.0f;
-	float tangentImpulse = 0.0f;
+	// Friction impulse in the contact's tangent plane (2 components - the
+	// full Coulomb friction disc, not a single sliding-direction scalar).
+	glm::vec2 tangentImpulse{ 0.0f };
 };
 
 struct EC_CollisionPair

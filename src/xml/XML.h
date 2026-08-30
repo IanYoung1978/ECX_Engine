@@ -132,13 +132,24 @@ namespace XML
 		return true;
 	}
 
-	// Parses EngineConfig.xml's <Physics><Debug> flags - currently just
-	// LogEnergy (see EC_PhysicsSystem::setLogEnergy). Missing file/section/
-	// tag all quietly default to false rather than failing, since these are
-	// optional debug toggles, not required settings.
-	inline bool loadPhysicsDebugSettings(const std::string& file, bool& outLogEnergy)
+	// EngineConfig.xml's <Physics><Debug> flags - one independent toggle per
+	// physics attribute (see EC_PhysicsSystem::setDebugLogging), rather than
+	// a single all-or-nothing switch, so e.g. friction can be traced without
+	// drowning it in a velocity line for every body every tick.
+	struct PhysicsDebugSettings
 	{
-		outLogEnergy = false;
+		bool logEnergy = false;
+		bool logVelocity = false;
+		bool logAngularVelocity = false;
+		bool logFriction = false;
+	};
+
+	// Parses EngineConfig.xml's <Physics><Debug> flags. Missing file/
+	// section/tag all quietly default to false rather than failing, since
+	// these are optional debug toggles, not required settings.
+	inline bool loadPhysicsDebugSettings(const std::string& file, PhysicsDebugSettings& outSettings)
+	{
+		outSettings = PhysicsDebugSettings{};
 
 		TiXmlDocument doc(file.c_str());
 		if (!doc.LoadFile())
@@ -153,9 +164,17 @@ namespace XML
 		auto debug = physics->FirstChildElement("Debug");
 		if (!debug)
 			return true;
-		auto logEnergy = debug->FirstChildElement("LogEnergy");
-		if (logEnergy && logEnergy->GetText())
-			outLogEnergy = (strcmp(logEnergy->GetText(), "true") == 0);
+
+		auto readFlag = [&](const char* tagName, bool& out)
+		{
+			auto elem = debug->FirstChildElement(tagName);
+			if (elem && elem->GetText())
+				out = (strcmp(elem->GetText(), "true") == 0);
+		};
+		readFlag("LogEnergy", outSettings.logEnergy);
+		readFlag("LogVelocity", outSettings.logVelocity);
+		readFlag("LogAngularVelocity", outSettings.logAngularVelocity);
+		readFlag("LogFriction", outSettings.logFriction);
 
 		return true;
 	}
