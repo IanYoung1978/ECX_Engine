@@ -10,6 +10,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/euler_angles.hpp>
 #include <unordered_map>
+#include <sstream>
 #include "Logging/ECX_Logging.h"
 
 EC_PhysicsSystem::EC_PhysicsSystem() {}
@@ -18,150 +19,64 @@ void EC_PhysicsSystem::init(ECXMessenger& messenger, EC_Game& game) {}
 
 namespace {
     constexpr glm::vec3 kGravity(0.0f, -9.8f, 0.0f);
-    // Below these speeds, a body is considered "at rest" for sleep purposes.
-    constexpr float kSleepLinearThreshold = 0.05f;
-    constexpr float kSleepAngularThreshold = 0.01f;
-    // How long it must stay below threshold before actually going to sleep -
-    // avoids putting a body to sleep during a brief momentary lull. A body
-    // sitting just past an unstable equilibrium (e.g. supporting another
-    // body with its combined centre of mass no longer over its own base)
-    // has torque roughly proportional to sin(tilt), so its angular
-    // acceleration right at the start of a topple is genuinely tiny - it
-    // can sit under kSleepAngularThreshold for a while before visibly
-    // accelerating. A short window here reads that as "at rest" and freezes
-    // it mid-topple - and once asleep, gravity is skipped for it entirely
-    // (see the isSleeping check below), so it never resumes falling even
-    // though the configuration was never actually stable. 1 full second
-    // (60 frames at the engine's fixed 60Hz) gives a slow-building topple
-    // enough real time to build up past the threshold before being frozen;
-    // Box2D's own default (b2_timeToSleep) is 0.5s for comparison.
-    constexpr float kTimeToSleep = 60.0f / 60.0f;
-    // How far (world units, on the ground plane) the body's centre may sit
-    // outside its support base's convex hull and still count as stable -
-    // absorbs numerical noise in the manifold/hull test below, not a real
-    // tolerance for genuine imbalance.
-    constexpr float kStabilityMargin = 0.02f;
-
-    // The velocity-only check above still isn't enough on its own to rule
-    // out the mid-topple case documented above: it only asks "is it moving
-    // right now", not "is this configuration actually stable". A body
-    // resting flat on a face has its centre of mass over the polygon formed
-    // by its contact points; one balanced on an edge or corner does not (its
-    // own weight still exerts a net restoring/toppling torque about that
-    // base). This checks exactly that - true for both a box's multi-point
-    // face manifold and a sphere's single contact point (whose centre sits
-    // directly above it by construction), false for a box balanced on an
-    // edge or vertex - so it gates sleep on genuine geometric stability
-    // rather than an arbitrary point count, without penalising round shapes.
-    // `pts` and `p` are both already projected onto the ground (XZ) plane.
-    bool centerOverSupportBase(const std::vector<glm::vec2>& pts, const glm::vec2& p) {
-        if (pts.empty()) return false;
-
-        std::vector<glm::vec2> unique;
-        for (const glm::vec2& q : pts) {
-            bool dup = false;
-            for (const glm::vec2& u : unique) {
-                if (glm::length(q - u) < 1e-4f) { dup = true; break; }
-            }
-            if (!dup) unique.push_back(q);
-        }
-
-        auto distanceToSegment = [](const glm::vec2& a, const glm::vec2& b, const glm::vec2& pt) {
-            const glm::vec2 ab = b - a;
-            const float denom = std::max(glm::dot(ab, ab), 1e-8f);
-            const float t = std::clamp(glm::dot(pt - a, ab) / denom, 0.0f, 1.0f);
-            return glm::length(pt - (a + t * ab));
-        };
-
-        if (unique.size() == 1) {
-            return glm::length(p - unique[0]) <= kStabilityMargin;
-        }
-        if (unique.size() == 2) {
-            return distanceToSegment(unique[0], unique[1], p) <= kStabilityMargin;
-        }
-
-        // Convex hull via gift wrapping - point counts here are tiny (<= 8).
-        std::vector<glm::vec2> hull;
-        size_t start = 0;
-        for (size_t i = 1; i < unique.size(); ++i) {
-            if (unique[i].x < unique[start].x) start = i;
-        }
-        size_t current = start;
-        do {
-            hull.push_back(unique[current]);
-            size_t next = (current + 1) % unique.size();
-            for (size_t i = 0; i < unique.size(); ++i) {
-                const glm::vec2& a = unique[current];
-                const glm::vec2& b = unique[next];
-                const glm::vec2& c = unique[i];
-                const float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-                if (cross < 0.0f) next = i;
-            }
-            current = next;
-        } while (current != start && hull.size() <= unique.size());
-
-        if (hull.size() < 3) {
-            return distanceToSegment(hull.front(), hull.back(), p) <= kStabilityMargin;
-        }
-
-        for (size_t i = 0; i < hull.size(); ++i) {
-            const glm::vec2& a = hull[i];
-            const glm::vec2& b = hull[(i + 1) % hull.size()];
-            const glm::vec2 edge = b - a;
-            const glm::vec2 toP = p - a;
-            const float cross = edge.x * toP.y - edge.y * toP.x;
-            if (cross < -kStabilityMargin) return false;
-        }
-        return true;
-    }
+    // Momentum, not raw velocity - mass/inertia-scaled, so the same
+    // physical threshold applies consistently regardless of a body's mass
+    // or shape.
+    constexpr float kSleepLinearMomentumThreshold = 0.05f;
+    constexpr float kSleepAngularMomentumThreshold = 0.01f;
+    constexpr float kTimeToSleep = 1.0f;
+    constexpr int kSolverPasses = 4;
+    // Roughly 10 log lines/sec at 4 substeps * ~60Hz tick.
+    constexpr int kDebugLogInterval = 24;
+    // Positional correction: linear projection + slop (Baumgarte-style),
+    // kept fully separate from the velocity solve above so the two never
+    // double-correct the same overlap.
+    constexpr float kPenetrationSlop = 0.01f;
+    constexpr float kPositionCorrectionPercent = 0.4f;
 }
 
 void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    // --- Step 1: pairs only. Every pair the collision system found
-    // colliding this tick contributes a normal + friction impulse (per
-    // contact point in its cached manifold) into each body's
-    // EC_DOD_ImpulseAccumulator. Nothing else happens here - no gravity,
-    // no damping, no integration; those belong to step 2 below.
-    //
-    // Resolved sequentially (Gauss-Seidel) across every pair, several
-    // passes per tick, and warm-started from last tick's result (see
-    // EC_PhysicsResolution::accumulateImpulses/previewVelocity). Each
-    // pair's resolution reads every earlier pair's contribution so far
-    // this tick via previewVelocity (which reads the live, continuously-
-    // updated accumulator) - so a body touching multiple simultaneous
-    // contacts converges properly within the tick: e.g. a cube resting on
-    // the floor while a falling neighbour lands on it the same tick - the
-    // floor's support impulse now sees that fresh downward hit instead of
-    // resolving against stale velocity. Combined with warm starting
-    // (each contact's accumulated impulse persists tick-to-tick instead of
-    // restarting at zero every frame), this is the standard sequential-
-    // impulse architecture every production physics engine uses.
-    //
-    // Also collected here (independent of the above): every resolvable,
-    // currently-colliding pair's world-space contact points, per entity -
-    // this tick's support base for the centerOverSupportBase() stability
-    // check that gates sleep in Step 2 below.
-    std::unordered_map<EntityID, std::vector<glm::vec3>> bodyContactPoints;
+    // --- Gravity applied first, before the solve, so the constraint solve
+    // below sees and cancels THIS tick's gravity directly. Applying it after
+    // instead leaves the solve chasing last tick's residual one step behind
+    // forever, so the cached normal impulse a resting contact converges to
+    // never reflects the real steady-state weight - it keeps ratcheting up
+    // by a fresh increment each tick, understating the friction budget
+    // (proportional to that cached impulse) for as long as it takes to
+    // build up. ---
+    {
+        auto* rbArrayGravity = manager.getComponentArray<EC_DOD_RigidBody>();
+        if (rbArrayGravity) {
+            std::shared_lock gravityLock(rbArrayGravity->getMutex());
+            auto& rigidBodiesGravity = rbArrayGravity->getData();
+            for (size_t i = 0; i < rigidBodiesGravity.size(); i++) {
+                auto& rb = rigidBodiesGravity[i];
+                if (rb.isStatic || rb.isSleeping) continue;
+                EntityID entity = rbArrayGravity->getEntity(i);
+                if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
+                manager.getComponent<EC_DOD_Spatial>(entity).velocity += kGravity * deltaTimeS;
+            }
+        }
+    }
 
     if (m_PairManager) {
-        // Warm start every still-colliding, resolvable pair exactly once
-        // per tick, before the multi-pass solve below - matches this
-        // tick's contact points to last tick's cache and seeds the real
-        // accumulator with each one's carried-over impulse, so every
-        // solver pass (and every other pair's previewVelocity) sees it as
-        // this tick's starting guess. Must run to completion here, not
-        // inside the pass loop, or it would double-apply on every pass.
+        // --- RECORD: every body touched by at least one currently-
+        // colliding pair gets its real velocity/mass/inertia read exactly
+        // once, up front. This recorded state is never mutated again this
+        // tick - everything below only ever adds to a separate accumulator. ---
+        std::unordered_map<EntityID, EC_PhysicsResolution::BodyState> bodies;
+        // Every colliding pair's contact points, per entity - published
+        // below as EC_DOD_DebugContacts so debug rendering (F1) can draw
+        // them via the normal shared_mutex-protected component-array path,
+        // instead of reading EC_PairManager (physics-thread-internal) from
+        // the render thread.
+        std::unordered_map<EntityID, std::vector<glm::vec3>> bodyContactPoints;
         for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
-            if (!EC_PhysicsResolution::shouldResolve(pair.body_A, pair.body_B)) continue;
-
-            CollisionManifold manifold;
-            manifold.contactPoints = pair.m_CollisionPoints;
-            manifold.contactNormal = pair.m_ContactNormal;
-            manifold.penetrationDepth = pair.m_PenetrationDepth;
-            EC_PhysicsResolution::warmStartPair(pair.body_A, pair.body_B, manifold, pair.m_ContactCache);
+            bodies.try_emplace(pair.body_A, EC_PhysicsResolution::recordBody(pair.body_A));
+            bodies.try_emplace(pair.body_B, EC_PhysicsResolution::recordBody(pair.body_B));
 
             auto& pointsA = bodyContactPoints[pair.body_A];
             auto& pointsB = bodyContactPoints[pair.body_B];
@@ -169,13 +84,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             pointsB.insert(pointsB.end(), pair.m_CollisionPoints.begin(), pair.m_CollisionPoints.end());
         }
 
-        // Publish this tick's contact points as component data so debug
-        // rendering can draw them via the normal shared_mutex-protected
-        // component-array path, same as it reads colliders/transforms -
-        // instead of reading EC_PairManager (physics-thread-internal) from
-        // the render thread. Only entities actually in bodyContactPoints get
-        // written; anything that had contacts last tick but not this tick
-        // gets explicitly cleared below so stale markers don't linger.
+        // Only entities actually in bodyContactPoints get written; anything
+        // that had contacts last tick but not this tick gets explicitly
+        // cleared so stale markers don't linger.
         std::vector<EntityID> currentContactEntities;
         currentContactEntities.reserve(bodyContactPoints.size());
         for (const auto& [entity, points] : bodyContactPoints) {
@@ -189,119 +100,207 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         }
         m_LastDebugContactEntities = std::move(currentContactEntities);
 
-        constexpr int kSolverPasses = 4;
-        for (int pass = 0; pass < kSolverPasses; pass++) {
-            for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
-                if (!pair.m_Colliding) continue;
-                if (!EC_PhysicsResolution::shouldResolve(pair.body_A, pair.body_B)) continue;
+        // --- WARM START: re-apply every contact point's previously
+        // converged impulse in full, before any new pass runs. Kinetic
+        // friction is an ongoing force - it needs to keep decelerating a
+        // sliding body every substep, not just once - so the cached
+        // impulse has to be reapplied fresh each tick, not merely used as
+        // a baseline that only the CHANGE from is ever applied to real
+        // velocity (see EC_PhysicsResolution::applyWarmStart). ---
+        for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
+            if (!pair.m_Colliding) continue;
 
-                CollisionManifold manifold;
-                manifold.contactPoints = pair.m_CollisionPoints;
-                manifold.contactNormal = pair.m_ContactNormal;
-                manifold.penetrationDepth = pair.m_PenetrationDepth;
+            auto& bodyA = bodies.at(pair.body_A);
+            auto& bodyB = bodies.at(pair.body_B);
+            if (bodyA.invMass <= 0.0f && bodyB.invMass <= 0.0f) continue;
 
-                glm::vec3 velA, angVelA, velB, angVelB;
-                EC_PhysicsResolution::previewVelocity(pair.body_A, velA, angVelA);
-                EC_PhysicsResolution::previewVelocity(pair.body_B, velB, angVelB);
+            if (pair.m_ContactCache.size() != pair.m_CollisionPoints.size()) {
+                pair.m_ContactCache.assign(pair.m_CollisionPoints.size(), EC_ContactImpulseCache{});
+            }
 
-                EC_PhysicsResolution::accumulateImpulses(pair.body_A, pair.body_B, manifold,
-                    velA, angVelA, velB, angVelB, pair.m_ContactCache);
+            glm::vec3 posA(0.0f), posB(0.0f);
+            if (manager.hasComponent<EC_DOD_Spatial>(pair.body_A))
+                posA = manager.getComponent<EC_DOD_Spatial>(pair.body_A).position;
+            if (manager.hasComponent<EC_DOD_Spatial>(pair.body_B))
+                posB = manager.getComponent<EC_DOD_Spatial>(pair.body_B).position;
+
+            for (size_t i = 0; i < pair.m_CollisionPoints.size(); i++) {
+                EC_PhysicsResolution::applyWarmStart(
+                    bodyA, bodyB, posA, posB,
+                    pair.m_CollisionPoints[i], pair.m_ContactNormal,
+                    pair.m_ContactCache[i]);
             }
         }
 
-        // --- Step 1b: direct positional correction, once per still-
-        // colliding pair, after velocity has converged above. The velocity
-        // bias inside accumulateImpulses is rate-limited by construction -
-        // a body under sustained load (e.g. still supporting the rest of a
-        // stack) settles at whatever depth balances that rate against the
-        // load, and a fast impact can outrun it before it catches up. This
-        // has no such limit: it closes most of the gap immediately,
-        // regardless of load or impact speed. Runs once (not per sweep) -
-        // it isn't part of the velocity solve's convergence, and repeating
-        // it would just overshoot. ---
+        // --- ITERATE: every contact point on every colliding pair
+        // contributes an incremental impulse each pass. Repeating the whole
+        // pass over every pair (rather than just each pair's own manifold)
+        // is what lets a multi-body system - a stack - converge within one
+        // tick: resolving the bottom pair changes velocities the next pair
+        // up needs to see. ---
+        for (int pass = 0; pass < kSolverPasses; pass++) {
+            for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
+                if (!pair.m_Colliding) continue;
+
+                auto& bodyA = bodies.at(pair.body_A);
+                auto& bodyB = bodies.at(pair.body_B);
+                if (bodyA.invMass <= 0.0f && bodyB.invMass <= 0.0f) continue;
+
+                if (pair.m_ContactCache.size() != pair.m_CollisionPoints.size()) {
+                    pair.m_ContactCache.assign(pair.m_CollisionPoints.size(), EC_ContactImpulseCache{});
+                }
+
+                glm::vec3 posA(0.0f), posB(0.0f);
+                if (manager.hasComponent<EC_DOD_Spatial>(pair.body_A))
+                    posA = manager.getComponent<EC_DOD_Spatial>(pair.body_A).position;
+                if (manager.hasComponent<EC_DOD_Spatial>(pair.body_B))
+                    posB = manager.getComponent<EC_DOD_Spatial>(pair.body_B).position;
+
+                for (size_t i = 0; i < pair.m_CollisionPoints.size(); i++) {
+                    pair.m_ContactCache[i].point = pair.m_CollisionPoints[i];
+                    EC_PhysicsResolution::accumulateContactImpulse(
+                        bodyA, bodyB, posA, posB,
+                        pair.m_CollisionPoints[i], pair.m_ContactNormal,
+                        pair.m_ContactCache[i]);
+
+                    if (m_LogFriction && pass == kSolverPasses - 1 && ++m_ContactLogCounter >= kDebugLogInterval) {
+                        m_ContactLogCounter = 0;
+                        const auto& c = pair.m_ContactCache[i];
+                        const float staticCoeff = std::sqrt(bodyA.staticFriction * bodyB.staticFriction);
+                        const float kineticCoeff = std::sqrt(bodyA.kineticFriction * bodyB.kineticFriction);
+                        std::ostringstream oss;
+                        oss << "[FRICTION] A=" << pair.body_A << " B=" << pair.body_B
+                            << " point=" << i
+                            << " normalImpulse=" << c.normalImpulse
+                            << " tangentImpulse=(" << c.tangentImpulse.x << "," << c.tangentImpulse.y << ")"
+                            << " tangentMag=" << glm::length(c.tangentImpulse)
+                            << " staticCoeff=" << staticCoeff << " kineticCoeff=" << kineticCoeff;
+                        LOGGING::ECX_Logger::GetInstance()->LogMessage(oss.str(), LOGGING::LogLevel::INFORMATION);
+                    }
+                }
+            }
+        }
+
+        // --- APPLY: every recorded body's total accumulated impulse
+        // becomes a real velocity change, exactly once, now that every
+        // pass and every contact point is done. A sleeping body that
+        // genuinely got pushed (real resulting speed, not just numerical
+        // noise) wakes up right here, so it's picked up by the gravity/
+        // integration loop below in the same tick instead of losing a
+        // frame reacting to it. ---
+        for (auto& [entity, body] : bodies) {
+            if (body.invMass <= 0.0f) continue;
+            if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
+            auto& spatial = manager.getComponent<EC_DOD_Spatial>(entity);
+            spatial.velocity += body.accumulatedLinearImpulse * body.invMass;
+            spatial.angVelocity += body.invInertiaWorld * body.accumulatedAngularImpulse;
+
+            if (manager.hasComponent<EC_DOD_RigidBody>(entity)) {
+                auto& rb = manager.getComponent<EC_DOD_RigidBody>(entity);
+                if (rb.isSleeping &&
+                    (glm::dot(spatial.velocity, spatial.velocity) > 1e-6f ||
+                     glm::dot(spatial.angVelocity, spatial.angVelocity) > 1e-6f)) {
+                    rb.isSleeping = false;
+                    rb.sleepTimer = 0.0f;
+                }
+            }
+        }
+
+        // --- Positional correction: resolves a fraction of any remaining
+        // penetration beyond a small slop, translation only, once per
+        // still-colliding pair, after velocity has converged above. ---
         for (const EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
-            if (!EC_PhysicsResolution::shouldResolve(pair.body_A, pair.body_B)) continue;
+            if (pair.m_PenetrationDepth <= kPenetrationSlop) continue;
 
-            CollisionManifold manifold;
-            manifold.contactPoints = pair.m_CollisionPoints;
-            manifold.contactNormal = pair.m_ContactNormal;
-            manifold.penetrationDepth = pair.m_PenetrationDepth;
-            EC_PhysicsResolution::correctPosition(pair.body_A, pair.body_B, manifold);
+            float invMassA = 0.0f, invMassB = 0.0f;
+            if (manager.hasComponent<EC_DOD_RigidBody>(pair.body_A)) {
+                const auto& rb = manager.getComponent<EC_DOD_RigidBody>(pair.body_A);
+                if (!rb.isStatic && rb.mass > 1e-6f) invMassA = 1.0f / rb.mass;
+            }
+            if (manager.hasComponent<EC_DOD_RigidBody>(pair.body_B)) {
+                const auto& rb = manager.getComponent<EC_DOD_RigidBody>(pair.body_B);
+                if (!rb.isStatic && rb.mass > 1e-6f) invMassB = 1.0f / rb.mass;
+            }
+            const float invMassSum = invMassA + invMassB;
+            if (invMassSum <= 1e-6f) continue;
+
+            if (!manager.hasComponent<EC_DOD_Spatial>(pair.body_A) ||
+                !manager.hasComponent<EC_DOD_Spatial>(pair.body_B)) continue;
+            auto& spatialA = manager.getComponent<EC_DOD_Spatial>(pair.body_A);
+            auto& spatialB = manager.getComponent<EC_DOD_Spatial>(pair.body_B);
+
+            const float excessDepth = pair.m_PenetrationDepth - kPenetrationSlop;
+            const float correctionMag = excessDepth / invMassSum * kPositionCorrectionPercent;
+            const glm::vec3 correction = correctionMag * pair.m_ContactNormal;
+
+            if (invMassA > 0.0f) spatialA.position -= correction * invMassA;
+            if (invMassB > 0.0f) spatialB.position += correction * invMassB;
         }
     }
 
-    // --- Step 2: apply. Every awake, non-static rigid body consumes
-    // gravity + whatever step 1 (or a prior tick's leftover, though there
-    // shouldn't be any) cached in its accumulator, then integrates. ---
+    // --- Damping, sleep, integration: every awake, non-static rigid body,
+    // once per tick. Gravity already applied above, before the solve. ---
     auto* rbArray = manager.getComponentArray<EC_DOD_RigidBody>();
     if (!rbArray) return;
 
     std::shared_lock lock(rbArray->getMutex());
     auto& rigidBodies = rbArray->getData();
 
+    float totalMechanicalEnergy = 0.0f;
+
     for (size_t i = 0; i < rigidBodies.size(); i++) {
         auto& rb = rigidBodies[i];
         EntityID entity = rbArray->getEntity(i);
 
         if (rb.isStatic) continue;
-
         if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
         auto& spatial = manager.getComponent<EC_DOD_Spatial>(entity);
 
-        if (rb.isSleeping) {
-            continue; // frozen; woken by EC_PhysicsResolution when disturbed
-        }
+        if (rb.isSleeping) continue;
 
-        const float invMass = (rb.mass > 1e-6f) ? (1.0f / rb.mass) : 0.0f;
-
-        // --- Gravity: a plain linear force, applied as a momentum
-        // contribution (mass * g * dt) same as any other impulse source. ---
-        glm::vec3 deltaLinearMomentum = kGravity * rb.mass * deltaTimeS;
-        glm::vec3 deltaAngularMomentum(0.0f);
-
-        // --- Cached impulses from this tick's collision resolution (step 1
-        // above, warm-started and converged across several solver passes). ---
-        if (manager.hasComponent<EC_DOD_ImpulseAccumulator>(entity)) {
-            auto& accum = manager.getComponent<EC_DOD_ImpulseAccumulator>(entity);
-            deltaLinearMomentum += accum.deltaLinearMomentum;
-            deltaAngularMomentum += accum.deltaAngularMomentum;
-            accum.deltaLinearMomentum = glm::vec3(0.0f);
-            accum.deltaAngularMomentum = glm::vec3(0.0f);
-        }
-
-        // --- Apply: linear first, then angular ---
-        spatial.velocity += deltaLinearMomentum * invMass;
-
-        const glm::mat3 invInertiaWorld = EC_PhysicsResolution::computeInvInertiaWorld(entity, rb.mass);
-        spatial.angVelocity += invInertiaWorld * deltaAngularMomentum;
-
-        // --- Damping: a per-second fractional velocity decay, independent
-        // of contact - models drag/internal energy loss. Distinct from
-        // friction (which only acts at a contact point) and from the
-        // impulse-based forces above. ---
         spatial.velocity *= std::max(0.0f, 1.0f - rb.linearDamping * deltaTimeS);
         spatial.angVelocity *= std::max(0.0f, 1.0f - rb.angularDamping * deltaTimeS);
 
-        // --- Sleep bookkeeping, now that this tick's velocity is final ---
-        const bool slowEnough =
-            glm::dot(spatial.velocity, spatial.velocity) < kSleepLinearThreshold * kSleepLinearThreshold &&
-            glm::dot(spatial.angVelocity, spatial.angVelocity) < kSleepAngularThreshold * kSleepAngularThreshold;
+        const glm::mat3 invInertiaWorld = EC_PhysicsResolution::computeInvInertiaWorld(entity, rb.mass);
 
-        bool stablySupported = false;
-        if (slowEnough) {
-            const auto it = bodyContactPoints.find(entity);
-            if (it != bodyContactPoints.end()) {
-                std::vector<glm::vec2> projected;
-                projected.reserve(it->second.size());
-                for (const glm::vec3& pt : it->second) {
-                    projected.emplace_back(pt.x, pt.z);
-                }
-                stablySupported = centerOverSupportBase(projected, glm::vec2(spatial.position.x, spatial.position.z));
+        const glm::vec3 linearMomentum = rb.mass * spatial.velocity;
+        glm::mat3 inertiaWorld(0.0f);
+        if (std::abs(glm::determinant(invInertiaWorld)) > 1e-8f) {
+            inertiaWorld = glm::inverse(invInertiaWorld);
+        }
+        const glm::vec3 angularMomentum = inertiaWorld * spatial.angVelocity;
+
+        if (m_LogEnergy) {
+            const float kineticEnergy = 0.5f * rb.mass * glm::dot(spatial.velocity, spatial.velocity);
+            const float rotationalEnergy = 0.5f * glm::dot(spatial.angVelocity, angularMomentum);
+            const float potentialEnergy = -rb.mass * kGravity.y * spatial.position.y;
+            totalMechanicalEnergy += kineticEnergy + rotationalEnergy + potentialEnergy;
+        }
+
+        if ((m_LogVelocity || m_LogAngularVelocity) && ++m_BodyLogCounter >= kDebugLogInterval) {
+            m_BodyLogCounter = 0;
+            if (m_LogVelocity) {
+                std::ostringstream oss;
+                oss << "[VELOCITY] entity=" << entity
+                    << " velocity=(" << spatial.velocity.x << "," << spatial.velocity.y << "," << spatial.velocity.z << ")"
+                    << " speed=" << glm::length(spatial.velocity)
+                    << " pos=(" << spatial.position.x << "," << spatial.position.y << "," << spatial.position.z << ")";
+                LOGGING::ECX_Logger::GetInstance()->LogMessage(oss.str(), LOGGING::LogLevel::INFORMATION);
+            }
+            if (m_LogAngularVelocity) {
+                std::ostringstream oss;
+                oss << "[ANGULAR_VELOCITY] entity=" << entity
+                    << " angVelocity=(" << spatial.angVelocity.x << "," << spatial.angVelocity.y << "," << spatial.angVelocity.z << ")"
+                    << " speed=" << glm::length(spatial.angVelocity);
+                LOGGING::ECX_Logger::GetInstance()->LogMessage(oss.str(), LOGGING::LogLevel::INFORMATION);
             }
         }
 
-        const bool atRest = slowEnough && stablySupported;
+        const bool atRest =
+            glm::dot(linearMomentum, linearMomentum) < kSleepLinearMomentumThreshold * kSleepLinearMomentumThreshold &&
+            glm::dot(angularMomentum, angularMomentum) < kSleepAngularMomentumThreshold * kSleepAngularMomentumThreshold;
+
         rb.sleepTimer = atRest ? (rb.sleepTimer + deltaTimeS) : 0.0f;
         if (rb.sleepTimer >= kTimeToSleep) {
             rb.isSleeping = true;
@@ -310,40 +309,19 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             continue;
         }
 
-        // --- Integrate position/orientation from the final velocity ---
+        // --- Integrate position/orientation from the final velocity.
+        // Angular velocity is composed as a real quaternion rotation, not
+        // summed component-wise into Euler angles and rebuilt via three
+        // sequential single-axis rotations - that only tracks rotation
+        // correctly about one fixed axis at a time. ---
         spatial.position += spatial.velocity * deltaTimeS;
 
-        // Rigid bodies tumble about a constantly-changing axis, so angular
-        // velocity has to be composed as a real 3D rotation - NOT summed
-        // component-wise into spatial.orientation and rebuilt via three
-        // sequential single-axis rotations (what this used to do, and what
-        // EC_SpatialSystem/EC_TransformSystem::buildLocal still correctly
-        // do for non-physics entities, where only single-axis/no rotation
-        // ever applies). That sequential-Euler reconstruction only tracks
-        // rotation correctly about one fixed axis at a time; a genuine
-        // multi-axis tumble drifts away from the real physical orientation
-        // under it, which is exactly what let a box settle resting on an
-        // edge or corner instead of a face even when the underlying angular
-        // velocity was truly converging toward zero - the DISPLAYED and
-        // COLLIDED orientation was silently wrong regardless.
-        //
-        // Fix: integrate into a real orientation quaternion instead
-        // (spatial.orientationQuat), reading the CURRENT right/up/direction
-        // basis as this tick's starting orientation (so a body's XML-authored
-        // spawn orientation, or last tick's result, is always the true
-        // input - no separate first-tick sync needed), applying this tick's
-        // rotation as a proper quaternion composition, then writing the
-        // result back out to right/up/direction (read by the OBB collider)
-        // AND decomposing it into the same X*Y*Z-order Euler angles
-        // EC_TransformSystem::buildLocal expects, so rendering picks up the
-        // fix automatically without needing any change of its own.
         const glm::mat3 basis(spatial.right, spatial.up, -spatial.direction);
         const glm::quat currentQuat = glm::normalize(glm::quat_cast(basis));
 
         const float angSpeed = glm::length(spatial.angVelocity);
         glm::quat deltaQuat(1.0f, 0.0f, 0.0f, 0.0f);
         if (angSpeed > 1e-8f) {
-            // World-space angular velocity - premultiply.
             deltaQuat = glm::angleAxis(angSpeed * deltaTimeS, spatial.angVelocity / angSpeed);
         }
         const glm::quat newQuat = glm::normalize(deltaQuat * currentQuat);
@@ -358,30 +336,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             spatial.orientation.x, spatial.orientation.y, spatial.orientation.z);
     }
 
-    // Total system mechanical energy (kinetic + gravitational potential, not
-    // just kinetic - KE alone legitimately grows anytime something is simply
-    // falling, so it isn't a useful invariant on its own) across every awake
-    // dynamic body. Should only ever decrease (friction/damping/inelastic
-    // impacts dissipate it) or drop sharply when a body goes to sleep
-    // (excluded from the sum) - a sustained increase means the solver is
-    // injecting energy it shouldn't. Off by default; enable via
-    // EngineConfig.xml's <Physics><Debug><LogEnergy>true</LogEnergy>.
     if (m_LogEnergy) {
-        static int s_EnergyTick = 0;
-        s_EnergyTick++;
-        float totalEnergy = 0.0f;
-        for (size_t i = 0; i < rigidBodies.size(); i++) {
-            auto& rb = rigidBodies[i];
-            if (rb.isStatic || rb.isSleeping) continue;
-            EntityID entity = rbArray->getEntity(i);
-            if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
-            auto& spatial = manager.getComponent<EC_DOD_Spatial>(entity);
-            totalEnergy += 0.5f * rb.mass * glm::dot(spatial.velocity, spatial.velocity);
-            totalEnergy += 0.5f * glm::dot(spatial.angVelocity, spatial.angVelocity);
-            totalEnergy += rb.mass * 9.8f * spatial.position.y;
-        }
-        LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "[ENERGY] tick=" + std::to_string(s_EnergyTick) + " total=" + std::to_string(totalEnergy),
-            LOGGING::LogLevel::INFORMATION);
+        std::ostringstream oss;
+        oss << "[ENERGY] " << totalMechanicalEnergy;
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(oss.str(), LOGGING::LogLevel::INFORMATION);
     }
 }

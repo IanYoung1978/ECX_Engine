@@ -1,144 +1,76 @@
 #pragma once
 #include "Entity/EC_DOD_Types.h"
-#include "EC_CollisionShapes.h"
 #include "EC_PairManager.h"
 #include <glm/glm.hpp>
 
 namespace EC_PhysicsResolution
 {
-    // Stage 1 of 2 (collision resolution). Computes the normal + friction
-    // impulse at every contact point in the manifold - based on the bodies'
-    // velocities as of the start of this tick, not updated between points -
-    // and adds the resulting linear/angular momentum contributions to each
-    // body's EC_DOD_ImpulseAccumulator. Does NOT touch EC_DOD_Spatial
-    // velocity/angVelocity at all; that happens in stage 2 (see
-    // EC_PhysicsSystem), which consumes every body's accumulator alongside
-    // gravity and damping in one place. Entities without an EC_DOD_RigidBody
-    // are treated as infinite-mass/static, so any existing scene geometry
-    // acts as a solid obstacle with no changes required.
-    //
-    // Purely a velocity-space impulse: cancels closing velocity (with
-    // restitution) at every contact point, nothing else. Penetration depth
-    // is NOT folded in here - that's correctPosition's job, run once per
-    // pair separately after velocity resolution. Combining a velocity-space
-    // depth bias with a direct position correction double-corrects (the
-    // position fix removes the overlap, but the bias-driven separating
-    // velocity it also added is still there and keeps pushing the body
-    // apart on top of that), which is why the two are kept fully separate.
-    //
-    // velA/angVelA/velB/angVelB are the velocities this call resolves
-    // against - NOT read from EC_DOD_Spatial internally, so the caller
-    // controls exactly what "start of tick" means. For a single isolated
-    // pair that's just each body's real EC_DOD_Spatial velocity. For a body
-    // touching multiple pairs at once (e.g. a cube in a stack, resting on
-    // one neighbour and freshly struck by another), a single pass across
-    // all pairs computed against the real, un-updated Spatial velocity
-    // can't converge - the floor's support impulse doesn't "see" a fresh
-    // downward hit from above still landing this same tick, so it
-    // undercorrects. EC_PhysicsSystem resolves this sequentially across all
-    // pairs, each pair reading every earlier pair's result so far this tick
-    // (via previewVelocity below), rather than calling this with raw
-    // Spatial.
-    //
-    // contactCache is this pair's persistent per-contact-point accumulated
-    // impulse (warm starting), already prepared for this tick by exactly
-    // one prior call to warmStartPair (see below) - indexed 1:1 with
-    // manifold.contactPoints. This may be called several times per tick
-    // (one per solver pass); each call refines the running totals already
-    // in contactCache further, it does not re-seed them - re-seeding on
-    // every pass would double-apply the warm start.
-    void accumulateImpulses(EntityID a, EntityID b, const CollisionManifold& manifold,
-        const glm::vec3& velA, const glm::vec3& angVelA,
-        const glm::vec3& velB, const glm::vec3& angVelB,
-        std::vector<EC_ContactImpulseCache>& contactCache);
-
-    // Call exactly once per pair per tick, before any accumulateImpulses
-    // calls for it. Matches this tick's contactPoints to last tick's cache
-    // by closest position (within a small radius) and carries over each
-    // matched point's normal impulse as this tick's starting guess -
-    // "warm starting" - immediately applying it to both bodies'
-    // EC_DOD_ImpulseAccumulator so every subsequent previewVelocity call
-    // this tick (across every solver pass) reflects it. Unmatched points
-    // (a genuinely new contact) start at zero, same as with no warm
-    // starting at all. Friction is deliberately NOT carried over - its
-    // tangent direction is derived from the current slip direction each
-    // call, which can rotate tick-to-tick, so a carried-over magnitude
-    // wouldn't cleanly apply to a different direction. This is what
-    // actually lets a sustained contact (a resting or tumbling box)
-    // converge tick-to-tick instead of re-deriving - and re-injecting
-    // solver noise from - a fresh answer every single frame. Standard
-    // technique in every production physics engine.
-    void warmStartPair(EntityID a, EntityID b, const CollisionManifold& manifold,
-        std::vector<EC_ContactImpulseCache>& contactCache);
-
-    // Returns entity's real EC_DOD_Spatial velocity/angular velocity plus
-    // whatever its EC_DOD_ImpulseAccumulator has accumulated so far this
-    // tick, converted through invMass/invInertia - i.e. "the velocity this
-    // body would have if step 2 applied the accumulator right now, minus
-    // gravity/damping (which are step 2's job, not relevant mid-solve)".
-    // Called before resolving every pair, so each pair sees every earlier
-    // pair's contribution so far this tick (sequential/Gauss-Seidel, not a
-    // frozen per-sweep snapshot); entities without a RigidBody (static
-    // geometry) just return their Spatial velocity unchanged (always zero
-    // for genuinely static geometry).
-    void previewVelocity(EntityID entity, glm::vec3& outVel, glm::vec3& outAngVel);
-
-    // Call once per pair, before accumulating its impulses, to apply sleep
-    // bookkeeping: wakes a sleeping body if the other side of the pair has
-    // real motion, and returns false (meaning skip accumulateImpulses/
-    // correctPosition this frame) when both sides are already at rest
-    // relative to each other - resolving an already-settled pair every frame
-    // is exactly what re-injects the tiny numerical drift sleeping exists to
-    // prevent.
-    bool shouldResolve(EntityID a, EntityID b);
-
-    // Wakes the entity if it has a sleeping RigidBody, no-op otherwise. Call
-    // when a pair stops colliding (CollisionEndEvent) - a sleeping body may
-    // have been resting on whatever it just separated from (e.g. knocked out
-    // from under it), so losing that contact needs to re-evaluate it rather
-    // than leaving it frozen mid-air with nothing left holding it up.
     void wakeIfSleeping(EntityID entity);
 
-    // Direct positional correction: separates a and b along the manifold
-    // normal by a fraction of the excess penetration (beyond slop), no
-    // velocity/momentum involved. Companion to accumulateImpulses'
-    // velocity-space resolution, not a replacement for it - velocity
-    // resolution is rate-limited by construction (it only closes a
-    // fraction of the gap per second, however stiff), so a body under
-    // sustained load (e.g. still supporting the rest of a stack) settles
-    // into an equilibrium at whatever depth balances that rate against the
-    // load, and a fast transient impact can outrun it entirely before it
-    // catches up. Direct position correction has no such rate limit -
-    // called once per still-colliding pair, after velocity has already
-    // been resolved, it closes most of the gap immediately regardless of
-    // load or impact speed. Standard technique (every mainstream engine
-    // pairs the two for this exact reason).
-    //
-    // Translation only - deliberately never touches orientation. A version
-    // of this that also nudged orientation directly (a per-point pseudo-
-    // torque split across manifold.contactPoints, intended to fix tilted
-    // contacts a pure translation can't) was tried and reverted: for a
-    // body in a SUSTAINED asymmetric contact (leaning against a neighbour
-    // rather than resting flat), gravity regenerates the same small
-    // overlap every tick, so that correction reapplied every tick too, in
-    // the same direction, silently accumulating into a large rotation over
-    // many seconds - entirely outside spatial.angVelocity, so the sleep
-    // system (which only ever looks at velocity) had no way to see or stop
-    // it. Rotation belongs entirely to the velocity solver
-    // (accumulateImpulses) - if a body needs to rotate, that has to come
-    // from a real, measurable angular velocity, not a position-space nudge
-    // with no velocity behind it.
-    void correctPosition(EntityID a, EntityID b, const CollisionManifold& manifold);
-
-    // Diagonal inverse inertia tensor for entity's collider shape, rotated
-    // into world space (sphere: 2/5*m*r^2; box: standard 1/12*m*(h^2+d^2) per
-    // axis, using the OBB's current orientation - AABB colliders don't
-    // rotate so use the identity orientation). Shared between stage 1
-    // (computing angular impulse denominators) and stage 2 (turning
-    // accumulated angular momentum into angular velocity) so both use
-    // exactly the same inertia. Capsule/Cylinder/etc have no
-    // collision-response dispatch entries at all (pre-existing gap), so they
-    // fall back to infinite inertia (zero matrix - no rotation imparted)
-    // rather than guessing a formula.
     glm::mat3 computeInvInertiaWorld(EntityID entity, float mass);
+
+    // One body's state for this tick's velocity solve: real velocity/
+    // angular velocity as RECORDED at the start of the solve (never
+    // mutated again), inverse mass/inertia and material properties, and
+    // the impulse accumulated across every contact point touching it so
+    // far - not applied to real EC_DOD_Spatial until the caller's own
+    // final apply step, after every contact point on every pair has
+    // contributed.
+    struct BodyState
+    {
+        glm::vec3 recordedVelocity{ 0.0f };
+        glm::vec3 recordedAngVelocity{ 0.0f };
+        float invMass = 0.0f;
+        float restitution = 0.0f;
+        float staticFriction = 0.0f;
+        float kineticFriction = 0.0f;
+        glm::mat3 invInertiaWorld{ 0.0f };
+        glm::vec3 accumulatedLinearImpulse{ 0.0f };
+        glm::vec3 accumulatedAngularImpulse{ 0.0f };
+    };
+
+    // Records entity's real current velocity, mass, inertia, and material
+    // properties. Call once per body per tick, before any contact point is
+    // processed.
+    BodyState recordBody(EntityID entity);
+
+    // This body's velocity ESTIMATE at a point: recordedVelocity/
+    // recordedAngVelocity plus whatever's accumulated on it so far this
+    // tick. Never reads or writes real EC_DOD_Spatial state.
+    glm::vec3 estimatedVelocityAtPoint(const BodyState& body, const glm::vec3& r);
+
+    // Re-applies a contact point's PREVIOUSLY CONVERGED impulse (from the
+    // last time this pair was solved) into bodyA/bodyB's accumulator,
+    // before any new pass runs this tick. Without this, only the CHANGE in
+    // the cached impulse ever reaches real velocity - fine for the normal
+    // constraint (a resting contact's required impulse is nearly the same
+    // tick to tick, so the change is naturally small), but wrong for
+    // kinetic friction, which is an ONGOING force: once a sliding contact's
+    // cached impulse saturates the friction cone (immediately, in
+    // practice), the cone clamp keeps producing the SAME total every pass,
+    // the delta collapses to ~zero, and the object stops decelerating
+    // while still sliding. Call once per contact point per tick, before
+    // the solver passes.
+    void applyWarmStart(
+        BodyState& bodyA, BodyState& bodyB,
+        const glm::vec3& posA, const glm::vec3& posB,
+        const glm::vec3& contactPoint, const glm::vec3& normal,
+        const EC_ContactImpulseCache& cache);
+
+    // Computes this pass's incremental impulse for one contact point,
+    // solving the normal (non-penetration) constraint and both tangential
+    // (Coulomb friction) directions as one coupled 3x3 system - the
+    // tangent basis is built from the contact normal's own geometry
+    // (stable), not from relative velocity (unstable near rest, where
+    // normalizing a tiny/noisy vector swings the friction direction wildly
+    // pass to pass). Adds the result into bodyA/bodyB's accumulated
+    // impulse and the cache's running totals (warm-started, clamped
+    // non-negative for the normal impulse). Never touches real
+    // EC_DOD_Spatial; the caller applies the final accumulated totals once,
+    // after every pass and every contact point is done.
+    void accumulateContactImpulse(
+        BodyState& bodyA, BodyState& bodyB,
+        const glm::vec3& posA, const glm::vec3& posB,
+        const glm::vec3& contactPoint, const glm::vec3& normal,
+        EC_ContactImpulseCache& cache);
 }

@@ -22,13 +22,28 @@
 		     near a near-balanced equilibrium. 4 is a common default; 1
 		     disables substepping entirely (original behaviour). -->
 		<Substeps>4</Substeps>
-		<!-- Logs every tick's total system mechanical energy (kinetic +
-		     gravitational potential, summed across every awake dynamic body)
-		     via ECX_Logger, tagged "[ENERGY]". Off by default - meant for
-		     diagnosing solver bugs (a real bug shows as a sustained
-		     increase; kinetic energy alone isn't a useful signal here since
-		     it legitimately grows anytime something is simply falling). -->
-		<Debug><LogEnergy>false</LogEnergy></Debug>
+		<!-- Independent debug-logging toggles via ECX_Logger, each off by
+		     default - enable only the one(s) you need, since every awake
+		     body/contact point logs at ~10 lines/sec when its flag is on.
+		     LogEnergy: total system mechanical energy (kinetic + rotational
+		     + gravitational potential, summed across every awake dynamic
+		     body), tagged "[ENERGY]" - a real solver bug shows as a
+		     sustained increase; kinetic energy alone isn't a useful signal
+		     since it legitimately grows anytime something is simply falling.
+		     LogVelocity / LogAngularVelocity: per-body linear/angular
+		     velocity and position, tagged "[VELOCITY]"/"[ANGULAR_VELOCITY]".
+		     LogFriction: per-contact-point normal/tangent impulse and the
+		     combined static/kinetic coefficients actually used, tagged
+		     "[FRICTION]" - e.g. to catch a static body missing its
+		     RigidBody component (and so silently contributing zero
+		     friction to every contact, regardless of what the other body's
+		     material specifies). -->
+		<Debug>
+			<LogEnergy>false</LogEnergy>
+			<LogVelocity>false</LogVelocity>
+			<LogAngularVelocity>false</LogAngularVelocity>
+			<LogFriction>false</LogFriction>
+		</Debug>
 	</Physics>
 	
 </EngineSettings>
