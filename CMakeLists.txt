@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.13)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 # attach to vcpkg's cmake configuration for project dependencies
@@ -24,11 +24,33 @@ find_package(Catch2 CONFIG REQUIRED)
 
 if(ECX_BUILD_ENGINE)
 
-message("searching ${SOURCE_DIR} for source files")
+# Explicit sources, not a glob: each src/ subdirectory owns a CMakeLists.txt
+# calling target_sources(ECX PRIVATE ...) with its own files (relative paths
+# resolve against that subdirectory - CMP0076, default NEW as of the 3.13
+# minimum above), so it's visible from the directory listing alone which
+# files belong to the build, and a stray file added to a directory without
+# updating its CMakeLists.txt is silently excluded rather than silently
+# swept in.
+add_executable(ECX
+    src/Eclipsis.cpp
+    src/Game.cpp
+    src/Game.h
+    src/resource.h
+)
 
-file(GLOB_RECURSE ECX_SOURCE ${SOURCE_DIR}/*.*)
-
-add_executable(ECX ${ECX_SOURCE} "src/Engine/Subsystems/CollisionSystems/EC_CollisionShapes.h")
+add_subdirectory(src/Components)
+add_subdirectory(src/Engine)
+add_subdirectory(src/Entity)
+add_subdirectory(src/Graphics)
+add_subdirectory(src/Logging)
+add_subdirectory(src/Messaging)
+add_subdirectory(src/SceneManager)
+add_subdirectory(src/Spatial)
+add_subdirectory(src/TaskManager)
+add_subdirectory(src/UI)
+add_subdirectory(src/vendor)
+add_subdirectory(src/Window)
+add_subdirectory(src/xml)
 
 set_property(TARGET ECX PROPERTY CXX_STANDARD 17)
 

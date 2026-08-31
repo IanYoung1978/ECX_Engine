@@ -1,10 +1,10 @@
 #pragma once
 #include <memory>
-#include "Engine/Controller.h"
-#include "EC_System.h"
+#include "Engine/Controllers/Controller.h"
+#include "Engine/Subsystems/EC_System.h"
 #include <vector>
-#include "Engine/Mouse.h"
-#include "Engine/Keyboard.h"
+#include "Engine/Controllers/Mouse.h"
+#include "Engine/Controllers/Keyboard.h"
 
 class GameController;
 class Touch;

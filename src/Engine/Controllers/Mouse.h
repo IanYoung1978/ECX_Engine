@@ -1,8 +1,8 @@
 #pragma once
-#include "Controller.h"
+#include "Engine/Controllers/Controller.h"
 #include <vector>
 #include <glm\glm.hpp>
-#include "MouseButton.h"
+#include "Engine/Controllers/MouseButton.h"
 class Mouse :
 	public Controller
 {

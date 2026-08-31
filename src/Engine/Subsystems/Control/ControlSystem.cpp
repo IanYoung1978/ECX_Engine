@@ -1,6 +1,6 @@
-#include "ControlSystem.h"
-#include "Engine/Keyboard.h"
-#include "Engine/Mouse.h"
+#include "Engine/Subsystems/Control/ControlSystem.h"
+#include "Engine/Controllers/Keyboard.h"
+#include "Engine/Controllers/Mouse.h"
 
 
 ControlSystem::ControlSystem()

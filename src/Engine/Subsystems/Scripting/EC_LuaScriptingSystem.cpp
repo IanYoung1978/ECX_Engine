@@ -1,4 +1,4 @@
-#include "Engine/Subsystems/EC_LuaScriptingSystem.h"
+#include "Engine/Subsystems/Scripting/EC_LuaScriptingSystem.h"
 #include <lua.hpp>
 #include <luabridge3/LuaBridge/LuaBridge.h>
 #include <thread>
