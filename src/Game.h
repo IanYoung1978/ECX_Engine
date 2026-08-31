@@ -4,13 +4,13 @@
 #include "SceneManager/EC_SceneManager.h"
 #include "Window/Window.h"
 #include "Engine/Timer.h"
-#include "Engine/Controller.h"
-#include "Engine/Subsystems/ControlSystem.h"
+#include "Engine/Controllers/Controller.h"
+#include "Engine/Subsystems/Control/ControlSystem.h"
 #include "Messaging/ECXMessenger.h"
 #include <mutex>
 #include "TaskManager/EC_ThreadManager.h"
 #include "Entity/EC_DOD_Types.h"
-#include "Engine/MouseButton.h"
+#include "Engine/Controllers/MouseButton.h"
 #include "UI/EC_UI_InputSystem.h"
 #include "Spatial/RayQueryHit.h"
 #include <glm/glm.hpp>

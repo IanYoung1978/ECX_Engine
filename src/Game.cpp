@@ -1,7 +1,7 @@
 #include "Game.h"
 #include "Window/SDL_GL_Window.h"
 #include "xml/XML.h"
-#include "Engine/Keyboard.h"
+#include "Engine/Controllers/Keyboard.h"
 #include "Engine/Config.h"
 #include "Logging/ECX_Logging.h"
 #include "Components/EC_DOD_Components.h"
