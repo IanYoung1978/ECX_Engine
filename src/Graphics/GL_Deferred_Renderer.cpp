@@ -18,6 +18,14 @@
 #include <algorithm>
 #include <typeindex>
 
+namespace {
+    // Not tunable: a cubemap's 6 faces exactly tile a full sphere only when
+    // each face covers precisely 90 degrees, so a point light's omnidirectional
+    // shadow cubemap requires this FOV geometrically, unlike the spot/point
+    // near/far planes below which are genuine render-quality tradeoffs.
+    constexpr float kCubemapFaceFovDegrees = 90.0f;
+}
+
 GL_Deferred_Renderer::GL_Deferred_Renderer()
     : m_MSAA(false)
     , m_DOF(false)
@@ -560,7 +568,11 @@ void GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light
     up[2] = direction[0] - direction[1];
 
     glm::mat4 view = glm::lookAt(position, position + direction, up);
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1.0f, 1.0f, 100.0f);
+    // FOV must match the light's own cone (cutoffAngle is the HALF-angle, in
+    // radians - see EC_DOD_EntityFactory::parseLight), not a fixed guess -
+    // otherwise a wider spotlight's shadow map misses the edges of its own
+    // visible cone while a narrower one wastes resolution on unlit area.
+    glm::mat4 projection = glm::perspective(2.0f * light.cutoffAngle, 1.0f, m_SpotShadowNearPlane, m_SpotShadowFarPlane);
     outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
     glEnable(GL_POLYGON_OFFSET_FILL);
@@ -585,7 +597,7 @@ void GL_Deferred_Renderer::shadowPointPass(EntityID lightID, LightData& light, c
     glm::vec3 lightPos = glm::vec3(light.position);
 
     glm::mat4 projection = glm::perspective(
-        glm::radians(90.0f), 1.0f, 0.1f, m_PointShadowFarPlane);
+        glm::radians(kCubemapFaceFovDegrees), 1.0f, m_PointShadowNearPlane, m_PointShadowFarPlane);
 
     glm::mat4 faceViews[6] = {
         glm::lookAt(lightPos, lightPos + glm::vec3(1, 0, 0), glm::vec3(0,-1, 0)),

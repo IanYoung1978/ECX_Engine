@@ -37,6 +37,7 @@ private:
 
     unsigned int m_TextVAO = 0, m_TextVBO = 0;
     static constexpr size_t kMaxTextChars = 4096;
+    static constexpr float kDefaultFontSizePx = 16.0f;
 
     unsigned int m_QuadVAO = 0, m_QuadVBO = 0;
 };
