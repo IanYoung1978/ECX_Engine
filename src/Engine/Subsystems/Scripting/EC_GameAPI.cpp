@@ -4,7 +4,7 @@
 #include "Engine/Subsystems/Scripting/EC_EntityAPI.h"
 #include "UI/EC_UI_Components.h"
 #include "Logging/ECX_Logging.h"
-#include "Graphics/DebugVisualization.h"
+#include "Graphics/Renderers/DebugVisualization.h"
 #include "Game.h"
 #include "Messaging/ECXMessenger.h"
 #include <algorithm>
