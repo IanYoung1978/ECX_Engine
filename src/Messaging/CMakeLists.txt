@@ -1,0 +1,26 @@
+target_sources(ECX PRIVATE
+    ECXArgType.h
+    ECXCommand.h
+    ECXCommandBroker.cpp
+    ECXCommandBroker.h
+    ECXCommandType.h
+    ECXEvent.h
+    ECXEventBroker.cpp
+    ECXEventBroker.h
+    ECXEventType.h
+    ECXMessenger.cpp
+    ECXMessenger.h
+    ECXRequest.h
+    ECXRequestBroker.cpp
+    ECXRequestBroker.h
+    ECXRequestType.h
+    ECXResponse.h
+    ECXResponseType.h
+    ICommandListener.h
+    IEventListener.h
+    IRequestResponder.h
+    KeyEvent.cpp
+    KeyEvent.h
+    MouseEvent.cpp
+    MouseEvent.h
+)

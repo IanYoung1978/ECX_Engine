@@ -1,0 +1,25 @@
+target_sources(ECX PRIVATE
+    EC_BroadPhase.cpp
+    EC_BroadPhase.h
+    EC_CollisionChecks.cpp
+    EC_CollisionChecks.h
+    EC_CollisionShapes.h
+    EC_CollisionSystem.cpp
+    EC_CollisionSystem.h
+    EC_ConvexSupport.cpp
+    EC_ConvexSupport.h
+    EC_GJK.cpp
+    EC_GJK.h
+    EC_NarrowPhase.cpp
+    EC_NarrowPhase.h
+    EC_PairManager.cpp
+    EC_PairManager.h
+    EC_PhysicsResolution.cpp
+    EC_PhysicsResolution.h
+    EC_PhysicsSystem.cpp
+    EC_PhysicsSystem.h
+    EC_RayIntersection.cpp
+    EC_RayIntersection.h
+    EC_VClip.cpp
+    EC_VClip.h
+)
