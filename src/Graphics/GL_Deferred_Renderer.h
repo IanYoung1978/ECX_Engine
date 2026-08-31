@@ -125,7 +125,10 @@ private:
     float m_Exposure = 0.75f;
     ShadowAtlas m_ShadowAtlas;
     CubemapShadowPool m_PointShadowPool;
+    float m_PointShadowNearPlane = 0.1f;
     float m_PointShadowFarPlane = 100.0f;
+    float m_SpotShadowNearPlane = 1.0f;
+    float m_SpotShadowFarPlane = 100.0f;
     std::vector<DirLightData> m_ShadowDirs;
     std::vector<LightData> m_ShadowPoints;
     std::vector<SpotLightData> m_ShadowSpots;

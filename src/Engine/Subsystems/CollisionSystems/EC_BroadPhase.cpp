@@ -11,6 +11,16 @@
 #include <limits>
 #include <cmath>
 
+namespace {
+    // A true infinite plane has no finite AABB, so broad-phase needs a
+    // stand-in bound large enough that it never becomes the actual limiting
+    // factor for real scene geometry. Half-extent in world units - a plane
+    // collider participates correctly in broad-phase pairing with anything
+    // inside +-10000 units of its center; scene geometry placed further out
+    // than that would fail to pair against a Plane collider at all.
+    constexpr float kPlaneColliderHalfExtent = 10000.0f;
+}
+
 void EC_BroadPhase::broadPhaseCollisionDetection()
 {
     // Get all entities with collider and spatial components
@@ -566,10 +576,8 @@ AABB EC_BroadPhase::computeWorldAABB(const EC_DOD_Collider& collider,
     }
 
     case EC_DOD_Collider::Type::Plane: {
-        // Planes are infinite - use a very large AABB
-        const float planeSize = 10000.0f;
-        worldAABB.min = worldCenter - glm::vec3(planeSize);
-        worldAABB.max = worldCenter + glm::vec3(planeSize);
+        worldAABB.min = worldCenter - glm::vec3(kPlaneColliderHalfExtent);
+        worldAABB.max = worldCenter + glm::vec3(kPlaneColliderHalfExtent);
         break;
     }
 
