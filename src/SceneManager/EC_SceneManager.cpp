@@ -1,7 +1,7 @@
 #include "EC_SceneManager.h"
 #include "Game.h"
 #include "xml/XML.h"
-#include "Graphics/GL_Deferred_Renderer.h"
+#include "Graphics/Renderers/GL_Deferred_Renderer.h"
 #include "Logging/ECX_Logging.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Components/EC_DOD_Components.h"

@@ -3,7 +3,7 @@
 #include <string>
 #include <glm/glm.hpp>
 #include "FontAtlas.h"
-#include "Graphics/Shader.h"
+#include "Graphics/Shaders/Shader.h"
 
 class Window;
 

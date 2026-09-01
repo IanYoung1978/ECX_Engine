@@ -4,7 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include "Window/Window.h"
-#include "Graphics/BufferType.h"
+#include "Graphics/FrameBuffers/BufferType.h"
 #include "Logging/ECX_Logging.h"
 
 void GL_UIRenderer::init(std::shared_ptr<Window> window)

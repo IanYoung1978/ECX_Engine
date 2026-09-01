@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <mutex>
 #include "Engine/EC_Engine.h"
-#include "Graphics/Renderer.h"
+#include "Graphics/Renderers/Renderer.h"
 #include "TaskManager/EC_DOD_LoadingWorker.h"
 #include "TaskManager/EC_ThreadManager.h"
 #include "Messaging/ICommandListener.h"

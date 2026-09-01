@@ -3,9 +3,9 @@
 #include <glm/gtc/quaternion.hpp>
 #include <string>
 #include "Entity/EC_DOD_EntityManager.h"
-#include "Graphics/TextureSet.h"
-#include "Graphics/ObjModel.h"
-#include "Graphics/Shader.h"
+#include "Graphics/Textures/TextureSet.h"
+#include "Graphics/Models/ObjModel.h"
+#include "Graphics/Shaders/Shader.h"
 #include "Messaging/ECXEventType.h"
 
 class Shader;

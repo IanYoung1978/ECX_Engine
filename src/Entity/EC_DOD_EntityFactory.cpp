@@ -6,10 +6,10 @@
 #include <cmath>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "Graphics/ObjModel.h"
-#include "Graphics/Shader.h"
-#include "Graphics/ADS_TextureSet.h"
-#include "Graphics/PBR_TextureSet.h"
+#include "Graphics/Models/ObjModel.h"
+#include "Graphics/Shaders/Shader.h"
+#include "Graphics/Textures/ADS_TextureSet.h"
+#include "Graphics/Textures/PBR_TextureSet.h"
 #include "Components/EC_CollisionLayers.h"
 
 TextureManager EC_DOD_EntityFactory::s_TexManager;
