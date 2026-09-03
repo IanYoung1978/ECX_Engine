@@ -62,7 +62,7 @@
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 			<Intensity>0.6</Intensity>
 			<CastsShadow>true</CastsShadow>
-			<Dynamic>false</Dynamic>
+			<Dynamic>true</Dynamic>
 		</Light>
 	</Entity>
 
@@ -76,7 +76,7 @@
 			<Cutoff>45.0</Cutoff>
 			<Attenuation>1.0,0.05,0.005</Attenuation>
 			<CastsShadow>true</CastsShadow>
-			<Dynamic>false</Dynamic>
+			<Dynamic>true</Dynamic>
 		</Light>
 	</Entity>
 

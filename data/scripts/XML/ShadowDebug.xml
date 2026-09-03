@@ -1,0 +1,133 @@
+<?xml version="1.0"?>
+<Scene>
+	<Manifest>
+		<HDR alias="nightsky">data/assets/Images/Skybox/qwantani_moon_noon_puresky_4k.hdr</HDR>
+		<LuaScript alias="keydown">data/scripts/LUA/OnKeyDown.lua</LuaScript>
+		<LuaScript alias="keyup">data/scripts/LUA/OnKeyUp.lua</LuaScript>
+		<LuaScript alias="keyheld">data/scripts/LUA/OnKeyHeld.lua</LuaScript>
+		<LuaScript alias="mousemove">data/scripts/LUA/onMouseMove.lua</LuaScript>
+		<PBRMaterial alias="crate_material">
+			<Albedo>data/assets/Images/Crate/Crate_D.png</Albedo>
+			<Normal>data/assets/Images/Crate/crate_normal.png</Normal>
+			<Metallic>data/assets/Images/Crate/crate_metallic.png</Metallic>
+			<Height>data/assets/Images/Crate/crate_height.png</Height>
+			<Emissive>data/assets/Images/Crate/Crate_E.png</Emissive>
+			<AO>data/assets/Images/Crate/crate_ao.png</AO>
+			<Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness>
+			<ParallaxScale>0.05</ParallaxScale>
+			<ParallaxBias>0.001</ParallaxBias>
+		</PBRMaterial>
+		<Model alias="cratemesh">data/assets/models/crate.obj</Model>
+		<Model alias="plane">data/assets/models/plane.obj</Model>
+		<Shader alias="pbrshader" vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+	</Manifest>
+
+	<!-- Minimal repro scene for the directional-shadow camera-fit bug: exactly one
+	     caster, one floor, one directional light. LargeYard/PhysicsDemo have too many
+	     overlapping casters to tell a genuine frustum-fit bug apart from ordinary
+	     multi-shadow interaction. -->
+
+	<Entity uid="200" name="debug_skybox">
+		<Skybox>
+			<HDR alias="nightsky"/>
+		</Skybox>
+	</Entity>
+
+	<Entity uid="201" name="debug_camera">
+		<Camera>
+			<FOV>60.0</FOV>
+			<DrawDistance>100.0</DrawDistance>
+		</Camera>
+		<Spatial>
+			<Position>0.0,5.0,-15.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<ScriptComponent>
+			<OnKeyDown filename="data/scripts/LUA/DebugSceneKeyDown.lua"/>
+			<OnKeyUp alias="keyup"/>
+			<OnKeyHeld alias="keyheld"/>
+			<OnMouseMove alias="mousemove"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="202" name="debug_sun">
+		<Light>
+			<Type>Directional</Type>
+			<Direction>0.3,-1.0,0.2,0.0</Direction>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Intensity>1.0</Intensity>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>true</Dynamic>
+		</Light>
+	</Entity>
+
+	<Entity uid="203" name="debug_spot">
+		<Light>
+			<Type>Spotlight</Type>
+			<Position>1.5,8.0,0.0</Position>
+			<Direction>0.0,-1.0,0.0,0.0</Direction>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Intensity>3.0</Intensity>
+			<Cutoff>40.0</Cutoff>
+			<Attenuation>1.0,0.05,0.005</Attenuation>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>true</Dynamic>
+		</Light>
+	</Entity>
+
+	<Entity uid="204" name="debug_point">
+		<Light>
+			<Type>Point</Type>
+			<Position>1.5,3.0,-3.0</Position>
+			<Colour>1.0,0.8,0.6,1.0</Colour>
+			<Intensity>3.0</Intensity>
+			<Attenuation>1.0,0.05,0.005</Attenuation>
+			<CastsShadow>true</CastsShadow>
+			<Dynamic>true</Dynamic>
+		</Light>
+	</Entity>
+
+	<Entity name="debug_cube">
+		<Spatial>
+			<Position>0.0,1.5,0.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Gfx>
+			<PBRMaterial alias="crate_material"/>
+			<Model alias="cratemesh"/>
+			<Shader alias="pbrshader"/>
+		</Gfx>
+	</Entity>
+
+	<Entity name="debug_cube_grounded">
+		<Spatial>
+			<Position>3.0,1.0,0.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<Transform>
+			<Scale>1.0,1.0,1.0</Scale>
+		</Transform>
+		<Gfx>
+			<PBRMaterial alias="crate_material"/>
+			<Model alias="cratemesh"/>
+			<Shader alias="pbrshader"/>
+		</Gfx>
+	</Entity>
+
+	<Entity name="debug_floor">
+		<Spatial>
+			<Position>0.0,0.0,0.0</Position>
+		</Spatial>
+		<Transform>
+			<Scale>5.0,5.0,5.0</Scale>
+		</Transform>
+		<Gfx>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Model alias="plane"/>
+			<Shader alias="pbrshader"/>
+		</Gfx>
+	</Entity>
+</Scene>

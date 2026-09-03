@@ -127,16 +127,16 @@ vec3 computeLight(
 	vec3 Lo = vec3(0.0);
 	// add to outgoing radiance Lo
 	Lo += (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
-	vec3 color	= (albedo * 0.2)  + Lo;  
 	return Lo;
 }
 float computeOcclusion(vec4 shadowCoords)
 {
+	// shadowMap is a sampler2DShadow (GL_TEXTURE_COMPARE_MODE = GL_COMPARE_R_TO_TEXTURE) -
+	// this texture() call already performs the hardware depth comparison and hardware PCF,
+	// returning the comparison result (0..1), not a raw depth to compare again.
 	vec3 coord 			= vec3(shadowCoords.xyz/shadowCoords.w);
-	float depth 		= texture( shadowMap, vec3(coord.xy,coord.z));
-	if ( depth < coord.z - 0.001)
-		return 0.2;
-	return 1.0;
+	float lit 			= texture( shadowMap, vec3(coord.xy,coord.z));
+	return mix(0.2, 1.0, lit);
 }
 
 void main()
@@ -147,12 +147,12 @@ void main()
 	vec4 albedo 		= texture(AlbedoMap, indata.VSTexCoord).rgba;
 	vec3 pbr 			= texture(PBRMap, indata.VSTexCoord).rgb;
 	vec4 shadowCoords 	= ShadowTransform * pcolour;
+	vec3 ltf 			= spotLight.position.xyz - pcolour.rgb;
 	float visibility 	= computeOcclusion( shadowCoords );
 	vec3 vToEye 		= WSCamPos - pcolour.xyz;
 	vToEye 				= normalize(vToEye);
 	vec3 outColour 		= vec3(0.0,0.0,0.0);
 
-	vec3 ltf 			= spotLight.position.xyz - pcolour.rgb;
 	float cos_cur_angle = dot(normalize(-ltf),spotLight.direction.xyz);
 	if (cos_cur_angle > cos(spotLight.cutoffAngle))
 	{

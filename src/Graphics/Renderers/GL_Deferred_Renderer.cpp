@@ -12,11 +12,14 @@
 #include "Messaging/ECXMessenger.h"
 #include "Messaging/ECXRequest.h"
 #include "Messaging/ECXResponse.h"
+#include "Spatial/RayQueryHit.h"
 #include "SceneManager/EC_GameScene.h"
 #include "UI/EC_UI_Components.h"
 #include "Graphics/Renderers/DebugVisualization.h"
 #include <algorithm>
 #include <typeindex>
+#include <array>
+#include <limits>
 
 namespace {
     // Not tunable: a cubemap's 6 faces exactly tile a full sphere only when
@@ -24,6 +27,90 @@ namespace {
     // shadow cubemap requires this FOV geometrically, unlike the spot/point
     // near/far planes below which are genuine render-quality tradeoffs.
     constexpr float kCubemapFaceFovDegrees = 90.0f;
+
+    // The 8 corners of the camera's view frustum in world space, clamped to [nearPlane,
+    // farPlane] rather than the camera's own draw distance - used to fit the directional
+    // shadow's ortho box to what the camera can actually see (see shadowDirPass).
+    std::array<glm::vec3, 8> computeCameraFrustumCorners(
+        const glm::mat4& camView, float fovDeg, float aspect, float nearPlane, float farPlane)
+    {
+        glm::mat4 proj = glm::perspective(glm::radians(fovDeg), aspect, nearPlane, farPlane);
+        glm::mat4 invViewProj = glm::inverse(proj * camView);
+        std::array<glm::vec3, 8> corners;
+        int idx = 0;
+        for (int x = 0; x < 2; x++)
+            for (int y = 0; y < 2; y++)
+                for (int z = 0; z < 2; z++)
+                {
+                    glm::vec4 pt = invViewProj * glm::vec4(2.0f * x - 1.0f, 2.0f * y - 1.0f, 2.0f * z - 1.0f, 1.0f);
+                    corners[idx++] = glm::vec3(pt) / pt.w;
+                }
+        return corners;
+    }
+
+    // Small, fixed padding on the X/Y (texel-density-determining) axes, just enough to
+    // cover a caster whose center sits right at the frustum edge but whose geometry pokes
+    // a little past it. Deliberately NOT m_ShadowQueryRadius-sized - padding X/Y directly
+    // widens the box and divides the same tile resolution across more world space, so a
+    // large XY margin quietly destroys shadow resolution instead of catching more casters.
+    constexpr float kShadowBoxXYMargin = 3.0f;
+    // Same reasoning as the XY margin above, applied to depth: catches casters just beyond
+    // the visible frustum's near/far without blowing the box's Z range out to hundreds of
+    // units. A too-large Z margin doesn't cost texel density, but it does wreck the shadow
+    // map's DEPTH PRECISION (the whole range gets crammed into the same fixed-point depth
+    // buffer), which shows up as false self-shadowing/acne once the existing polygon-offset
+    // bias (tuned for the old ~30-unit range) is no longer big enough relative to how
+    // coarsely a much larger range quantizes.
+    constexpr float kShadowBoxZMargin = 20.0f;
+
+    // Bounding-sphere fit, not a raw AABB of the transformed corners. An AABB's own size
+    // depends on the corners' orientation relative to the light's axes, so it changes as
+    // the camera rotates in place (no translation needed) - same frustum, different
+    // projected extent - which makes the box's size, its texel density, and any bias tuned
+    // against that size all drift with camera orientation. A frustum's bounding SPHERE has
+    // a radius that depends only on fov/aspect/near/far (all orientation-invariant), so a
+    // box sized to that sphere (same half-extent on every axis) stays a constant size no
+    // matter which way the camera looks - only its center moves. X/Y center is then snapped
+    // to whole shadow-map texels so the box doesn't sub-texel-jitter as the camera moves
+    // (standard stable-fit stabilization).
+    ShadowBoxBounds computeLightSpaceBounds(
+        const std::array<glm::vec3, 8>& corners, const glm::mat4& lightView, float zMargin, int tileSize)
+    {
+        glm::vec3 centroid(0.0f);
+        for (const auto& c : corners) centroid += c;
+        centroid /= (float)corners.size();
+
+        float radius = 0.0f;
+        for (const auto& c : corners) radius = std::max(radius, glm::length(c - centroid));
+
+        glm::vec3 lc = glm::vec3(lightView * glm::vec4(centroid, 1.0f));
+
+        ShadowBoxBounds b;
+        b.minX = lc.x - radius - kShadowBoxXYMargin; b.maxX = lc.x + radius + kShadowBoxXYMargin;
+        b.minY = lc.y - radius - kShadowBoxXYMargin; b.maxY = lc.y + radius + kShadowBoxXYMargin;
+        b.minZ = lc.z - radius - zMargin;            b.maxZ = lc.z + radius + zMargin;
+
+        if (tileSize > 0)
+        {
+            float sizeX = b.maxX - b.minX;
+            float sizeY = b.maxY - b.minY;
+            float texelX = sizeX / (float)tileSize;
+            float texelY = sizeY / (float)tileSize;
+            if (texelX > 0.0f)
+            {
+                float centerX = std::floor(((b.minX + b.maxX) * 0.5f) / texelX) * texelX;
+                b.minX = centerX - sizeX * 0.5f;
+                b.maxX = centerX + sizeX * 0.5f;
+            }
+            if (texelY > 0.0f)
+            {
+                float centerY = std::floor(((b.minY + b.maxY) * 0.5f) / texelY) * texelY;
+                b.minY = centerY - sizeY * 0.5f;
+                b.maxY = centerY + sizeY * 0.5f;
+            }
+        }
+        return b;
+    }
 }
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
@@ -264,6 +351,42 @@ std::vector<EntityID> GL_Deferred_Renderer::queryEntitiesNear(const glm::vec3& p
     }
 }
 
+std::vector<EntityID> GL_Deferred_Renderer::queryEntitiesInCone(const glm::vec3& apex, const glm::vec3& direction,
+    float halfAngleRadians, float maxDistance)
+{
+    if (!m_Messenger) return {};
+
+    ECXRequest request;
+    request.type = ECXRequestType::ConeCheck;
+    request.args[0] = apex;
+    request.args[1] = direction;
+    request.args[2] = halfAngleRadians;
+    request.args[3] = maxDistance;
+    request.args[4] = static_cast<uint32_t>(CollisionLayers::Renderable);
+    request.args[5] = true;  // castsShadowOnly
+    request.args[6] = false; // checkOcclusion - a caster behind another still needs to
+                              // render into the depth map, unlike a visibility/interaction
+                              // cone check where an occluded candidate should be excluded.
+
+    ECXResponse response;
+    m_Messenger->publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        const auto& hits = std::any_cast<std::vector<RayQueryHit>>(response.responseData[0]);
+        std::vector<EntityID> result;
+        result.reserve(hits.size());
+        for (const auto& hit : hits)
+            result.push_back(hit.entity);
+        return result;
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
+}
+
 void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
@@ -389,7 +512,6 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     m_ShadowDirs.clear();
     m_ShadowSpots.clear();
     m_ShadowPoints.clear();
-    m_ShadowSpotRadii.clear();
     m_ShadowPointRadii.clear();
     m_ShadowDirIDs.clear();
     m_ShadowSpotIDs.clear();
@@ -400,6 +522,12 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     for (EntityID entityID : scene.getLights()) {
         if (!manager.isAlive(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_Light>(entityID)) continue;
+        // A deactivated light (EntityAPI::deactivate(), e.g. a debug light-cycling script)
+        // must stop contributing entirely - matches the same EC_DOD_EntityInfo::active check
+        // EC_BroadPhase::broadPhaseCollisionDetection() already does for scene-deactivation.
+        if (manager.hasComponent<EC_DOD_EntityInfo>(entityID) &&
+            !manager.getComponent<EC_DOD_EntityInfo>(entityID).active)
+            continue;
 
         const auto& light = manager.getComponent<EC_DOD_Light>(entityID);
 
@@ -425,7 +553,6 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             if (!light.castsShadow) m_Spots.push_back(data);
             else {
                 m_ShadowSpots.push_back(data);
-                m_ShadowSpotRadii.push_back(light.cutoffRadius);
                 m_ShadowSpotIDs.push_back(entityID);
             }
         }
@@ -456,19 +583,55 @@ void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)
     // matters more than efficiency for a one-time operation.
     std::vector<EntityID> allEntities = scene.getEntities();
 
-    for (size_t i = 0; i < m_ShadowDirs.size(); i++)
+    // A static (dynamic=false) directional light's box is fit once, here, to wherever the
+    // scene's active camera is at load time - then never touched again (see the
+    // "Directional shadow: camera-following frustum fit" plan's Dynamic-flag contract:
+    // static means baked once and trusted forever, not kept in sync with a roaming camera).
+    bool haveCamera = false;
+    glm::mat4 camView(1.0f);
+    glm::vec3 camPos(0.0f);
+    float camFov = 60.0f, camNear = 1.0f, aspect = 1.0f;
+    for (EntityID cameraID : scene.getCameras())
     {
-        EntityID id = m_ShadowDirIDs[i];
-        if (m_BakedStaticDirLights.count(id)) continue;
-        if (!manager.isAlive(id) || !manager.hasComponent<EC_DOD_Light>(id)) continue;
-        if (manager.getComponent<EC_DOD_Light>(id).dynamic) continue;
+        if (!manager.isAlive(cameraID)) continue;
+        const auto& camera = manager.getComponent<EC_DOD_Camera>(cameraID);
+        if (!camera.isActive) continue;
+        const auto& spatial = manager.getComponent<EC_DOD_Spatial>(cameraID);
+        camView = camera.viewMatrix;
+        camPos = spatial.position;
+        camFov = camera.fov;
+        camNear = camera.nearPlane;
+        aspect = (float)m_Window->getWidth() / m_Window->getHeight();
+        haveCamera = true;
+        break;
+    }
 
-        glm::mat4 shadowTransform;
-        shadowDirPass(id, m_ShadowDirs[i], allEntities, shadowTransform);
-        if (m_ShadowAtlas.hasTile(id))
+    if (haveCamera)
+    {
+        for (size_t i = 0; i < m_ShadowDirs.size(); i++)
         {
-            m_BakedStaticDirLights.insert(id);
-            m_BakedDirShadowTransforms[id] = shadowTransform;
+            EntityID id = m_ShadowDirIDs[i];
+            if (m_BakedStaticDirLights.count(id)) continue;
+            if (!manager.isAlive(id) || !manager.hasComponent<EC_DOD_Light>(id)) continue;
+            if (manager.getComponent<EC_DOD_Light>(id).dynamic) continue;
+
+            glm::mat4 shadowTransform;
+            ShadowBoxBounds bounds;
+            int drawn = shadowDirPass(id, m_ShadowDirs[i], allEntities, camView, camPos, camFov, aspect, camNear, shadowTransform, bounds);
+            // bakeStaticShadows() runs exactly once per scene (EC_SceneManager, right as it
+            // finishes loading) - permanently caching a bake where nothing actually drew
+            // (mesh handles not finalized yet, this early after scene load) would leave the
+            // light silently unshadowed forever with no way to retry. Leaving it out of the
+            // baked set here means shadowLightingPass()'s per-frame loop falls through to the
+            // ordinary dynamic-light soft-bake path instead (which does retry every frame) -
+            // effectively degrading a failed static bake to dynamic rather than losing the
+            // shadow outright.
+            if (m_ShadowAtlas.hasTile(id) && drawn > 0)
+            {
+                m_BakedStaticDirLights.insert(id);
+                m_BakedDirShadowTransforms[id] = shadowTransform;
+                m_BakedDirShadowBounds[id] = bounds;
+            }
         }
     }
 
@@ -480,8 +643,8 @@ void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)
         if (manager.getComponent<EC_DOD_Light>(id).dynamic) continue;
 
         glm::mat4 shadowTransform;
-        shadowSpotPass(id, m_ShadowSpots[i], allEntities, shadowTransform);
-        if (m_ShadowAtlas.hasTile(id))
+        int drawn = shadowSpotPass(id, m_ShadowSpots[i], allEntities, shadowTransform);
+        if (m_ShadowAtlas.hasTile(id) && drawn > 0)
         {
             m_BakedStaticSpotLights.insert(id);
             m_BakedSpotShadowTransforms[id] = shadowTransform;
@@ -503,9 +666,10 @@ void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)
     }
 }
 
-void GL_Deferred_Renderer::renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities)
+int GL_Deferred_Renderer::renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
+    int drawn = 0;
 
     for (EntityID entityID : entities) {
         if (!manager.isAlive(entityID)) continue;
@@ -525,12 +689,17 @@ void GL_Deferred_Renderer::renderShadowCasters(const glm::mat4& view, const glm:
         glBindVertexArray(gfx.getMeshHandle());
         glDrawElements(GL_TRIANGLES, gfx.getVertexCount(), GL_UNSIGNED_INT, 0);
         glBindVertexArray(0);
+        drawn++;
     }
+
+    return drawn;
 }
 
-void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
+int GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities,
+    const glm::mat4& camView, const glm::vec3& camPos, float camFov, float aspect, float camNear,
+    glm::mat4& outShadowTransform, ShadowBoxBounds& outBounds)
 {
-    if (!m_ShadowAtlas.acquireTile(lightID)) return;
+    if (!m_ShadowAtlas.acquireTile(lightID)) return 0;
 
     glm::vec3 eye = glm::vec3(-light.direction);
     glm::vec3 up;
@@ -538,27 +707,49 @@ void GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, 
     up[1] = eye[2] - eye[0];
     up[2] = eye[0] - eye[1];
 
-    glm::mat4 view = glm::lookAt(eye, glm::vec3(0.0f), up);
-    glm::mat4 projection = glm::ortho(-20.0f, 20.0f, -20.0f, 20.0f, -10.0f, 20.0f);
+    // Eye is offset from the camera (not the world origin) along the light's direction -
+    // only fixes *where* the view matrix is anchored, not its orientation, which still
+    // comes entirely from `eye`/`up` as before. See "Directional shadow: camera-following
+    // frustum fit" plan - the old glm::lookAt(eye, glm::vec3(0.0f), up) anchored the whole
+    // frustum at the world origin regardless of where the camera or its content actually was.
+    glm::mat4 view = glm::lookAt(camPos + eye * m_ShadowQueryRadius, camPos, up);
+
+    auto corners = computeCameraFrustumCorners(camView, camFov, aspect, camNear, m_RenderConfig.dirShadowDistance);
+    ShadowBoxBounds bounds = computeLightSpaceBounds(corners, view, kShadowBoxZMargin, m_ShadowAtlas.getTileSize());
+    outBounds = bounds;
+
+    // glm::lookAt's view space has -Z forward, so a closer point has a larger (less
+    // negative) view-space Z - glm::ortho's near/far are positive distances along -Z, so
+    // near = -maxZ (closest) and far = -minZ (farthest).
+    glm::mat4 projection = glm::ortho(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, -bounds.maxZ, -bounds.minZ);
     outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0, 2.0);
-    glCullFace(GL_FRONT);
+    // Bias lives entirely on the READ side now (DirLightShadowPBR.frag's computeOcclusion,
+    // slope-scaled against the receiving surface - see learnopengl.com/Advanced-Lighting/
+    // Shadows/Shadow-Mapping, which uses no glPolygonOffset at all for exactly this reason).
+    // No write-side glPolygonOffset here, and no front-face culling either - front-face
+    // culling is ITSELF a (cruder, geometric) bias technique: it deliberately records the
+    // far/back surface instead of the near one as an implicit offset. Stacking it on top of
+    // the new read-side bias is the same double-biasing mistake as the glPolygonOffset one,
+    // and the reference tutorial explicitly warns front-face culling "may still give
+    // incorrect results" for a caster close to its receiver - exactly the contact-point gap
+    // seen here. Render normally (GL_BACK, the frame's default) and let the read-side bias
+    // be the only bias mechanism.
     m_ShadowAtlas.bindTileForWriting(lightID);
 
-    renderShadowCasters(view, projection, entities);
+    int drawn = renderShadowCasters(view, projection, entities);
 
     glUseProgram(0);
     m_ShadowAtlas.unbindTileForWriting();
     glEnable(GL_CULL_FACE);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glCullFace(GL_BACK);
+    return drawn;
 }
 
-void GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
+int GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform)
 {
-    if (!m_ShadowAtlas.acquireTile(lightID)) return;
+    if (!m_ShadowAtlas.acquireTile(lightID)) return 0;
 
     glm::vec3 position = light.position;
     glm::vec3 direction = light.direction;
@@ -575,18 +766,25 @@ void GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light
     glm::mat4 projection = glm::perspective(2.0f * light.cutoffAngle, 1.0f, m_SpotShadowNearPlane, m_SpotShadowFarPlane);
     outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
+    // No front-face culling here (unlike the original) - for a near-overhead spot and a
+    // short caster, the "back" (far-from-light) face front-culling would record is the
+    // object's underside, nearly coplanar with the floor it's supposedly occluding -
+    // producing almost no usable depth difference to compare against, which reads as no
+    // shadow at all. Same lesson as the directional-light fix earlier this session.
+    // glPolygonOffset stays - a genuinely different, complementary technique (slope-scaled
+    // depth-buffer bias, not "which surface gets recorded").
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(2.0, 2.0);
-    glCullFace(GL_FRONT);
     m_ShadowAtlas.bindTileForWriting(lightID);
 
-    renderShadowCasters(view, projection, entities);
+    int drawn = renderShadowCasters(view, projection, entities);
 
     glUseProgram(0);
     m_ShadowAtlas.unbindTileForWriting();
     glEnable(GL_CULL_FACE);
     glDisable(GL_POLYGON_OFFSET_FILL);
     glCullFace(GL_BACK);
+    return drawn;
 }
 
 void GL_Deferred_Renderer::shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities)
@@ -809,6 +1007,7 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             m_BakedStaticDirLights.erase(evicted);
             m_BakedStaticSpotLights.erase(evicted);
             m_BakedDirShadowTransforms.erase(evicted);
+            m_BakedDirShadowBounds.erase(evicted);
             m_BakedSpotShadowTransforms.erase(evicted);
         }
         for (EntityID evicted : m_PointShadowPool.reconcile(m_ShadowPointIDs))
@@ -816,16 +1015,34 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             m_BakedStaticPointLights.erase(evicted);
         }
 
+        float aspect = (float)m_Window->getWidth() / m_Window->getHeight();
+
         auto dirCasters = queryEntitiesNear(spatial.position, m_ShadowQueryRadius);
         for (size_t i = 0; i < m_ShadowDirs.size(); i++)
         {
             EntityID id = m_ShadowDirIDs[i];
             glm::mat4 shadowTransform;
+            ShadowBoxBounds activeBounds;
             bool baked = m_BakedStaticDirLights.count(id) != 0;
             if (baked)
+            {
                 shadowTransform = m_BakedDirShadowTransforms.at(id);
+                activeBounds = m_BakedDirShadowBounds.at(id);
+            }
             else
-                shadowDirPass(id, m_ShadowDirs[i], dirCasters, shadowTransform);
+            {
+                // Always re-render for dynamic=true lights - no soft-bake caching. A caching
+                // scheme was attempted here (skip re-render when the camera's view is still
+                // covered by the last box and nothing nearby is moving) but proved unsafe in
+                // practice: the caster query can stabilize its *count* before the underlying
+                // entities are actually fully populated (mesh handles finalize a frame or two
+                // behind broad-phase indexing), so a render could report a plausible non-zero
+                // "drew something" result while still missing some of the real casters -
+                // caching that wrong result then never gets corrected, since nothing in a
+                // static scene invalidates it afterward. Unconditional per-frame rendering is
+                // always correct; revisit caching later with a more robust readiness check.
+                shadowDirPass(id, m_ShadowDirs[i], dirCasters, camView, spatial.position, camera.fov, aspect, camera.nearPlane, shadowTransform, activeBounds);
+            }
             if (!m_ShadowAtlas.hasTile(id)) continue; // atlas full, skip this light entirely this frame
 
             m_ShadowDirLightShader.activate();
@@ -835,6 +1052,11 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             m_ShadowDirLightShader.setUniform("WSCamPos", spatial.position);
             m_ShadowDirLightShader.setDirLight("dirLight", m_ShadowDirs[i]);
             m_ShadowDirLightShader.setUniform("ShadowTransform", shadowTransform);
+            // Read-side, slope-scaled bias (see DirLightShadowPBR.frag's computeOcclusion) needs
+            // to know the box's actual world-space depth span to convert a world-space bias
+            // into the right NDC offset - this varies with the camera-fit frustum, unlike the
+            // old fixed ~30-unit box, so it can't be a shader constant.
+            m_ShadowDirLightShader.setUniform("ShadowDepthRange", activeBounds.maxZ - activeBounds.minZ);
             m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
             glDisable(GL_BLEND);
@@ -845,13 +1067,30 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         for (size_t i = 0; i < m_ShadowSpots.size(); i++)
         {
             EntityID id = m_ShadowSpotIDs[i];
-            auto nearby = queryEntitiesNear(glm::vec3(m_ShadowSpots[i].position), m_ShadowSpotRadii[i]);
+            // A spot's influence is a cone, not a sphere - queryEntitiesNear's sphere-center
+            // test both over-includes (candidates behind the light within the radius) and
+            // under-includes (a large caster whose bounds cross into the cone but whose own
+            // center falls outside it). queryEntitiesInCone runs the exact GJK cone-vs-shape
+            // test EC_BroadPhase already uses for interaction cone checks (see
+            // RayConeClickTest.lua), so partial overlaps are correctly included.
+            auto nearby = queryEntitiesInCone(glm::vec3(m_ShadowSpots[i].position), glm::vec3(m_ShadowSpots[i].direction),
+                m_ShadowSpots[i].cutoffAngle, m_SpotShadowFarPlane);
             glm::mat4 shadowTransform;
             bool baked = m_BakedStaticSpotLights.count(id) != 0;
             if (baked)
                 shadowTransform = m_BakedSpotShadowTransforms.at(id);
             else
+            {
+                // Always re-render for dynamic=true lights - no soft-bake caching. See the
+                // identical note in the directional loop above for why: a caching scheme
+                // here proved unsafe in practice (a render can report a plausible non-zero
+                // "drew something" result while still missing some real casters, if the
+                // caster query's count stabilizes before every entity's mesh handle actually
+                // finalizes - and that wrong result then never self-corrects). Unconditional
+                // per-frame rendering is always correct; revisit caching later with a more
+                // robust readiness check.
                 shadowSpotPass(id, m_ShadowSpots[i], nearby, shadowTransform);
+            }
             if (!m_ShadowAtlas.hasTile(id)) continue; // atlas full, skip this light entirely this frame
 
             m_ShadowSpotLightShader.activate();
@@ -877,7 +1116,14 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             auto nearby = queryEntitiesNear(glm::vec3(m_ShadowPoints[i].position), m_ShadowPointRadii[i]);
             bool baked = m_BakedStaticPointLights.count(id) != 0;
             if (!baked)
+            {
+                // Always re-render for dynamic=true lights - no soft-bake caching. See the
+                // identical note in shadowLightingPass()'s directional/spot loops for why:
+                // a caching scheme here has the same unexercised risk (a render could report
+                // success while still missing casters whose mesh handles hadn't finished GPU
+                // upload yet, and that wrong result would never self-correct afterward).
                 shadowPointPass(id, m_ShadowPoints[i], nearby);
+            }
             if (!m_PointShadowPool.hasSlot(id)) continue; // pool full, skip this light entirely this frame
 
             m_ShadowPointLightShader.activate();
