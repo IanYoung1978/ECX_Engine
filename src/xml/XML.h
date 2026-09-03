@@ -324,6 +324,11 @@ namespace XML
 				const char* faceSize = child->Attribute("faceSize");
 				if (faceSize) settings.pointShadowFaceSize = std::stoi(faceSize);
 			}
+			else if (strcmp(child->Value(), "DirShadow") == 0)
+			{
+				const char* distance = child->Attribute("distance");
+				if (distance) settings.dirShadowDistance = std::stof(distance);
+			}
 			child = child->NextSiblingElement();
 		}
 		return true;

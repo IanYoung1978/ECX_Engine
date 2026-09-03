@@ -1,7 +1,8 @@
 <?xml version="1.0"?>
 <Scenes>
-	<Scene alias="physics_demo" precache="true" unloadondeactivate="false">data/scripts/XML/PhysicsDemo.xml</Scene>
+	<Scene alias="shadowdebug" precache="true" unloadondeactivate="false">data/scripts/XML/ShadowDebug.xml</Scene>
 	<Scene alias="yard" precache="false" unloadondeactivate="false">data/scripts/XML/LargeYard.xml</Scene>
+	<Scene alias="physics_demo" precache="false" unloadondeactivate="false">data/scripts/XML/PhysicsDemo.xml</Scene>
 	<Scene alias="main" precache="false" unloadondeactivate="false">data/scripts/XML/Scene1.xml</Scene>
 	<Scene alias="streamed" precache="false" unloadondeactivate="true">data/scripts/XML/StreamedZone.xml</Scene>
 </Scenes>

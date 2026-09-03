@@ -70,6 +70,18 @@ bool Shader::loadShader(const std::string & vertFile, const std::string & fragFi
 	glLinkProgram(m_Shader);
 	error = glGetError();
 
+	int linked = 0;
+	glGetProgramiv(m_Shader, GL_LINK_STATUS, &linked);
+	if (!linked)
+	{
+		outputShaderError(m_Shader);
+		glDeleteShader(vert);
+		glDeleteShader(frag);
+		delete[] vs;
+		delete[] fs;
+		return false;
+	}
+
 	delete vs;
 	delete fs;
 

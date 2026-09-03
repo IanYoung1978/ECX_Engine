@@ -11,9 +11,7 @@ project(ECX LANGUAGES CXX)
 
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
-# Off in CI (unit-test workflow): skips the main ECX target and its heavy
-# SDL2/GLEW/assimp/Lua/OpenGL/Stb dependencies entirely, so `cmake --build
-# --target ECX_UnitTests` only needs glm + Catch2 to configure.
+# Off in CI: lets ECX_UnitTests configure with only glm + Catch2.
 option(ECX_BUILD_ENGINE "Build the main ECX game target (requires SDL2/GLEW/assimp/Lua/OpenGL/Stb)" ON)
 
 set(CMAKE_GENERATOR_PLATFORM x64)
@@ -24,13 +22,7 @@ find_package(Catch2 CONFIG REQUIRED)
 
 if(ECX_BUILD_ENGINE)
 
-# Explicit sources, not a glob: each src/ subdirectory owns a CMakeLists.txt
-# calling target_sources(ECX PRIVATE ...) with its own files (relative paths
-# resolve against that subdirectory - CMP0076, default NEW as of the 3.13
-# minimum above), so it's visible from the directory listing alone which
-# files belong to the build, and a stray file added to a directory without
-# updating its CMakeLists.txt is silently excluded rather than silently
-# swept in.
+# Explicit sources, not a glob - each src/ subdirectory owns a CMakeLists.txt.
 add_executable(ECX
     src/Eclipsis.cpp
     src/Game.cpp
@@ -164,12 +156,7 @@ add_custom_command(
 
 endif() # ECX_BUILD_ENGINE
 
-# Catch2-based unit tests for the pure-logic collision/spatial modules (Tier 1 of
-# the testability review): GJK/ConvexSupport, CollisionChecks, VClip, PairManager,
-# SpatialGrid, Frustum. Deliberately isolated from the main ECX target: only
-# depends on glm + Catch2, not SDL/GLEW/assimp/Lua/the ECS, so it builds fast and
-# can run headless without a graphics context.
-
+# Pure-logic collision/spatial unit tests - only depends on glm + Catch2, not the engine.
 add_executable(ECX_UnitTests
     tests/EC_GJK_Tests.cpp
     tests/EC_CollisionChecks_Tests.cpp

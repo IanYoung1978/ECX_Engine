@@ -3,6 +3,6 @@
 	<Exposure>0.75</Exposure>
 	<EmissiveIntensity>2.0</EmissiveIntensity>
 	<BloomMipLevels>6</BloomMipLevels>
-	<ShadowAtlas size="4096" tileSize="1024"/>
+	<ShadowAtlas size="4096" tileSize="2048"/>
 	<PointShadowPool size="6" faceSize="1024"/>
 </GraphicsSettings>

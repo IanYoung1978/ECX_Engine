@@ -28,6 +28,15 @@ enum class PostProcess {
 class EC_GameScene;
 class ECXMessenger;
 
+// Light-space AABB of a directional shadow's camera-fitted ortho box, used both to build
+// the box itself and (for dynamic=true lights) to test whether a later frame's camera
+// frustum still fits inside a previous render - see GL_Deferred_Renderer::shadowDirPass.
+struct ShadowBoxBounds {
+    float minX = 0.0f, maxX = 0.0f;
+    float minY = 0.0f, maxY = 0.0f;
+    float minZ = 0.0f, maxZ = 0.0f;
+};
+
 class GL_Deferred_Renderer : public Renderer, public ICommandListener {
 public:
     GL_Deferred_Renderer();
@@ -53,9 +62,24 @@ private:
     // call - only the view/projection construction differs between the two callers, which
     // they each keep). shadowPointPass's 6-face loop is structurally different enough that
     // forcing it into this helper would hurt readability more than it would help.
-    void renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities);
-    void shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
-    void shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
+    // Returns how many casters were actually drawn (passed every filter: alive, has
+    // Transform/GraphicsData, mesh handle finalized, castsShadow) - NOT just entities.size().
+    // A caster's mesh handle can still be 0 for a frame or two after it starts appearing in
+    // spatial queries (GPU resource finalization lags a frame behind broad-phase indexing),
+    // so entities.size() > 0 alone doesn't mean anything was actually rendered - callers
+    // that cache a render need this to avoid caching an effectively-empty one.
+    int renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities);
+    // Builds the ortho box by fitting it to the camera's current view frustum (clamped to
+    // RenderConfig::dirShadowDistance) instead of a fixed world-space box - see the
+    // "Directional shadow: camera-following frustum fit" plan. outBounds is the light-space
+    // AABB the box was built from, so callers can later test whether a new camera frustum
+    // is still covered by it without re-rendering (the dynamic-light soft-bake check).
+    // Return value: same "how many casters were actually drawn" as renderShadowCasters, or
+    // 0 if the tile couldn't be acquired.
+    int shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities,
+        const glm::mat4& camView, const glm::vec3& camPos, float camFov, float aspect, float camNear,
+        glm::mat4& outShadowTransform, ShadowBoxBounds& outBounds);
+    int shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities);
     // Issue #28: redraws just the receivesShadow==false entities among `entities` with this
     // light's full (unshadowed) contribution, depth-testing GL_EQUAL against the G-buffer so
@@ -79,6 +103,12 @@ private:
     // owning/maintaining its own - decouples rendering from collision internals.
     std::vector<EntityID> queryVisibleEntities(const glm::mat4& viewProjection);
     std::vector<EntityID> queryEntitiesNear(const glm::vec3& position, float radius);
+    // Exact GJK cone-vs-shape test (EC_BroadPhase::handleConeCheck), not a bounding-sphere
+    // approximation - a spot light's actual influence is a cone, not a sphere, and this
+    // returns every caster whose shape overlaps it at all (partial overlap included, not
+    // just fully-contained), matching what queryEntitiesNear's sphere-center check missed.
+    std::vector<EntityID> queryEntitiesInCone(const glm::vec3& apex, const glm::vec3& direction,
+        float halfAngleRadians, float maxDistance);
 
     ECXMessenger* m_Messenger = nullptr;
     RenderConfig m_RenderConfig;
@@ -150,12 +180,15 @@ private:
     std::unordered_set<EntityID> m_BakedStaticSpotLights;
     std::unordered_set<EntityID> m_BakedStaticPointLights;
     std::unordered_map<EntityID, glm::mat4> m_BakedDirShadowTransforms;
+    std::unordered_map<EntityID, ShadowBoxBounds> m_BakedDirShadowBounds;
     std::unordered_map<EntityID, glm::mat4> m_BakedSpotShadowTransforms;
-    // Cached cutoff radius for each entry in m_ShadowPoints/m_ShadowSpots, indices
-    // aligned 1:1. Copied from EC_DOD_Light::cutoffRadius in updateLights() - not
-    // recomputed here, since the radius only depends on light data set at load time.
+
+    // Cached cutoff radius for each entry in m_ShadowPoints, indices aligned 1:1.
+    // Copied from EC_DOD_Light::cutoffRadius in updateLights() - not recomputed here,
+    // since the radius only depends on light data set at load time. Spot's equivalent
+    // caster query now uses queryEntitiesInCone (the light's own cutoffAngle/far plane),
+    // not a radius.
     std::vector<float> m_ShadowPointRadii;
-    std::vector<float> m_ShadowSpotRadii;
     GL_DebugRenderer m_DebugRenderer;
     GL_UIRenderer m_UIRenderer;
 };
