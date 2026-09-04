@@ -186,6 +186,44 @@ const char* EC_LuaScriptSystem::getEventFunctionName(ECXEventType type) {
     }
 }
 
+namespace {
+    // Every global function name a script might define to handle an event - must stay in
+    // sync with EC_LuaScriptSystem::getEventFunctionName() below, plus "update" (the name
+    // update() actually looks up at its call site above - note getEventFunctionName maps
+    // system_update to "onSystemUpdate", a name nothing ever calls; "update" is the real
+    // one every script uses). Not derived programmatically from the enum - this list
+    // rarely changes and a flat, reviewable array is clearer than threading ECXEventType
+    // through here just to avoid duplicating a dozen string literals.
+    constexpr const char* kHandlerFunctionNames[] = {
+        "onEntityCreate", "onEntityKill", "onEntityDestroy", "onEntityLoaded",
+        "onStopRotation", "onStopMotion", "onPositionChanged", "onOrientationChanged",
+        "onAngularVelocityChanged", "onVelocityChanged", "onCollisionBegin", "onCollisionEnd",
+        "onKeyDown", "onKeyUp", "onKeyHeld", "onMouseDown", "onMouseUp", "onMouseHeld",
+        "onMouseMove", "onMouseEnter", "onMouseLeave", "onSelect", "onUnSelect", "onClick",
+        "onWorldLoaded", "onConfigLoaded", "onSystemUpdate", "update",
+    };
+
+    // Looks up scriptFile's captured handler named funcName (see loadScript()'s capture
+    // step below) and returns it as a callable LuaRef, or a non-function LuaRef if that
+    // script never defined this particular handler.
+    luabridge::LuaRef getScriptHandler(lua_State* L,
+        const std::unordered_map<std::string, std::unordered_map<std::string, int>>& handlers,
+        const std::string& scriptFile, const char* funcName)
+    {
+        auto scriptIt = handlers.find(scriptFile);
+        if (scriptIt != handlers.end()) {
+            auto handlerIt = scriptIt->second.find(funcName);
+            if (handlerIt != scriptIt->second.end()) {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, handlerIt->second);
+                luabridge::LuaRef func = luabridge::LuaRef::fromStack(L, -1);
+                lua_pop(L, 1);
+                return func;
+            }
+        }
+        return luabridge::LuaRef(L);
+    }
+}
+
 bool EC_LuaScriptSystem::loadScript(const std::string& filename) {
     if (m_loadedScripts[filename]) return true;
 
@@ -207,6 +245,22 @@ bool EC_LuaScriptSystem::loadScript(const std::string& filename) {
         return false;
     }
 
+    // Capture whichever handler functions this file actually defined into a per-file slot,
+    // then clear the global so the NEXT script's same-named definition (if any) doesn't
+    // collide with what we already captured - see m_ScriptHandlers's declaration for why.
+    for (const char* name : kHandlerFunctionNames) {
+        lua_getglobal(m_luaState, name);
+        if (lua_isfunction(m_luaState, -1)) {
+            int ref = luaL_ref(m_luaState, LUA_REGISTRYINDEX); // pops the function, stores it
+            m_ScriptHandlers[filename][name] = ref;
+            lua_pushnil(m_luaState);
+            lua_setglobal(m_luaState, name);
+        }
+        else {
+            lua_pop(m_luaState, 1);
+        }
+    }
+
     m_loadedScripts[filename] = true;
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
         "Script loaded successfully: " + filename,
@@ -220,7 +274,7 @@ void EC_LuaScriptSystem::callLuaFunction(const std::string& scriptFile, const ch
     if (!loadScript(scriptFile)) return;
 
     try {
-        luabridge::LuaRef func = luabridge::getGlobal(m_luaState, funcName);
+        luabridge::LuaRef func = getScriptHandler(m_luaState, m_ScriptHandlers, scriptFile, funcName);
         if (func.isFunction()) {
             ScriptAPI::EntityAPI entityAPI(entity);
             auto result = func(entityAPI, deltaTime);
@@ -245,7 +299,7 @@ void EC_LuaScriptSystem::callLuaEvent(const std::string& scriptFile, const char*
     if (!loadScript(scriptFile)) return;
 
     try {
-        luabridge::LuaRef func = luabridge::getGlobal(m_luaState, funcName);
+        luabridge::LuaRef func = getScriptHandler(m_luaState, m_ScriptHandlers, scriptFile, funcName);
         if (func.isFunction()) {
             ScriptAPI::EntityAPI entityAPI(entity);
             ScriptAPI::EventAPI eventAPI(event, m_game->game, entity);
