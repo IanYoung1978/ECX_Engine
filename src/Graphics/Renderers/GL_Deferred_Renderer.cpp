@@ -806,10 +806,14 @@ void GL_Deferred_Renderer::shadowPointPass(EntityID lightID, LightData& light, c
         glm::lookAt(lightPos, lightPos + glm::vec3(0, 0,-1), glm::vec3(0,-1, 0))
     };
 
-    glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(2.0, 2.0);
-    glCullFace(GL_FRONT);
-
+    // No write-side glPolygonOffset here - point_shadow.frag writes gl_FragDepth manually
+    // (linear light-distance / FarPlane), which overrides the hardware-rasterized depth
+    // glPolygonOffset would have biased, so it had zero effect. No front-face culling
+    // either, for the same reason removed from the directional/spot passes: recording the
+    // far (light-facing-away) surface instead of the near one is itself a crude geometric
+    // bias, and for a caster close to its receiver that gap reads as the shadow detaching
+    // from the object. Render normally (GL_BACK, the frame's default) and let the read-side
+    // slope-scaled bias in PointShadowLightPass.frag's computeOcclusion be the only bias.
     auto& manager = EC_DOD_EntityManager::getInstance();
 
     for (int face = 0; face < 6; face++)
