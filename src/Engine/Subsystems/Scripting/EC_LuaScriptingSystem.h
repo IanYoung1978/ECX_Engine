@@ -29,6 +29,14 @@ private:
     lua_State* m_luaState;
     ScriptAPI::GameAPI* m_game;
     std::unordered_map<std::string, bool> m_loadedScripts;
+    // Per-script-file handler functions, captured out of the shared global table right
+    // after that file loads (see loadScript()) - every Lua script in the game executes
+    // into ONE shared lua_State, so two different files both defining e.g. a global
+    // `onKeyDown` would otherwise silently clobber each other (whichever loads second
+    // wins, permanently). Keyed by script filename, then handler name (e.g. "onKeyDown");
+    // value is a Lua registry reference (luaL_ref), not a luabridge::LuaRef, so this
+    // header doesn't have to pull in the Lua/LuaBridge headers just to declare this map.
+    std::unordered_map<std::string, std::unordered_map<std::string, int>> m_ScriptHandlers;
     std::mutex m_LuaMutex;
 
     const char* getEventFunctionName(ECXEventType type);
