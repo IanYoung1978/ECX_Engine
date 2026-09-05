@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <mutex>
+#include <atomic>
 #include "Engine/EC_Engine.h"
 #include "Graphics/Renderers/Renderer.h"
 #include "TaskManager/EC_DOD_LoadingWorker.h"
@@ -47,7 +48,13 @@ private:
     EC_ThreadManager m_ThreadManager;
     GameModeSettings m_Settings;
     std::vector<EC_GameScene> m_Scenes;
-    size_t m_ActiveScene = 0;
+    // Written from game:activateScene(), which Lua handlers call from the scripting
+    // subsystem's thread (EC_ScriptingTask runs alongside physics on a background thread -
+    // see EC_Engine::init()), and read every frame from update() on the main/render
+    // thread. A plain size_t here was an unsynchronized cross-thread data race - the
+    // render thread could observe a stale value, making a scene switch intermittently
+    // fail to actually change what's drawn even though the switch itself succeeded.
+    std::atomic<size_t> m_ActiveScene{ 0 };
     std::unordered_map<std::string, size_t> m_AliasMap;
     std::unordered_map<uint32_t, EntityID> m_UIDMap;
     std::unordered_map<std::string, EntityID> m_NameMap;

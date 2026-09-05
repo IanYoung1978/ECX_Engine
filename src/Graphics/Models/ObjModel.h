@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <glm\glm.hpp>
+#include "Terrain/EC_TerrainMeshData.h"
 
 class ObjModel
 {
@@ -15,8 +16,12 @@ public:
 	void unload();
 	unsigned int getHandle();
 	unsigned int getVertCount();
-	void draw() const;	
+	void draw() const;
 	void initialise(void);
+	// Additive bypass for procedurally generated meshes (e.g. EC_MarchingCubesMesher
+	// output): skips Assimp/loadModel entirely, uploading only position + normal + index
+	// data. Must be called on the GL/main thread, same as initialise().
+	void initialiseFromMeshData(const EC_TerrainMeshData& meshData);
 	virtual ~ObjModel();
 private:
 	void loadFromScene(const aiScene *p_assimpScene);

@@ -217,6 +217,41 @@ void ObjModel::initialise(void)
 
 }
 
+void ObjModel::initialiseFromMeshData(const EC_TerrainMeshData& meshData)
+{
+	if (m_Loaded) return;
+	if (meshData.positions.empty()) return;
+
+	glGenVertexArrays(1, &m_MeshLocation);
+	glBindVertexArray(m_MeshLocation);
+
+	GLuint VBO;
+	glGenBuffers(1, &VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, meshData.positions.size() * sizeof(glm::vec3), meshData.positions.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer((GLuint)BufferType::Vertex, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray((GLuint)BufferType::Vertex);
+	m_VBOData[(GLuint)BufferType::Vertex] = VBO;
+
+	glGenBuffers(1, &VBO);
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ARRAY_BUFFER, meshData.normals.size() * sizeof(glm::vec3), meshData.normals.data(), GL_STATIC_DRAW);
+	glVertexAttribPointer((GLuint)BufferType::Normal, 3, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray((GLuint)BufferType::Normal);
+	m_VBOData[(GLuint)BufferType::Normal] = VBO;
+
+	glGenBuffers(1, &VBO);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, VBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, meshData.indices.size() * sizeof(GLuint), meshData.indices.data(), GL_STATIC_DRAW);
+	m_VBOData[(GLuint)BufferType::Index] = VBO;
+
+	glBindVertexArray(0);
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+	m_NumVerts = static_cast<unsigned int>(meshData.indices.size());
+	m_Loaded = true;
+}
+
 bool ObjModel::loadFromFile(std::string & filename, std::vector<std::string>& data)
 {
 	std::fstream fs;

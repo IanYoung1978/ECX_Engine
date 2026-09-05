@@ -42,8 +42,11 @@ void EC_GameScene::activate()
     auto& manager = EC_DOD_EntityManager::getInstance();
     for (EntityID entity : m_Entities)
     {
+        // sceneActive only - NOT `active` (see EC_DOD_EntityInfo's comment). `active` is a
+        // gameplay-level toggle a script may have set deliberately (e.g. a debug light-
+        // cycling feature); scene activation must not silently overwrite it.
         if (manager.isAlive(entity) && manager.hasComponent<EC_DOD_EntityInfo>(entity))
-            manager.getComponent<EC_DOD_EntityInfo>(entity).active = true;
+            manager.getComponent<EC_DOD_EntityInfo>(entity).sceneActive = true;
     }
 }
 
@@ -54,7 +57,7 @@ void EC_GameScene::deactivate()
     for (EntityID entity : m_Entities)
     {
         if (manager.isAlive(entity) && manager.hasComponent<EC_DOD_EntityInfo>(entity))
-            manager.getComponent<EC_DOD_EntityInfo>(entity).active = false;
+            manager.getComponent<EC_DOD_EntityInfo>(entity).sceneActive = false;
     }
 }
 

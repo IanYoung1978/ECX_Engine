@@ -39,6 +39,7 @@ add_subdirectory(src/Messaging)
 add_subdirectory(src/SceneManager)
 add_subdirectory(src/Spatial)
 add_subdirectory(src/TaskManager)
+add_subdirectory(src/Terrain)
 add_subdirectory(src/UI)
 add_subdirectory(src/vendor)
 add_subdirectory(src/Window)
@@ -164,6 +165,7 @@ add_executable(ECX_UnitTests
     tests/EC_PairManager_Tests.cpp
     tests/EC_SpatialGrid_Tests.cpp
     tests/EC_Frustum_Tests.cpp
+    tests/EC_MarchingCubes_Tests.cpp
     src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
     src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
     src/Engine/Subsystems/CollisionSystems/EC_CollisionChecks.cpp
@@ -171,6 +173,8 @@ add_executable(ECX_UnitTests
     src/Engine/Subsystems/CollisionSystems/EC_PairManager.cpp
     src/Spatial/EC_SpatialGrid.cpp
     src/Spatial/EC_Frustum.cpp
+    src/Terrain/EC_MarchingCubesTables.cpp
+    src/Terrain/EC_MarchingCubesMesher.cpp
 )
 set_property(TARGET ECX_UnitTests PROPERTY CXX_STANDARD 17)
 target_include_directories(ECX_UnitTests PRIVATE ${SOURCE_DIR})
