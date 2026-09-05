@@ -1,4 +1,5 @@
 #include "Entity/EC_DOD_EntityManager.h"
+#include "Components/EC_DOD_Components.h"
 #include <algorithm>
 
 
@@ -141,6 +142,23 @@ std::vector<EntityID> EC_DOD_EntityManager::getEntitiesWithComponents(const std:
         if (hasAll) {
             result.push_back(entity);
         }
+    }
+
+    return result;
+}
+
+std::vector<EntityID> EC_DOD_EntityManager::getActiveEntitiesWithComponents(const std::vector<std::type_index>& types) const {
+    std::vector<EntityID> candidates = getEntitiesWithComponents(types);
+
+    std::vector<EntityID> result;
+    result.reserve(candidates.size());
+
+    for (EntityID entity : candidates) {
+        if (hasComponent<EC_DOD_EntityInfo>(entity)) {
+            const auto& info = getComponent<EC_DOD_EntityInfo>(entity);
+            if (!info.active || !info.sceneActive) continue;
+        }
+        result.push_back(entity);
     }
 
     return result;

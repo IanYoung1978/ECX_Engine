@@ -5,7 +5,7 @@ precision highp float;
 
 layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
-layout (location = 2) uniform sampler2D colourMap;
+layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
 uniform int NumSpots;
 uniform int NumPoints;
@@ -76,7 +76,7 @@ void main()
     // No geometry written here � let skybox show through
     if (pcolour.a == 0.0) discard;
 	vec4 ncolour = texture(normalMap, indata.VSTexCoord).rgba;
-	vec4 dcolour = texture(colourMap, indata.VSTexCoord).rgba;
+	vec4 dcolour = texture(AlbedoMap, indata.VSTexCoord).rgba;
 	vec4 scolour = texture(PBRMap, indata.VSTexCoord).rgba;
 	vec3 vToEye = WSCamPos - pcolour.xyz;
 	vToEye = normalize(vToEye);

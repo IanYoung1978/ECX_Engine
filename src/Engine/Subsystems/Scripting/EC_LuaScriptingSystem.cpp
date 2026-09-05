@@ -78,14 +78,18 @@ void EC_LuaScriptSystem::update(const float& deltaTimeS, EC_Game& game) {
     if (m_shuttingDown) return;
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    auto entities = manager.getEntitiesWithComponent(
-        std::type_index(typeid(EC_DOD_ScriptData))
+    // Excludes a deactivated scene's entities (EC_GameScene::deactivate() -> sceneActive)
+    // and any entity a script has individually deactivated (EntityAPI::deactivate() ->
+    // active) - see EC_DOD_EntityInfo's comment for why the two are separate. Without the
+    // sceneActive check, an inactive scene's OnKeyHeld/update handlers kept firing right
+    // alongside the active scene's - notably breaking any script logic (e.g. a debug
+    // scene-switch toggle) that multiple simultaneously-alive entities across scenes both
+    // subscribe to.
+    auto entities = manager.getActiveEntitiesWithComponents(
+        { std::type_index(typeid(EC_DOD_ScriptData)) }
     );
 
     for (EntityID entity : entities) {
-        if (!manager.isAlive(entity)) continue;
-        if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
-
         const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
         if (!script.enabled) continue;
 
@@ -101,8 +105,9 @@ void EC_LuaScriptSystem::receive(ECXEvent& event) {
     if (m_shuttingDown) return;
 
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto entities = manager.getEntitiesWithComponent(
-        std::type_index(typeid(EC_DOD_ScriptData))
+    // See the matching call in update() above for why this is active+sceneActive filtered.
+    auto entities = manager.getActiveEntitiesWithComponents(
+        { std::type_index(typeid(EC_DOD_ScriptData)) }
     );
 
     EntityID participantA = INVALID_ENTITY;
@@ -127,9 +132,6 @@ void EC_LuaScriptSystem::receive(ECXEvent& event) {
     }
 
     for (EntityID entity : entities) {
-        if (!manager.isAlive(entity)) continue;
-        if (!manager.hasComponent<EC_DOD_ScriptData>(entity)) continue;
-
         const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
         if (!script.enabled) continue;
 

@@ -485,8 +485,16 @@ void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
         m_LightPassShader->setUniform("WSCamPos", spatial.position);
 
         if (!m_Directionals.empty())
-            m_LightPassShader->setLight("dirLight", m_Directionals[0]);
+            m_LightPassShader->setDirLight("dirLight", m_Directionals[0]);
         else {
+            // setLight("dirLight", ...) previously used here only accepts LightData, and
+            // DirLightData's `direction` field (added by inheriting from LightData - see
+            // LightData.h) was silently sliced off by that call, so this path's
+            // lightpass.frag dirLight.direction uniform was never actually set - every
+            // scene until now used a shadow-casting directional light (a different code
+            // path, DirLightShadowPBR.frag via setDirLight elsewhere), so this never
+            // surfaced. setDirLight sets colour/intensity/direction, matching
+            // lightpass.frag's DirLightData uniform exactly.
             DirLightData noDirLight;
             noDirLight.colour = glm::vec4(0.0f);
             noDirLight.position = glm::vec4(0.0f);
@@ -495,7 +503,7 @@ void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
             noDirLight.padding = glm::vec3(0.0f);
             noDirLight.addPadding = glm::vec4(0.0f);
             noDirLight.direction = glm::vec4(0.0f);
-            m_LightPassShader->setLight("dirLight", noDirLight);
+            m_LightPassShader->setDirLight("dirLight", noDirLight);
         }
 
         renderQuad();
@@ -523,11 +531,13 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
         if (!manager.isAlive(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_Light>(entityID)) continue;
         // A deactivated light (EntityAPI::deactivate(), e.g. a debug light-cycling script)
-        // must stop contributing entirely - matches the same EC_DOD_EntityInfo::active check
-        // EC_BroadPhase::broadPhaseCollisionDetection() already does for scene-deactivation.
-        if (manager.hasComponent<EC_DOD_EntityInfo>(entityID) &&
-            !manager.getComponent<EC_DOD_EntityInfo>(entityID).active)
-            continue;
+        // must stop contributing entirely, and so must one whose scene is no longer active
+        // - matches the same active+sceneActive check EC_BroadPhase's broad-phase build
+        // already does. See EC_DOD_EntityInfo's comment for why they're separate flags.
+        if (manager.hasComponent<EC_DOD_EntityInfo>(entityID)) {
+            const auto& info = manager.getComponent<EC_DOD_EntityInfo>(entityID);
+            if (!info.active || !info.sceneActive) continue;
+        }
 
         const auto& light = manager.getComponent<EC_DOD_Light>(entityID);
 

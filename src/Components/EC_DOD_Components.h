@@ -200,7 +200,19 @@ struct EC_DOD_Light {
 
 struct EC_DOD_EntityInfo {
     std::string name;
+    // Gameplay-level toggle - what EntityAPI::activate()/deactivate() (Lua-exposed) and
+    // isActive() control. A script (e.g. a debug light-cycling feature) sets this
+    // deliberately per entity and expects it to stick.
     bool active = true;
+    // Scene-membership toggle - what EC_GameScene::activate()/deactivate() controls when a
+    // scene is switched to/from. Kept separate from `active` because the two used to share
+    // one flag: EC_GameScene::deactivate()/activate() unconditionally overwrote every one
+    // of its entities' `active`, silently discarding any gameplay-level state a script had
+    // set (e.g. cycling to one active light out of three, then switching scenes and back,
+    // reset all three to active again). Subsystems that need "should this entity actually
+    // participate right now" must check active && sceneActive (see
+    // EC_DOD_EntityManager::getActiveEntitiesWithComponents).
+    bool sceneActive = true;
     uint32_t uid = 0;
 };
 

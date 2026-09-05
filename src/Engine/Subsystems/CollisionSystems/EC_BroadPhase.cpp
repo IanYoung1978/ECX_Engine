@@ -51,11 +51,14 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
                 // is the single point rendering (via queryVisibleEntities), gameplay
                 // collision, and ray/cone queries all read from, so filtering here is
                 // what actually stops a deactivated scene's geometry from continuing to
-                // render/collide/hit-test after a scene switch. EC_DOD_EntityInfo::active
-                // was previously written by scene activation but never read anywhere.
-                if (EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_EntityInfo>(entityId) &&
-                    !EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entityId).active)
-                    continue;
+                // render/collide/hit-test after a scene switch. Checks both `active`
+                // (gameplay-level, e.g. a script deactivating one specific entity) and
+                // `sceneActive` (scene-membership) - see EC_DOD_EntityInfo's comment for
+                // why they're separate flags.
+                if (EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_EntityInfo>(entityId)) {
+                    const auto& info = EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entityId);
+                    if (!info.active || !info.sceneActive) continue;
+                }
 
                 // Lock and get components (get() has its own locking)
                 EC_DOD_Collider collider;
