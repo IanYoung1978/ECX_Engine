@@ -166,6 +166,7 @@ add_executable(ECX_UnitTests
     tests/EC_SpatialGrid_Tests.cpp
     tests/EC_Frustum_Tests.cpp
     tests/EC_MarchingCubes_Tests.cpp
+    tests/EC_TerrainWorldDensity_Tests.cpp
     src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
     src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
     src/Engine/Subsystems/CollisionSystems/EC_CollisionChecks.cpp
@@ -175,6 +176,7 @@ add_executable(ECX_UnitTests
     src/Spatial/EC_Frustum.cpp
     src/Terrain/EC_MarchingCubesTables.cpp
     src/Terrain/EC_MarchingCubesMesher.cpp
+    src/Terrain/EC_TerrainWorldDensity.cpp
 )
 set_property(TARGET ECX_UnitTests PROPERTY CXX_STANDARD 17)
 target_include_directories(ECX_UnitTests PRIVATE ${SOURCE_DIR})

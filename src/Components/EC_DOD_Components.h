@@ -163,6 +163,16 @@ struct EC_DOD_GraphicsData {
     uint32_t getVertexCount() const { return model ? model->getVertCount() : 0; }
 };
 
+// A voxel terrain chunk entity - the real, permanent integration (see
+// EC_VoxelChunkSystem/EC_VoxelChunkWorker), not debug scaffolding. `state` tracks the
+// async generate-then-upload lifecycle: Pending (spawned, not yet queued for generation),
+// Generating (queued/running on the worker thread), Ready (mesh uploaded, collider added).
+struct EC_DOD_VoxelChunk {
+    enum class State { Pending, Generating, Ready };
+    glm::ivec3 chunkCoord{ 0 };
+    State state = State::Pending;
+};
+
 struct EC_DOD_Camera {
     glm::mat4 viewMatrix{ 1.0f };
     glm::mat4 projectionMatrix{ 1.0f };
