@@ -44,6 +44,7 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
 
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
+    m_VoxelChunkSystem.init(m_Messenger, *this);
     m_Running = true;
     m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
     LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
@@ -130,6 +131,9 @@ void EC_Game::update(const float& deltaTimeS)
     if (m_Running)
     {
         m_Messenger.flush();
+        // Before scene update/render so a chunk finishing this frame is visible this
+        // frame rather than one frame late.
+        m_VoxelChunkSystem.update(deltaTimeS, *this);
         m_SceneManager.update(deltaTimeS, *this);
         m_Controls->update(deltaTimeS, *this);
         m_UIInput.update(*this, m_Messenger);
@@ -225,6 +229,7 @@ void EC_Game::receive(ECXCommand& command)
     {
         m_Running = false;
         m_Controls->shutdown();
+        m_VoxelChunkSystem.shutdown();
         m_threadmanager.stop();
     }
 }

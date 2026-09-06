@@ -13,6 +13,7 @@
 #include "Engine/Controllers/MouseButton.h"
 #include "UI/EC_UI_InputSystem.h"
 #include "Spatial/RayQueryHit.h"
+#include "Terrain/EC_VoxelChunkSystem.h"
 #include <glm/glm.hpp>
 
 enum class Game_Error
@@ -69,6 +70,7 @@ private:
     bool m_Running;
     EC_UI_InputSystem m_UIInput;
     EC_ThreadManager m_threadmanager;
+    EC_VoxelChunkSystem m_VoxelChunkSystem;
     std::mutex m_lock;
     void receive(ECXCommand& command) override;
 };

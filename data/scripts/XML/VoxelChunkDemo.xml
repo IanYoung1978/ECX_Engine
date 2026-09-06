@@ -1,0 +1,49 @@
+<?xml version="1.0"?>
+<Scene>
+	<Manifest>
+		<HDR alias="nightsky">data/assets/Images/Skybox/qwantani_moon_noon_puresky_4k.hdr</HDR>
+		<LuaScript alias="keydown">data/scripts/LUA/DebugSceneKeyDown.lua</LuaScript>
+		<LuaScript alias="keyup">data/scripts/LUA/OnKeyUp.lua</LuaScript>
+		<LuaScript alias="keyheld">data/scripts/LUA/OnKeyHeld.lua</LuaScript>
+		<LuaScript alias="mousemove">data/scripts/LUA/onMouseMove.lua</LuaScript>
+	</Manifest>
+
+	<!-- Verification scene for EC_VoxelChunkSystem (see the "Voxel terrain: entity-per-
+	     chunk streaming integration" plan) - the chunk grid itself is NOT authored here;
+	     EC_VoxelChunkSystem::init() spawns it unconditionally (a permanent subsystem, not
+	     scene-gated), so this scene only needs a camera, light, and skybox to view it. -->
+
+	<Entity uid="400" name="voxelchunk_skybox">
+		<Skybox>
+			<HDR alias="nightsky"/>
+		</Skybox>
+	</Entity>
+
+	<Entity uid="401" name="voxelchunk_camera">
+		<Camera>
+			<FOV>60.0</FOV>
+			<DrawDistance>300.0</DrawDistance>
+		</Camera>
+		<Spatial>
+			<Position>0.0,25.0,-60.0</Position>
+			<Orientation>0.0,0.0,0.0</Orientation>
+		</Spatial>
+		<ScriptComponent>
+			<OnKeyDown alias="keydown"/>
+			<OnKeyUp alias="keyup"/>
+			<OnKeyHeld alias="keyheld"/>
+			<OnMouseMove alias="mousemove"/>
+		</ScriptComponent>
+	</Entity>
+
+	<Entity uid="402" name="voxelchunk_sun">
+		<Light>
+			<Type>Directional</Type>
+			<Direction>0.3,-1.0,0.2,0.0</Direction>
+			<Colour>1.0,1.0,1.0,1.0</Colour>
+			<Intensity>1.0</Intensity>
+			<CastsShadow>false</CastsShadow>
+			<Dynamic>false</Dynamic>
+		</Light>
+	</Entity>
+</Scene>

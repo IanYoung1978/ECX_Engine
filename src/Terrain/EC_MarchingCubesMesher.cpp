@@ -217,6 +217,99 @@ void weldVertices(EC_TerrainMeshData& mesh)
     mesh = std::move(welded);
 }
 
+// Splits each cube into 6 tetrahedra sharing the cube's main space diagonal (corner 0 to
+// corner 6), the standard decomposition that keeps every cube in a uniform grid sliced the
+// same way - so two cubes sharing a face always agree on that face's diagonal and the
+// surface stitches with no possibility of a crack, unlike the flat 256-case cube table
+// this replaced. That table is topologically ambiguous for certain corner configurations
+// (some cube cases admit two different, mutually inconsistent triangulations of a shared
+// face; the table always picks one, and an adjacent cube can legally pick the other),
+// which is what left the scattered interior holes the diagnostic test caught - see
+// tests/EC_TerrainWorldDensity_Tests.cpp's "no non-manifold (hole) edges" case. A
+// tetrahedron's isosurface has no such ambiguity: a linear field over 4 points crosses an
+// isovalue in only one possible way per corner-sign pattern (derived below, not
+// table-driven, so there's no transcription-error surface for a bug to hide in).
+constexpr int kTetraCorners[6][4] = {
+    {0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6},
+    {0, 7, 4, 6}, {0, 4, 5, 6}, {0, 5, 1, 6},
+};
+
+// Fixes winding the same way the old cube-table path did: pick whichever ordering of the
+// triangle's own vertex-normal average, since the gradient-based normals are already known
+// to point outward. This matters more here, not less - the tetrahedron cases below are
+// derived from data flow, not by hand-checking each triangle's handedness.
+void emitTriangle(const EC_DensityField& field, EC_TerrainMeshData& mesh,
+    glm::vec3 p0, glm::vec3 p1, glm::vec3 p2)
+{
+    glm::vec3 n0 = computeNormal(field, p0);
+    glm::vec3 n1 = computeNormal(field, p1);
+    glm::vec3 n2 = computeNormal(field, p2);
+
+    glm::vec3 windingNormal = glm::cross(p1 - p0, p2 - p0);
+    glm::vec3 avgNormal = n0 + n1 + n2;
+    if (glm::dot(windingNormal, avgNormal) < 0.0f) {
+        std::swap(p1, p2);
+        std::swap(n1, n2);
+    }
+
+    mesh.positions.push_back(p0); mesh.normals.push_back(n0);
+    mesh.positions.push_back(p1); mesh.normals.push_back(n1);
+    mesh.positions.push_back(p2); mesh.normals.push_back(n2);
+    uint32_t base = static_cast<uint32_t>(mesh.positions.size()) - 3;
+    mesh.indices.push_back(base); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
+}
+
+// Polygonises one tetrahedron given its 4 corner positions/values (already resolved from
+// the parent cube's 8 corners via kTetraCorners). Every one of the 16 corner-inside
+// patterns is one of exactly 3 shapes - empty, a single vertex cut off (1 or 3 corners
+// inside), or a planar quad cut (2 and 2) - so the whole case table is this direct
+// classification rather than a hardcoded 16-row lookup.
+void polygoniseTetrahedron(const EC_DensityField& field, EC_TerrainMeshData& mesh, float isoLevel,
+    const glm::vec3 p[4], const float v[4])
+{
+    int inside = 0;
+    for (int c = 0; c < 4; c++)
+        if (v[c] < isoLevel) inside |= (1 << c);
+
+    int count = (inside & 1) + ((inside >> 1) & 1) + ((inside >> 2) & 1) + ((inside >> 3) & 1);
+    if (count == 0 || count == 4) return;
+
+    if (count == 1 || count == 3) {
+        // The one corner whose inside/outside state differs from the other three.
+        int apex = -1;
+        for (int c = 0; c < 4; c++) {
+            bool cIsInside = (inside & (1 << c)) != 0;
+            if ((count == 1) == cIsInside) { apex = c; break; }
+        }
+        glm::vec3 cut[3];
+        int slot = 0;
+        for (int c = 0; c < 4; c++) {
+            if (c == apex) continue;
+            cut[slot++] = vertexInterp(isoLevel, p[apex], p[c], v[apex], v[c]);
+        }
+        emitTriangle(field, mesh, cut[0], cut[1], cut[2]);
+        return;
+    }
+
+    // count == 2: two corners inside, two outside - the cross-section is a quadrilateral
+    // with one corner cut from each of the 4 (inside, outside) pairs. Going P(i0,o0),
+    // P(i0,o1), P(i1,o1), P(i1,o0) walks the quad's actual edge loop (each consecutive pair
+    // shares a tetrahedron vertex - i0, then o1, then i1, then o0), so splitting it along
+    // its own diagonal (i0,o0)-(i1,o1) gives two triangles rather than a bowtie.
+    int i0 = -1, i1 = -1, o0 = -1, o1 = -1;
+    for (int c = 0; c < 4; c++) {
+        bool cIsInside = (inside & (1 << c)) != 0;
+        if (cIsInside) { if (i0 < 0) i0 = c; else i1 = c; }
+        else { if (o0 < 0) o0 = c; else o1 = c; }
+    }
+    glm::vec3 q00 = vertexInterp(isoLevel, p[i0], p[o0], v[i0], v[o0]);
+    glm::vec3 q01 = vertexInterp(isoLevel, p[i0], p[o1], v[i0], v[o1]);
+    glm::vec3 q11 = vertexInterp(isoLevel, p[i1], p[o1], v[i1], v[o1]);
+    glm::vec3 q10 = vertexInterp(isoLevel, p[i1], p[o0], v[i1], v[o0]);
+    emitTriangle(field, mesh, q00, q01, q11);
+    emitTriangle(field, mesh, q00, q11, q10);
+}
+
 } // namespace
 
 EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel)
@@ -236,46 +329,10 @@ EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel)
                     cornerVal[c] = field.sample(cx, cy, cz);
                 }
 
-                int cubeIndex = 0;
-                for (int c = 0; c < 8; c++)
-                    if (cornerVal[c] < isoLevel) cubeIndex |= (1 << c);
-
-                const int* row = EC_MarchingCubesTables::kTriangleTable[cubeIndex];
-                if (row[0] < 0) continue;
-
-                for (int i = 0; i < 13 && row[i] >= 0; i += 3) {
-                    glm::vec3 triPos[3];
-                    glm::vec3 triNormal[3];
-                    for (int corner = 0; corner < 3; corner++) {
-                        int edge = row[i + corner];
-                        int a = EC_MarchingCubesTables::kCubeEdgeCorners[edge][0];
-                        int b = EC_MarchingCubesTables::kCubeEdgeCorners[edge][1];
-                        triPos[corner] = vertexInterp(isoLevel, cornerPos[a], cornerPos[b], cornerVal[a], cornerVal[b]);
-                        triNormal[corner] = computeNormal(field, triPos[corner]);
-                    }
-
-                    // The table's case rows don't all share one consistent winding
-                    // direction (some cube configurations emit CW, others CCW, relative to
-                    // the surface's actual outward side) - left as-is, the renderer's
-                    // backface culling would then remove a different, camera-angle-
-                    // dependent subset of triangles across the mesh, which looks exactly
-                    // like a lighting boundary that rotates with the camera (culling
-                    // happens before the fragment shader runs, so no shading fix could
-                    // have masked or revealed this). Correct it per-triangle: if the
-                    // geometric winding normal disagrees with the vertex normals (already
-                    // proven correctly outward-facing), swap two corners to flip it.
-                    glm::vec3 windingNormal = glm::cross(triPos[1] - triPos[0], triPos[2] - triPos[0]);
-                    glm::vec3 avgNormal = triNormal[0] + triNormal[1] + triNormal[2];
-                    if (glm::dot(windingNormal, avgNormal) < 0.0f) {
-                        std::swap(triPos[1], triPos[2]);
-                        std::swap(triNormal[1], triNormal[2]);
-                    }
-
-                    for (int corner = 0; corner < 3; corner++) {
-                        mesh.positions.push_back(triPos[corner]);
-                        mesh.normals.push_back(triNormal[corner]);
-                        mesh.indices.push_back(static_cast<uint32_t>(mesh.positions.size() - 1));
-                    }
+                for (const auto& tet : kTetraCorners) {
+                    glm::vec3 tetPos[4] = { cornerPos[tet[0]], cornerPos[tet[1]], cornerPos[tet[2]], cornerPos[tet[3]] };
+                    float tetVal[4] = { cornerVal[tet[0]], cornerVal[tet[1]], cornerVal[tet[2]], cornerVal[tet[3]] };
+                    polygoniseTetrahedron(field, mesh, isoLevel, tetPos, tetVal);
                 }
             }
         }
