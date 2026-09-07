@@ -1,7 +1,6 @@
 #pragma once
 #include "Graphics/Renderers/Renderer.h"
 #include "Graphics/FrameBuffers/FrameBufferSet.h"
-#include "Graphics/Renderers/LightUniformBuffer.h"
 #include "Graphics/FrameBuffers/ShadowAtlas.h"
 #include "Graphics/FrameBuffers/CubemapShadowPool.h"
 #include "Graphics/Shaders/Shader.h"
@@ -17,13 +16,6 @@
 #include <glm/glm.hpp>
 #include "Graphics/Renderers/GL_SkyboxRenderer.h"
 #include "Messaging/ICommandListener.h"
-
-enum class PostProcess {
-    MSAA,
-    HDR,
-    DOF,
-    NumProcesses
-};
 
 class EC_GameScene;
 class ECXMessenger;
@@ -48,6 +40,8 @@ public:
     virtual void bakeStaticShadows(EC_GameScene& scene) override;
     void setExposure(float exposure) { m_Exposure = exposure; }
     float getExposure() const { return m_Exposure; }
+    void setAmbientColour(const glm::vec3& colour) { m_AmbientColour = colour; }
+    glm::vec3 getAmbientColour() const { return m_AmbientColour; }
 
 private:
     void geometryPass(EC_GameScene& scene);
@@ -93,7 +87,6 @@ private:
     void skyboxPass(EC_GameScene& scene);
     void debugPass(EC_GameScene& scene);
     void uiPass(EC_GameScene& scene);
-    void postProcess();
     void glowPass();
     void renderQuad();
     void finalPass();
@@ -124,18 +117,12 @@ private:
     float m_ShadowQueryRadius = 100.0f;
 
     std::mutex m_Lock;
-    LightUniformBuffer m_LightBuffer;
     FrameBufferSet m_FrameBuffer;
     std::shared_ptr<Window> m_Window;
-    std::shared_ptr<Shader> m_LightPassShader;
-    std::vector<std::shared_ptr<Shader>> m_PostProcessShaders;
     unsigned int m_FS_QuadHandle;
     unsigned int m_FS_QuadVerts;
     unsigned int m_FS_QuadTex;
     unsigned int m_FS_QuadIndices;
-    bool m_HDR;
-    bool m_DOF;
-    bool m_MSAA;
     std::vector<LightData> m_Points;
     std::vector<SpotLightData> m_Spots;
     std::vector<DirLightData> m_Directionals;
@@ -143,10 +130,18 @@ private:
     Shader m_ShadowDirLightShader;
     Shader m_ShadowSpotLightShader;
     Shader m_ShadowPointLightShader;
+    Shader m_NonShadowDirLightShader;
+    Shader m_NonShadowSpotLightShader;
+    Shader m_NonShadowPointLightShader;
     Shader m_ExemptDirLightShader;
     Shader m_ExemptSpotLightShader;
     Shader m_ExemptPointLightShader;
     Shader m_EmissiveShader;
+    // Flat ambient term, applied once per frame in emissivePass() (see emissivePass.frag's
+    // comment for why it can't live in the per-light shaders) - this renderer has no real
+    // indirect/IBL lighting, just enough for AO to have a visible effect. Deliberately
+    // subtle; tune once visible in a real scene.
+    glm::vec3 m_AmbientColour = glm::vec3(0.03f);
     Shader m_BloomDownsampleShader;
     Shader m_BloomUpsampleShader;
     Shader m_PointShadowDepthShader;

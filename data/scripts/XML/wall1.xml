@@ -13,7 +13,7 @@
 			<PBRMaterial>
 				<Albedo>data/assets/Images/alley-brick-wall/alley-brick-wall_albedo.png</Albedo>
 				<Normal>data/assets/Images/alley-brick-wall/alley-brick-wall_normal-ogl.png</Normal>
-				<Smoothness>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</Smoothness>
+				<Roughness>data/assets/Images/alley-brick-wall/alley-brick-wall_roughness.png</Roughness>
 				<Height>data/assets/Images/alley-brick-wall/alley-brick-wall_height.png</Height>
 				<Metallic>data/assets/Images/alley-brick-wall/alley-brick-wall_metallic.png</Metallic>
 				<AO>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</AO>

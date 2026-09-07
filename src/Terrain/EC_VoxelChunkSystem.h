@@ -1,7 +1,9 @@
 #pragma once
 #include <memory>
+#include <vector>
 #include "Engine/Subsystems/EC_System.h"
 #include "TaskManager/EC_ThreadManager.h"
+#include "Entity/EC_DOD_Types.h"
 
 class EC_VoxelChunkWorker;
 class Shader;
@@ -34,4 +36,11 @@ private:
     EC_ThreadManager m_ThreadManager;
     std::shared_ptr<EC_VoxelChunkWorker> m_Worker;
     std::shared_ptr<Shader> m_ChunkShader;
+    // Chunks have no natural home in any EC_GameScene's own entity list (they're spawned
+    // procedurally, not authored in a scene's XML), so scene switching can't filter them
+    // the normal way (EC_GameScene::activate()/deactivate() only ever touches entities
+    // explicitly added to it). Tracked here instead so update() can toggle their
+    // EC_DOD_EntityInfo::sceneActive itself, keyed on whether "voxelchunkdemo" is the
+    // active scene - without this, chunks stayed visible and collidable in every scene.
+    std::vector<EntityID> m_ChunkEntities;
 };

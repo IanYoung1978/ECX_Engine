@@ -5,7 +5,7 @@
 PBR_TextureSet::PBR_TextureSet()
 {
 	m_Albedo = 0;
-	m_Smoothness = 0;
+	m_Roughness = 0;
 	m_Glow = 0;
 	m_Normal = 0;
 	m_Reflection = false;
@@ -25,7 +25,7 @@ void PBR_TextureSet::setTextureHandles(TextureManager& textureManager)
 	m_Albedo = textureManager.getTexture(m_AlbedoName);
 	m_Normal = textureManager.getTexture(m_NormalName);
 	m_Parallax = textureManager.getTexture(m_ParallaxName);
-	m_Smoothness = textureManager.getTexture(m_SmoothnessName);
+	m_Roughness = textureManager.getTexture(m_RoughnessName);
 	m_Metallic = textureManager.getTexture(m_MetallicName);
 	m_AO = textureManager.getTexture(m_AOName);
 	m_Glow = textureManager.getTexture(m_GlowName);
@@ -45,9 +45,9 @@ void PBR_TextureSet::setTexture(TextureID id, std::string& name)
 		m_NormalName = name;
 	}
 	break;
-	case (TextureID::Smoothness):
+	case (TextureID::Roughness):
 	{
-		m_SmoothnessName = name;
+		m_RoughnessName = name;
 	}
 	break;
 	case (TextureID::Parallax):
@@ -57,7 +57,10 @@ void PBR_TextureSet::setTexture(TextureID id, std::string& name)
 	break;
 	case (TextureID::Diffuse):
 	{
-		m_GlowName = name;
+		// "Diffuse" isn't sent by PBR material XML parsing (which always uses "Albedo"),
+		// but treat it as an Albedo alias rather than the previous dead/wrong fallthrough
+		// into m_GlowName, in case anything ever does send it.
+		m_AlbedoName = name;
 	}
 	break;
 	case (TextureID::AO):
@@ -92,7 +95,7 @@ void PBR_TextureSet::bindTextures(std::shared_ptr<Shader>& shader)
 	shader->bindTexture("normalMap", 1, m_Normal);
 	shader->bindTexture("heightMap", 2, m_Parallax);
 	shader->bindTexture("glowMap", 3, m_Glow);
-	shader->bindTexture("smoothnessMap", 4, m_Smoothness);
+	shader->bindTexture("roughnessMap", 4, m_Roughness);
 	shader->bindTexture("metalMap", 5, m_Metallic);
 	shader->bindTexture("AOMap", 6, m_AO);
 	shader->setUniform("parallaxScale", m_ParallaxScale);

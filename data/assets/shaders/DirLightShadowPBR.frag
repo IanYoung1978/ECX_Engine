@@ -89,17 +89,17 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 }
 
 vec3 computeLight(
-	vec3 Ldirection, 
-	vec3 Vdirection, 
+	vec3 Ldirection,
+	vec3 Vdirection,
 	vec3 Lcolour,
 	vec3 albedo,
-	vec3 normal, 
-	float Lintensity, 
-	float smoothness,
+	vec3 normal,
+	float Lintensity,
+	float roughness,
 	float metal,
 	float ao)
 {
-	vec3 F0 = vec3(0.04); 
+	vec3 F0 = vec3(0.04);
 	F0 = mix(F0, albedo,metal);
 	// calculate radiance
 	vec3 H = normalize(Vdirection + Ldirection);
@@ -108,8 +108,8 @@ vec3 computeLight(
 	vec3 radiance = Lcolour * (attenuation * Lintensity);
 
 	// Cook-Torrance BRDF
-	float NDF = DistributionGGX(normal, H, smoothness);   
-	float G   = GeometrySmith(normal, Vdirection, Ldirection, smoothness);      
+	float NDF = DistributionGGX(normal, H, roughness);
+	float G   = GeometrySmith(normal, Vdirection, Ldirection, roughness);
 	vec3 F    = fresnelSchlick(max(dot(H, Vdirection), 0.0), F0);
            
 	vec3 nominator    = NDF * G * F; 
@@ -178,7 +178,7 @@ void main()
 	vec4 pcolour 		= texture(positionMap, indata.VSTexCoord).rgba;
 	if (pcolour.a == 0.0) discard;
 	vec4 ncolour 		= texture(normalMap, indata.VSTexCoord).rgba;
-	vec3 dcolour 		= pow(texture(AlbedoMap, indata.VSTexCoord).rgb,vec3(2.2));
+	vec3 dcolour 		= texture(AlbedoMap, indata.VSTexCoord).rgb;
 	vec3 pbr 			= texture(PBRMap, indata.VSTexCoord).rgb;
 	vec4 shadowCoord 	= ShadowTransform * pcolour;
 	float visibility 	= computeOcclusion( shadowCoord, ncolour.rgb, -dirLight.direction.xyz );
@@ -196,5 +196,5 @@ void main()
 							pbr.g,
 							pbr.b
 						);
-	colour = vec4(pow(visibility*outColour, vec3(1.0/2.2)), 1.0);
+	colour = vec4(visibility*outColour, 1.0);
 }

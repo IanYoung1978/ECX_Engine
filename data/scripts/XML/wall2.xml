@@ -13,7 +13,7 @@
 			<PBRMaterial>
 				<Albedo>data/assets/Images/bricks/bricks_diffuseOriginal.png</Albedo>
 				<Normal>data/assets/Images/bricks/bricks_normal-ogl.png</Normal>
-				<Smoothness>data/assets/Images/bricks/bricks_normal-ogl.png</Smoothness>
+				<Roughness>data/assets/Images/bricks/bricks_roughness.png</Roughness>
 				<Height>data/assets/Images/bricks/bricks_height.png</Height>
 				<Metallic>data/assets/Images/bricks/bricks_metallic.png</Metallic>
 				<AO>data/assets/Images/bricks/bricks_ao.png</AO>

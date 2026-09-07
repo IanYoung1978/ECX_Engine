@@ -1,12 +1,12 @@
 #version 430 core
-// Some drivers require the following
 precision highp float;
 
-// Issue #28: redraws receivesShadow==false entities with full (unshadowed) lighting from
-// this directional light. Trimmed copy of DirLightShadowPBR.frag with computeOcclusion/
-// shadowMap removed - visibility is implicitly 1.0. Paired with shadow.vert (a bare MVP
-// transform, no varyings), so sampling uses screen-space texelFetch instead of a
-// full-screen-quad UV varying - correct here since this pass draws real mesh geometry.
+// Replaces lightpass.frag's role for spot lights with CastsShadow=false - real
+// Cook-Torrance/GGX PBR instead of the old Blinn-Phong path, drawn one light per additive
+// full-screen-quad pass (matching how SpotlightShadowPBR.frag's shadow-casting counterpart
+// is already invoked), just with no shadow-map sampling - visibility is implicitly 1.0.
+// sRGB decode of AlbedoMap is automatic; gamma encode happens once, centrally, in
+// hdr_tonemap.frag.
 
 layout (location = 0) uniform sampler2D positionMap;
 layout (location = 1) uniform sampler2D normalMap;
@@ -14,16 +14,26 @@ layout (location = 2) uniform sampler2D AlbedoMap;
 layout (location = 3) uniform sampler2D PBRMap;
 const float PI = 3.14159265359;
 
-struct DirLightData
+struct SpotLightData
 {
 	vec4 colour;
+	vec4 position;
+	vec4 attenuation;
 	float intensity;
+	vec3 padding;
 	vec4 direction;
+	float cutoffAngle;
 };
 
-uniform DirLightData dirLight;
+uniform SpotLightData spotLight;
 out vec4 colour;
 uniform vec3 WSCamPos;
+
+in xferBlock
+{
+	vec3 VSVertex;
+	vec2 VSTexCoord;
+} indata;
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0)
 {
@@ -36,7 +46,6 @@ float DistributionGGX(vec3 N, vec3 H, float roughness)
     float a2     		= a*a;
     float NdotH  		= max(dot(N, H), 0.0);
     float NdotH2 		= NdotH*NdotH;
-	const float PI		= 3.14159265359;
     float num   		= a2;
     float denom 		= (NdotH2 * (a2 - 1.0) + 1.0);
     denom 				= PI * denom * denom;
@@ -71,19 +80,18 @@ vec3 computeLight(
 	vec3 albedo,
 	vec3 normal,
 	float Lintensity,
-	float roughness,
-	float metal,
-	float ao)
+	vec3 pbr
+)
 {
 	vec3 F0 = vec3(0.04);
-	F0 = mix(F0, albedo,metal);
+	F0 = mix(F0, albedo, pbr.g);
 	vec3 H = normalize(Vdirection + Ldirection);
 	float distance = length(Ldirection);
 	float attenuation = 1.0 / (distance * distance);
 	vec3 radiance = Lcolour * (attenuation * Lintensity);
 
-	float NDF = DistributionGGX(normal, H, roughness);
-	float G   = GeometrySmith(normal, Vdirection, Ldirection, roughness);
+	float NDF = DistributionGGX(normal, H, pbr.r);
+	float G   = GeometrySmith(normal, Vdirection, Ldirection, pbr.r);
 	vec3 F    = fresnelSchlick(max(dot(H, Vdirection), 0.0), F0);
 
 	vec3 nominator    = NDF * G * F;
@@ -92,7 +100,7 @@ vec3 computeLight(
 
 	vec3 kS = F;
 	vec3 kD = vec3(1.0) - kS;
-	kD *= 1.0 - metal;
+	kD *= 1.0 - pbr.g;
 
 	float NdotL = max(dot(normal, Ldirection), 0.0);
 	vec3 Lo = (kD * albedo / PI + specular) * radiance * NdotL;
@@ -101,21 +109,28 @@ vec3 computeLight(
 
 void main()
 {
-	ivec2 px 			= ivec2(gl_FragCoord.xy);
-	vec4 pcolour 		= texelFetch(positionMap, px, 0);
+	vec4 pcolour 		= texture(positionMap, indata.VSTexCoord).rgba;
 	if (pcolour.a == 0.0) discard;
-	vec4 ncolour 		= texelFetch(normalMap, px, 0);
-	vec3 dcolour 		= texelFetch(AlbedoMap, px, 0).rgb;
-	vec3 pbr 			= texelFetch(PBRMap, px, 0).rgb;
+	vec4 ncolour 		= texture(normalMap, indata.VSTexCoord).rgba;
+	vec4 albedo 		= texture(AlbedoMap, indata.VSTexCoord);
+	vec3 pbr 			= texture(PBRMap, indata.VSTexCoord).rgb;
 	vec3 vToEye 		= normalize(WSCamPos - pcolour.xyz);
+	vec3 outColour 		= vec3(0.0,0.0,0.0);
 
-	vec3 outColour 		= computeLight(
-							-dirLight.direction.xyz,
+	vec3 ltf 			= spotLight.position.xyz - pcolour.rgb;
+	float cos_cur_angle = dot(normalize(-ltf),spotLight.direction.xyz);
+	if (cos_cur_angle > cos(spotLight.cutoffAngle))
+	{
+		vec3 fragCol 	= computeLight(
+							-spotLight.direction.xyz,
 							vToEye,
-							dirLight.colour.rgb,
-							dcolour,
-							ncolour.rgb, dirLight.intensity,
-							pbr.r, pbr.g, pbr.b
+							spotLight.colour.rgb,
+							albedo.rgb,
+							ncolour.rgb,
+							spotLight.intensity,
+							pbr
 						);
-	colour = vec4(outColour, 1.0);
+		outColour = fragCol * clamp((cos_cur_angle-spotLight.cutoffAngle)/(1.0-spotLight.cutoffAngle), 0.0, 1.0);
+	}
+	colour = vec4(outColour,1);
 }

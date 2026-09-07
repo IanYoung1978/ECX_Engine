@@ -488,7 +488,10 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
             auto child1 = child->FirstChildElement();
             while (child1 != nullptr) {
                 std::string texName = child1->GetText();
-                s_TexManager.loadTexture(texName);
+                // Diffuse/Emissive are colour data (sRGB-authored); Normal/Specular/Height
+                // are not - see TextureManager::loadTexture's isSRGB parameter.
+                bool isSRGB = strcmp(child1->Value(), "Diffuse") == 0 || strcmp(child1->Value(), "Emissive") == 0;
+                s_TexManager.loadTexture(texName, isSRGB);
 
                 if (strcmp(child1->Value(), "Diffuse") == 0)
                     gfx.textureSet->setTexture(TextureID::Diffuse, texName);
@@ -519,7 +522,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                 while (child1 != nullptr) {
                     if (strcmp(child1->Value(), "Albedo") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
-                        s_TexManager.loadTexture(texName);
+                        s_TexManager.loadTexture(texName, /*isSRGB*/ true);
                         gfx.textureSet->setTexture(TextureID::Albedo, texName);
                     }
                     else if (strcmp(child1->Value(), "Normal") == 0 && child1->GetText()) {
@@ -527,10 +530,10 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                         s_TexManager.loadTexture(texName);
                         gfx.textureSet->setTexture(TextureID::Normal, texName);
                     }
-                    else if (strcmp(child1->Value(), "Smoothness") == 0 && child1->GetText()) {
+                    else if (strcmp(child1->Value(), "Roughness") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
                         s_TexManager.loadTexture(texName);
-                        gfx.textureSet->setTexture(TextureID::Smoothness, texName);
+                        gfx.textureSet->setTexture(TextureID::Roughness, texName);
                     }
                     else if (strcmp(child1->Value(), "Height") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
@@ -539,7 +542,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                     }
                     else if (strcmp(child1->Value(), "Emissive") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
-                        s_TexManager.loadTexture(texName);
+                        s_TexManager.loadTexture(texName, /*isSRGB*/ true);
                         gfx.textureSet->setTexture(TextureID::Glow, texName);
                     }
                     else if (strcmp(child1->Value(), "Metallic") == 0 && child1->GetText()) {

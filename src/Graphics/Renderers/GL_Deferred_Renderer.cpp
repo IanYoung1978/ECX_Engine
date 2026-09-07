@@ -114,10 +114,7 @@ namespace {
 }
 
 GL_Deferred_Renderer::GL_Deferred_Renderer()
-    : m_MSAA(false)
-    , m_DOF(false)
-    , m_HDR(false)
-    , m_FS_QuadHandle(0)
+    : m_FS_QuadHandle(0)
     , m_FS_QuadIndices(0)
     , m_FS_QuadTex(0)
     , m_FS_QuadVerts(0)
@@ -188,9 +185,12 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     glBindVertexArray(0);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-    m_LightPassShader = std::make_shared<Shader>();
-    if (!m_LightPassShader->loadShader("data/assets/shaders/lightpass.vert", "data/assets/shaders/lightpass.frag"))
-        LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load light pass shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_NonShadowDirLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/NonShadowDirLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load non-shadow directional light shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_NonShadowSpotLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/NonShadowSpotLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load non-shadow spot light shader", LOGGING::LogLevel::CRITICAL);
+    if (!m_NonShadowPointLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/NonShadowPointLightPass.frag"))
+        LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load non-shadow point light shader", LOGGING::LogLevel::CRITICAL);
     if (!m_ShadowShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/shadow.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("failed to load point shadow pass shader", LOGGING::LogLevel::CRITICAL);
     if (!m_ShadowDirLightShader.loadShader("data/assets/shaders/ShadowLightPass.vert", "data/assets/shaders/DirLightShadowPBR.frag"))
@@ -233,7 +233,6 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
 
     m_PointShadowPool.init(config.pointShadowPoolSize, config.pointShadowFaceSize);
     m_FrameBuffer.init(window->getWidth(), window->getHeight(), config.bloomMipLevels);
-    m_LightBuffer.init((*m_LightPassShader));
     m_ShadowAtlas.init(config.shadowAtlasSize, config.shadowAtlasTileSize);
 
     glEnable(GL_DEPTH_TEST);
@@ -264,6 +263,7 @@ void GL_Deferred_Renderer::emissivePass()
     m_EmissiveShader.activate();
     m_FrameBuffer.LightingPass(m_EmissiveShader);
     m_EmissiveShader.setUniform("intensity", m_RenderConfig.emissiveIntensity);
+    m_EmissiveShader.setUniform("ambientColour", m_AmbientColour);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
     renderQuad();
@@ -463,7 +463,6 @@ void GL_Deferred_Renderer::geometryPass(EC_GameScene& scene)
 
 void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
 {
-    if (!m_LightPassShader) return;
     auto& manager = EC_DOD_EntityManager::getInstance();
 
     for (EntityID cameraID : scene.getCameras()) {
@@ -474,39 +473,45 @@ void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
 
         updateLights(scene);
 
-        m_LightPassShader->activate();
-        m_FrameBuffer.LightingPass(*m_LightPassShader);
-        m_LightBuffer.updatePointLights((int)m_Points.size(), m_Points.data());
-        m_LightBuffer.updateSpotLights((int)m_Spots.size(), m_Spots.data());
-        m_LightBuffer.bindPointLights();
-        m_LightPassShader->setUniform("NumPoints", (int)m_Points.size());
-        m_LightBuffer.bindSpotLights();
-        m_LightPassShader->setUniform("NumSpots", (int)m_Spots.size());
-        m_LightPassShader->setUniform("WSCamPos", spatial.position);
-
-        if (!m_Directionals.empty())
-            m_LightPassShader->setDirLight("dirLight", m_Directionals[0]);
-        else {
-            // setLight("dirLight", ...) previously used here only accepts LightData, and
-            // DirLightData's `direction` field (added by inheriting from LightData - see
-            // LightData.h) was silently sliced off by that call, so this path's
-            // lightpass.frag dirLight.direction uniform was never actually set - every
-            // scene until now used a shadow-casting directional light (a different code
-            // path, DirLightShadowPBR.frag via setDirLight elsewhere), so this never
-            // surfaced. setDirLight sets colour/intensity/direction, matching
-            // lightpass.frag's DirLightData uniform exactly.
-            DirLightData noDirLight;
-            noDirLight.colour = glm::vec4(0.0f);
-            noDirLight.position = glm::vec4(0.0f);
-            noDirLight.attenuation = glm::vec4(0.0f);
-            noDirLight.intensity = 0.0f;
-            noDirLight.padding = glm::vec3(0.0f);
-            noDirLight.addPadding = glm::vec4(0.0f);
-            noDirLight.direction = glm::vec4(0.0f);
-            m_LightPassShader->setDirLight("dirLight", noDirLight);
+        // Real Cook-Torrance/GGX PBR, same as the shadow-casting path (just with no
+        // shadow-map term - visibility is implicitly 1.0), one additive full-screen-quad
+        // draw per light rather than the old lightpass.frag's single-shader UBO-array
+        // batch. That also fixes a real bug the old batched approach had: only
+        // m_Directionals[0] was ever lit, silently dropping any additional non-shadow
+        // directional lights - every light here gets its own draw, so there's no cap.
+        for (const DirLightData& light : m_Directionals) {
+            m_NonShadowDirLightShader.activate();
+            m_FrameBuffer.LightingPass(m_NonShadowDirLightShader);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            m_NonShadowDirLightShader.setUniform("WSCamPos", spatial.position);
+            m_NonShadowDirLightShader.setDirLight("dirLight", light);
+            renderQuad();
+            glDisable(GL_BLEND);
         }
 
-        renderQuad();
+        for (const SpotLightData& light : m_Spots) {
+            m_NonShadowSpotLightShader.activate();
+            m_FrameBuffer.LightingPass(m_NonShadowSpotLightShader);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            m_NonShadowSpotLightShader.setUniform("WSCamPos", spatial.position);
+            m_NonShadowSpotLightShader.setSpotLight("spotLight", light);
+            renderQuad();
+            glDisable(GL_BLEND);
+        }
+
+        for (const LightData& light : m_Points) {
+            m_NonShadowPointLightShader.activate();
+            m_FrameBuffer.LightingPass(m_NonShadowPointLightShader);
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            m_NonShadowPointLightShader.setUniform("WSCamPos", spatial.position);
+            m_NonShadowPointLightShader.setLight("pointLight", light);
+            renderQuad();
+            glDisable(GL_BLEND);
+        }
+
         shadowLightingPass(scene);
         break;
     }
@@ -1163,27 +1168,6 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
 
     glUseProgram(0);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void GL_Deferred_Renderer::postProcess()
-{
-    if (!m_PostProcessShaders.empty()) {
-        if (m_MSAA) {
-            m_PostProcessShaders[(size_t)PostProcess::MSAA]->activate();
-            m_FrameBuffer.PostProcessPass();
-            renderQuad();
-        }
-        if (m_HDR) {
-            m_PostProcessShaders[(size_t)PostProcess::HDR]->activate();
-            m_FrameBuffer.PostProcessPass();
-            renderQuad();
-        }
-        if (m_DOF) {
-            m_PostProcessShaders[(size_t)PostProcess::DOF]->activate();
-            m_FrameBuffer.PostProcessPass();
-            renderQuad();
-        }
-    }
 }
 
 void GL_Deferred_Renderer::glowPass()

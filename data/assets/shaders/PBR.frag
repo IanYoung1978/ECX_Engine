@@ -1,7 +1,7 @@
 #version 430 core
 precision highp float;
 layout (location = 1) uniform sampler2D colourMap;
-layout (location = 2) uniform sampler2D smoothnessMap;
+layout (location = 2) uniform sampler2D roughnessMap;
 layout (location = 3) uniform sampler2D normalMap;
 layout (location = 4) uniform sampler2D heightMap;
 layout (location = 5) uniform sampler2D metalMap;
@@ -81,7 +81,7 @@ void main()
         normal_rgb = normalize(indata.TBN * normal_rgb);
         nColour = vec4(normal_rgb, 1.0);
 
-        pbr.r = texture(smoothnessMap, txc).r;
+        pbr.r = texture(roughnessMap, txc).r;
         pbr.g = texture(metalMap, txc).r;
         pbr.b = texture(AOMap, txc).r;
         PBR = vec4(pbr, 1.0);

@@ -48,7 +48,7 @@ void FrameBuffer::initFrame()
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, m_BufferHandle);
 	glDrawBuffer(GL_COLOR_ATTACHMENT0);
-	//glClear(GL_COLOR_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 }
 

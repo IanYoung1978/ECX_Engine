@@ -212,6 +212,14 @@ void EC_SceneManager::activateScene(const std::string& alias)
     activateSceneByIndex(idx);
 }
 
+bool EC_SceneManager::isSceneActive(const std::string& alias) const
+{
+    auto it = m_AliasMap.find(alias);
+    if (it == m_AliasMap.end())
+        return false;
+    return it->second == m_ActiveScene;
+}
+
 void EC_SceneManager::activateSceneByIndex(size_t index)
 {
     size_t previous = m_ActiveScene;

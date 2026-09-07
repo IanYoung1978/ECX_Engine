@@ -13,14 +13,14 @@
 			<Height>data/assets/Images/Crate/crate_height.png</Height>
 			<Emissive>data/assets/Images/Crate/Crate_E.png</Emissive>
 			<AO>data/assets/Images/Crate/crate_ao.png</AO>
-			<Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness>
+			<Roughness>data/assets/Images/Crate/crate_roughness.png</Roughness>
 			<ParallaxScale>0.05</ParallaxScale>
 			<ParallaxBias>0.001</ParallaxBias>
 		</PBRMaterial>
 		<PBRMaterial alias="woodfloor">
 			<Albedo>data/assets/Images/Wood_floor/Wood_floor_albedo.png</Albedo>
 			<Normal>data/assets/Images/Wood_floor/Wood_floor_normal.png</Normal>
-			<Smoothness>data/assets/Images/Wood_floor/Wood_floor_smoothness.png</Smoothness>
+			<Roughness>data/assets/Images/Wood_floor/Wood_floor_roughness.png</Roughness>
 			<Height>data/assets/Images/Wood_floor/Wood_floor_height.png</Height>
 			<Metallic>data/assets/Images/Wood_floor/Wood_floor_metallic.png</Metallic>
 			<AO>data/assets/Images/Wood_floor/Wood_floor_ao.png</AO>
@@ -30,7 +30,7 @@
 		<PBRMaterial alias="brickwall">
 			<Albedo>data/assets/Images/alley-brick-wall/alley-brick-wall_albedo.png</Albedo>
 			<Normal>data/assets/Images/alley-brick-wall/alley-brick-wall_normal-dx.png</Normal>
-			<Smoothness>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</Smoothness>
+			<Roughness>data/assets/Images/alley-brick-wall/alley-brick-wall_roughness.png</Roughness>
 			<Height>data/assets/Images/alley-brick-wall/alley-brick-wall_height.png</Height>
 			<Metallic>data/assets/Images/alley-brick-wall/alley-brick-wall_metallic.png</Metallic>
 			<AO>data/assets/Images/alley-brick-wall/alley-brick-wall_ao.png</AO>
@@ -40,7 +40,7 @@
 		<PBRMaterial alias="brickwall1">
 			<Albedo>data/assets/Images/bricks/bricks_diffuseOriginal.png</Albedo>
 			<Normal>data/assets/Images/bricks/bricks_normal-ogl.png</Normal>
-			<Smoothness>data/assets/Images/bricks/bricks_smoothness.png</Smoothness>
+			<Roughness>data/assets/Images/bricks/bricks_roughness.png</Roughness>
 			<Height>data/assets/Images/bricks/bricks_height.png</Height>
 			<Metallic>data/assets/Images/bricks/bricks_metallic.png</Metallic>
 			<AO>data/assets/Images/bricks/bricks_ao.png</AO>

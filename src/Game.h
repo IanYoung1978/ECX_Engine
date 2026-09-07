@@ -57,6 +57,7 @@ public:
     void loadScene(const std::string& alias);
     void unloadScene(const std::string& alias);
     void activateScene(const std::string& alias);
+    bool isSceneActive(const std::string& alias) const;
     std::shared_ptr<Window> getWindow();
     ~EC_Game();
 

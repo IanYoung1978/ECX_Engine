@@ -105,6 +105,11 @@ void EC_Game::activateScene(const std::string& alias)
     m_SceneManager.activateScene(alias);
 }
 
+bool EC_Game::isSceneActive(const std::string& alias) const
+{
+    return m_SceneManager.isSceneActive(alias);
+}
+
 void EC_Game::shutDown()
 {
     ECXCommand command;
