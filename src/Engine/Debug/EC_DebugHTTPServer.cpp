@@ -3,6 +3,88 @@
 #include <chrono>
 #include "Logging/ECX_Logging.h"
 
+namespace {
+    // Hand-authored rather than generated - the API is small (3 read-only routes) and
+    // changes rarely enough that keeping this in sync by hand alongside route changes is
+    // the pragmatic choice over pulling in a spec-generation library for a dev tool.
+    const std::string kOpenApiSpec = R"JSON({
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ECX_Engine Debug HTTP API",
+    "description": "Dev-build-only, read-only debug interface into a running ECX_Engine instance (Issue #87). Localhost-bound, no authentication - never enabled in a retail build. See GET /docs for an interactive viewer of this spec.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/log": {
+      "get": {
+        "summary": "Recent engine log lines",
+        "parameters": [
+          {
+            "name": "count",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "default": 50 },
+            "description": "Number of recent log lines to return, most recent last. Capped by the engine's own retained log history (200 lines)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Log lines, one per line.",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    },
+    "/screenshot": {
+      "get": {
+        "summary": "Capture the running engine's current frame",
+        "parameters": [
+          {
+            "name": "target",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["final", "albedo", "normal", "depth"],
+              "default": "final"
+            },
+            "description": "Which buffer to capture. 'final' (or omitted) is the fully composited frame - scene, skybox, debug overlay, and UI, exactly what's on screen. 'albedo'/'normal'/'depth' are individual G-buffer attachments, each with its own visualization: albedo is gamma-encoded linear colour, normal is world-space [-1,1] remapped to [0,1] per channel, depth is raw non-linear NDC depth (not linearized - nearby geometry reads much darker than its true distance would suggest)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "PNG image of the requested buffer.",
+            "content": { "image/png": { "schema": { "type": "string", "format": "binary" } } }
+          },
+          "503": {
+            "description": "Capture failed or timed out (e.g. the main loop is stalled or paused).",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    }
+  }
+})JSON";
+
+    const std::string kSwaggerUIPage = R"HTML(<!DOCTYPE html>
+<html>
+<head>
+  <title>ECX_Engine Debug API</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script>
+    window.onload = () => {
+      SwaggerUIBundle({ url: '/openapi.json', dom_id: '#swagger-ui' });
+    };
+  </script>
+</body>
+</html>
+)HTML";
+}
+
 EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port)
     : m_Host(std::move(host))
     , m_Port(port)
@@ -44,6 +126,14 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port)
             return;
         }
         res.set_content(reinterpret_cast<const char*>(png.data()), png.size(), "image/png");
+    });
+
+    m_Server->Get("/openapi.json", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content(kOpenApiSpec, "application/json");
+    });
+
+    m_Server->Get("/docs", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content(kSwaggerUIPage, "text/html");
     });
 }
 
