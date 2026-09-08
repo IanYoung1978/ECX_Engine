@@ -205,6 +205,40 @@ namespace XML
 		return true;
 	}
 
+	// EngineConfig.xml's <DebugHTTP enabled="" port=""/> - the dev-build-only debug HTTP
+	// server (Issue #87's first slice, GET /log only). Defaults to disabled on any
+	// missing file/section/attribute, since this must never turn on unexpectedly.
+	struct DebugHTTPSettings
+	{
+		bool enabled = false;
+		int port = 8089;
+	};
+
+	inline bool loadDebugHTTPSettings(const std::string& file, DebugHTTPSettings& outSettings)
+	{
+		outSettings = DebugHTTPSettings{};
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto debugHttp = root->FirstChildElement("DebugHTTP");
+		if (!debugHttp)
+			return true;
+
+		const char* enabledAttr = debugHttp->Attribute("enabled");
+		if (enabledAttr)
+			outSettings.enabled = (strcmp(enabledAttr, "true") == 0);
+		const char* portAttr = debugHttp->Attribute("port");
+		if (portAttr)
+			outSettings.port = atoi(portAttr);
+
+		return true;
+	}
+
 	inline bool loadGameConfig(const std::string& file, GameSettings& settings)
 	{
 		TiXmlDocument doc(file.c_str());

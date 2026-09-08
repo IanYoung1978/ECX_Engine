@@ -45,6 +45,16 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
     m_VoxelChunkSystem.init(m_Messenger, *this);
+
+    XML::DebugHTTPSettings debugHttpSettings;
+    XML::loadDebugHTTPSettings(m_SceneManager.getEngineConfigPath(), debugHttpSettings);
+    if (debugHttpSettings.enabled)
+    {
+        m_DebugHTTPServer = std::make_shared<EC_DebugHTTPServer>("127.0.0.1", debugHttpSettings.port);
+        m_threadmanager.addTask(m_DebugHTTPServer);
+        m_threadmanager.executeTasks();
+    }
+
     m_Running = true;
     m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
     LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
@@ -235,6 +245,7 @@ void EC_Game::receive(ECXCommand& command)
         m_Running = false;
         m_Controls->shutdown();
         m_VoxelChunkSystem.shutdown();
+        if (m_DebugHTTPServer) m_DebugHTTPServer->shutdown();
         m_threadmanager.stop();
     }
 }

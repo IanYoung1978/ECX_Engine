@@ -14,7 +14,14 @@ set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 # Off in CI: lets ECX_UnitTests configure with only glm + Catch2.
 option(ECX_BUILD_ENGINE "Build the main ECX game target (requires SDL2/GLEW/assimp/Lua/OpenGL/Stb)" ON)
 
-set(CMAKE_GENERATOR_PLATFORM x64)
+# Only Visual Studio generators accept a platform specification - Ninja (used by the
+# out/build/x64-Debug CMakePresets tree) errors out ("Generator Ninja does not support
+# platform specification") the moment anything triggers a try_compile() sub-build, e.g.
+# find_package(httplib)'s own find_dependency(Threads) - previously latent/harmless here
+# only because nothing had exercised that path yet.
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(CMAKE_GENERATOR_PLATFORM x64)
+endif()
 set(CMAKE_BUILD_TYPE Debug)
 
 find_package(GLM CONFIG REQUIRED)
@@ -140,8 +147,12 @@ find_path(LUABRIDGE3_INCLUDE_DIRS "luabridge3/LuaBridge/Array.h")
 message(${LUABRIDGE3_INCLUDE_DIRS})
 set(INCLUDE_DIRS ${INCLUDE_DIRS} ${LUABRIDGE3_INCLUDE_DIRS})
 
+# Dev-build-only debug HTTP server (Issue #87's first slice) - header-only, no threading
+# model of its own beyond a plain blocking listen()/stop() pair.
+find_package(httplib CONFIG REQUIRED)
+
 target_include_directories(ECX PRIVATE ${INCLUDE_DIRS} ${SOURCE_DIR})
-target_link_libraries(ECX ${LIBS})
+target_link_libraries(ECX ${LIBS} httplib::httplib)
 
 add_custom_command(
         TARGET ECX POST_BUILD
