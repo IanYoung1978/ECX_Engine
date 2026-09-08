@@ -220,6 +220,12 @@ bool EC_SceneManager::isSceneActive(const std::string& alias) const
     return it->second == m_ActiveScene;
 }
 
+bool EC_SceneManager::captureFrame(std::vector<unsigned char>& outPNGBytes)
+{
+    if (!m_Renderer) return false;
+    return m_Renderer->captureFrame(outPNGBytes);
+}
+
 void EC_SceneManager::activateSceneByIndex(size_t index)
 {
     size_t previous = m_ActiveScene;

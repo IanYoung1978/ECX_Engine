@@ -18,6 +18,7 @@
 #include "Graphics/Renderers/DebugVisualization.h"
 #include <algorithm>
 #include <typeindex>
+#include <stb_image_write.h>
 #include <array>
 #include <limits>
 
@@ -1201,6 +1202,46 @@ void GL_Deferred_Renderer::glowPass()
 void GL_Deferred_Renderer::finalPass()
 {
     m_FrameBuffer.FinalPass();
+}
+
+namespace {
+    void appendPngBytes(void* context, void* data, int size)
+    {
+        auto* out = static_cast<std::vector<unsigned char>*>(context);
+        const unsigned char* bytes = static_cast<const unsigned char*>(data);
+        out->insert(out->end(), bytes, bytes + size);
+    }
+}
+
+bool GL_Deferred_Renderer::captureFrame(std::vector<unsigned char>& outPNGBytes)
+{
+    // Must run on the GL/main thread, after this frame's rendering has all happened but
+    // before SDL_GL_SwapWindow() - see EC_Game::update()'s call site. Reading GL_BACK here
+    // (rather than the real backbuffer post-swap, which the issue's wording suggested) is
+    // the same pixels with none of the "just-swapped buffer contents are undefined on most
+    // drivers" fragility - this is what a viewer would see the instant it appears on screen,
+    // skybox/debug overlay/UI included (all drawn to this same default framebuffer before
+    // the swap).
+    int width = m_Window->getWidth();
+    int height = m_Window->getHeight();
+    if (width <= 0 || height <= 0) return false;
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glReadBuffer(GL_BACK);
+
+    constexpr int kChannels = 3; // GL_RGB
+    std::vector<unsigned char> pixels(static_cast<size_t>(width) * height * kChannels);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+
+    // OpenGL's row 0 is the bottom of the image; PNG expects row 0 at the top -
+    // stb_image_write's own flip flag handles this (this vcpkg build doesn't expose
+    // stbi_write_png_to_mem in its public header, only inside its implementation TU, so
+    // this uses the callback-based writer instead, which is fully declared).
+    outPNGBytes.clear();
+    stbi_flip_vertically_on_write(1);
+    int ok = stbi_write_png_to_func(appendPngBytes, &outPNGBytes, width, height, kChannels,
+        pixels.data(), width * kChannels);
+    return ok != 0;
 }
 
 void GL_Deferred_Renderer::renderQuad()

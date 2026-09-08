@@ -8,4 +8,5 @@ target_sources(ECX PRIVATE
 )
 
 add_subdirectory(Controllers)
+add_subdirectory(Debug)
 add_subdirectory(Subsystems)

@@ -45,5 +45,10 @@
 			<LogFriction>false</LogFriction>
 		</Debug>
 	</Physics>
-	
+
+	<!-- Dev-build-only debug HTTP server (Issue #87's first slice) - GET /log only,
+	     read-only, localhost-bound, no authentication. Off by default; must be
+	     explicitly enabled per-machine. -->
+	<DebugHTTP enabled="false" port="8089"/>
+
 </EngineSettings>

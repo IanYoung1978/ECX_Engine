@@ -34,11 +34,18 @@ public:
     void loadScene(const std::string& alias);
     void unloadScene(const std::string& alias);
     void activateScene(const std::string& alias);
+    // Resolved path to EngineConfig.xml - lets EC_Game read its own additional sections
+    // (e.g. <DebugHTTP>) without re-deriving this path itself or duplicating the
+    // GameMode->EngineSettings resolution already done in init().
+    const std::string& getEngineConfigPath() const { return m_Settings.engine_settings; }
     // Unknown alias returns false rather than asserting/logging - callers that just want to
     // gate their own per-frame behaviour on "is this particular scene the one showing right
     // now" (e.g. EC_VoxelChunkSystem tying its chunks' visibility to voxelchunkdemo) don't
     // need special-case handling for a typo'd or not-yet-registered alias.
     bool isSceneActive(const std::string& alias) const;
+    // Forwards to the active Renderer - see Renderer::captureFrame's own comment. Must be
+    // called from the GL/main thread.
+    bool captureFrame(std::vector<unsigned char>& outPNGBytes);
 
     void receive(ECXCommand& command) override;
 

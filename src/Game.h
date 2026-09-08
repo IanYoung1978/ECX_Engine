@@ -14,6 +14,7 @@
 #include "UI/EC_UI_InputSystem.h"
 #include "Spatial/RayQueryHit.h"
 #include "Terrain/EC_VoxelChunkSystem.h"
+#include "Engine/Debug/EC_DebugHTTPServer.h"
 #include <glm/glm.hpp>
 
 enum class Game_Error
@@ -72,6 +73,9 @@ private:
     EC_UI_InputSystem m_UIInput;
     EC_ThreadManager m_threadmanager;
     EC_VoxelChunkSystem m_VoxelChunkSystem;
+    // Null unless EngineConfig.xml's <DebugHTTP enabled="true"> - shared_ptr because
+    // EC_ThreadManager::addTask() requires it, matching EC_VoxelChunkWorker's ownership.
+    std::shared_ptr<EC_DebugHTTPServer> m_DebugHTTPServer;
     std::mutex m_lock;
     void receive(ECXCommand& command) override;
 };

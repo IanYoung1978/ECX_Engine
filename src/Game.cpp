@@ -45,6 +45,16 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
     m_VoxelChunkSystem.init(m_Messenger, *this);
+
+    XML::DebugHTTPSettings debugHttpSettings;
+    XML::loadDebugHTTPSettings(m_SceneManager.getEngineConfigPath(), debugHttpSettings);
+    if (debugHttpSettings.enabled)
+    {
+        m_DebugHTTPServer = std::make_shared<EC_DebugHTTPServer>("127.0.0.1", debugHttpSettings.port);
+        m_threadmanager.addTask(m_DebugHTTPServer);
+        m_threadmanager.executeTasks();
+    }
+
     m_Running = true;
     m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
     LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
@@ -142,6 +152,18 @@ void EC_Game::update(const float& deltaTimeS)
         m_SceneManager.update(deltaTimeS, *this);
         m_Controls->update(deltaTimeS, *this);
         m_UIInput.update(*this, m_Messenger);
+
+        // Must run after all of this frame's rendering-relevant work (above) but before
+        // present()'s swap - GL_BACK still holds this frame's fully composited image
+        // (scene, skybox, debug overlay, UI) at this exact point. See
+        // EC_DebugHTTPServer::requestCapture()'s comment for why this hand-off exists at
+        // all (glReadPixels is only valid on this, the GL/main, thread).
+        if (m_DebugHTTPServer && m_DebugHTTPServer->hasPendingCapture()) {
+            std::vector<unsigned char> pngBytes;
+            bool ok = m_SceneManager.captureFrame(pngBytes);
+            m_DebugHTTPServer->completeCapture(std::move(pngBytes), ok);
+        }
+
         m_Window->present();
     }
 }
@@ -235,6 +257,7 @@ void EC_Game::receive(ECXCommand& command)
         m_Running = false;
         m_Controls->shutdown();
         m_VoxelChunkSystem.shutdown();
+        if (m_DebugHTTPServer) m_DebugHTTPServer->shutdown();
         m_threadmanager.stop();
     }
 }
