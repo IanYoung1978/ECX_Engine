@@ -43,6 +43,16 @@ void FrameBufferSet::resize(int width, int height)
 void FrameBufferSet::initFrame()
 {
 	m_GBuffer.initFrame();
+	// m_FrameBuffer1 is where every lighting draw this frame additively blends its
+	// contribution (base lights, shadow lights, emissive/ambient) - without clearing it
+	// here, each new frame's lighting accumulates on top of every previous frame's result
+	// forever, since PostProcessPass()'s own would-be clear of the *other* buffer
+	// (m_FrameBuffer2) never actually reaches this one: m_SwapBuffers is reset to false
+	// every frame right below, so PostProcessPass() always takes the same branch and
+	// m_FrameBuffer1.initFrame() is never called from there in practice. Seen as a
+	// persistent ghosting/"drag" artefact that never fixes itself frame to frame.
+	m_FrameBuffer1.initFrame();
+	m_FrameBuffer2.initFrame();
 	m_SwapBuffers = false;
 }
 

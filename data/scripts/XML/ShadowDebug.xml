@@ -13,7 +13,7 @@
 			<Height>data/assets/Images/Crate/crate_height.png</Height>
 			<Emissive>data/assets/Images/Crate/Crate_E.png</Emissive>
 			<AO>data/assets/Images/Crate/crate_ao.png</AO>
-			<Smoothness>data/assets/Images/Crate/crate_smoothness.png</Smoothness>
+			<Roughness>data/assets/Images/Crate/crate_roughness.png</Roughness>
 			<ParallaxScale>0.05</ParallaxScale>
 			<ParallaxBias>0.001</ParallaxBias>
 		</PBRMaterial>

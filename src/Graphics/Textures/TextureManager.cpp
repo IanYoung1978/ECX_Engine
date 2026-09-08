@@ -22,13 +22,14 @@ bool TextureManager::init()
 	return true;
 }
 
-int TextureManager::loadTexture(const std::string & filename)
+int TextureManager::loadTexture(const std::string & filename, bool isSRGB)
 {
 	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
 	GLuint texID = 0;
 	texID = findTexture(filename);
 	if (texID > 0)
 		return (unsigned int)texID;
+	m_IsSRGB[filename] = isSRGB;
 	SDL_Surface* surface = IMG_Load(filename.c_str());
 	if (!surface)
 	{
@@ -118,19 +119,47 @@ unsigned int TextureManager::finalizeTexture(const std::string & fname, SDL_Surf
 	texID = findTexture(fname);
 	if (texID == 0)
 	{
+		// BytesPerPixel isn't just 3 (RGB) or 4 (RGBA) - a single-channel (grayscale) or
+		// dual-channel source image (e.g. an AO or height map authored as true grayscale,
+		// not an RGB file with equal channels - data/assets/Images/oakfloor_AO.png and the
+		// Grass texture set's AO map are both genuinely single-channel PNGs) loads as 1 or
+		// 2 bytes/pixel. Uploading that through glTexImage2D with a mismatched 3-byte
+		// format reads past the end of `surface->pixels` - a real access violation, not
+		// just a wrong-looking texture.
 		int BPP = surface->format->BytesPerPixel;
 		int mode = GL_RGB;
-		if (BPP == 4) {
+		if (BPP == 1) {
+			mode = GL_RED;
+		}
+		else if (BPP == 2) {
+			mode = GL_RG;
+		}
+		else if (BPP == 4) {
 			mode = GL_RGBA;
 		}
+
+		// Colour/albedo data is authored and stored sRGB-encoded; every other texture role
+		// (normal, height, glow, smoothness->roughness, metallic, AO) is linear data, not
+		// colour, and must never go through sRGB decode. Selecting an sRGB internal format
+		// here makes the GPU decode sRGB->linear automatically on every sample, so no
+		// shader anywhere needs its own manual pow(x, 2.2) - only meaningful for 3/4-channel
+		// colour data, never for single/dual-channel data textures.
+		int internalFormat = mode;
+		bool isSRGB = m_IsSRGB.count(fname) && m_IsSRGB[fname];
+		if (isSRGB) {
+			if (mode == GL_RGB) internalFormat = GL_SRGB8;
+			else if (mode == GL_RGBA) internalFormat = GL_SRGB8_ALPHA8;
+		}
+
 		//generate OpenGL texture
 		glGenTextures(1, &texID);
 		glBindTexture(GL_TEXTURE_2D, texID);
-		glTexImage2D(GL_TEXTURE_2D, 0, mode, surface->w, surface->h, 0, mode, GL_UNSIGNED_BYTE, surface->pixels);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, surface->w, surface->h, 0, mode, GL_UNSIGNED_BYTE, surface->pixels);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+		glGenerateMipmap(GL_TEXTURE_2D);
 		m_Textures.insert(std::pair<std::string, unsigned int>(fname, texID));
 	}
 	return texID;

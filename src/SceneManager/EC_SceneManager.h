@@ -34,6 +34,11 @@ public:
     void loadScene(const std::string& alias);
     void unloadScene(const std::string& alias);
     void activateScene(const std::string& alias);
+    // Unknown alias returns false rather than asserting/logging - callers that just want to
+    // gate their own per-frame behaviour on "is this particular scene the one showing right
+    // now" (e.g. EC_VoxelChunkSystem tying its chunks' visibility to voxelchunkdemo) don't
+    // need special-case handling for a typo'd or not-yet-registered alias.
+    bool isSceneActive(const std::string& alias) const;
 
     void receive(ECXCommand& command) override;
 

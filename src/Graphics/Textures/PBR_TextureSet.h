@@ -15,7 +15,7 @@ public:
 	void setParallaxBias(float bias) { m_ParallaxBias = bias; }
 private:
 	unsigned int m_Albedo;
-	unsigned int m_Smoothness;
+	unsigned int m_Roughness;
 	unsigned int m_Glow;
 	unsigned int m_Normal;
 	unsigned int m_Parallax;
@@ -25,7 +25,7 @@ private:
 	float m_ParallaxScale;
 	float m_ParallaxBias;
 	std::string m_AlbedoName;
-	std::string m_SmoothnessName;
+	std::string m_RoughnessName;
 	std::string m_GlowName;
 	std::string m_NormalName;
 	std::string m_ParallaxName;

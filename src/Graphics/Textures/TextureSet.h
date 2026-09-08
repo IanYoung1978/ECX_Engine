@@ -19,7 +19,7 @@ enum class TextureID
 	Glow,
 	Albedo,
 	Metallic,
-	Smoothness,
+	Roughness,
 	AO,
 	NumIDs
 };

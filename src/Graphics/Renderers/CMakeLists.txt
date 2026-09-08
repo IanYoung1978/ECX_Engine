@@ -9,8 +9,6 @@ target_sources(ECX PRIVATE
     GL_SkyboxRenderer.cpp
     GL_SkyboxRenderer.h
     LightData.h
-    LightUniformBuffer.cpp
-    LightUniformBuffer.h
     RenderConfig.h
     Renderer.cpp
     Renderer.h

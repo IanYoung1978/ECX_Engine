@@ -226,7 +226,7 @@ void Shader::bindTexture(int texTarget, unsigned int texHandle)
 		break;
 	case 4: setUniform(("glowMap"), texTarget);
 		break;
-	case 5: setUniform(("smoothnessMap"), texTarget);
+	case 5: setUniform(("roughnessMap"), texTarget);
 		break;
 	case 6: setUniform(("metalMap"), texTarget);
 		break;

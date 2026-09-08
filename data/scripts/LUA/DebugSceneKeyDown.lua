@@ -13,6 +13,12 @@ gamePaused = true
 lightCycleNames = { "debug_sun", "debug_spot", "debug_point" }
 lightCycleIndex = 0 -- 0 = nothing activated yet; first L press selects index 1
 
+-- Matches the aliases in data/scripts/XML/Scenes.XML - activateScene() loads a scene on
+-- demand if it isn't already (see EC_SceneManager::activateScene), so no separate
+-- loadScene() call is needed here.
+sceneCycleNames = { "voxelchunkdemo", "shadowdebug", "yard", "physics_demo", "main", "streamed" }
+sceneCycleIndex = 1 -- whichever scene is precached/active at startup is index 1
+
 local function applyLightCycle()
     for i, name in ipairs(lightCycleNames) do
         -- activate()/deactivate() are no-ops on an invalid/dead entity ID, so no need to
@@ -52,5 +58,10 @@ function onKeyDown(entity, event)
         lightCycleIndex = (lightCycleIndex % #lightCycleNames) + 1
         applyLightCycle()
         print("CycleLights: active light " .. lightCycleNames[lightCycleIndex])
+    end
+    if key == "N" then
+        sceneCycleIndex = (sceneCycleIndex % #sceneCycleNames) + 1
+        game:activateScene(sceneCycleNames[sceneCycleIndex])
+        print("CycleScenes: active scene " .. sceneCycleNames[sceneCycleIndex])
     end
 end
