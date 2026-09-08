@@ -17,6 +17,7 @@
 #include "UI/EC_UI_Components.h"
 #include "Graphics/Renderers/DebugVisualization.h"
 #include <algorithm>
+#include <cmath>
 #include <typeindex>
 #include <stb_image_write.h>
 #include <array>
@@ -1213,25 +1214,80 @@ namespace {
     }
 }
 
-bool GL_Deferred_Renderer::captureFrame(std::vector<unsigned char>& outPNGBytes)
+bool GL_Deferred_Renderer::captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes)
 {
     // Must run on the GL/main thread, after this frame's rendering has all happened but
-    // before SDL_GL_SwapWindow() - see EC_Game::update()'s call site. Reading GL_BACK here
-    // (rather than the real backbuffer post-swap, which the issue's wording suggested) is
-    // the same pixels with none of the "just-swapped buffer contents are undefined on most
-    // drivers" fragility - this is what a viewer would see the instant it appears on screen,
-    // skybox/debug overlay/UI included (all drawn to this same default framebuffer before
-    // the swap).
+    // before SDL_GL_SwapWindow() - see EC_Game::update()'s call site.
     int width = m_Window->getWidth();
     int height = m_Window->getHeight();
     if (width <= 0 || height <= 0) return false;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glReadBuffer(GL_BACK);
+    constexpr int kChannels = 3; // always encode RGB, regardless of source format
+    size_t pixelCount = static_cast<size_t>(width) * height;
+    std::vector<unsigned char> pixels;
 
-    constexpr int kChannels = 3; // GL_RGB
-    std::vector<unsigned char> pixels(static_cast<size_t>(width) * height * kChannels);
-    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    if (target.empty() || target == "final") {
+        // Reading GL_BACK here (rather than the real backbuffer post-swap, which the
+        // issue's wording suggested) is the same pixels with none of the "just-swapped
+        // buffer contents are undefined on most drivers" fragility - this is what a
+        // viewer would see the instant it appears on screen, skybox/debug overlay/UI
+        // included (all drawn to this same default framebuffer before the swap).
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glReadBuffer(GL_BACK);
+        pixels.resize(pixelCount * kChannels);
+        glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    }
+    else if (target == "depth") {
+        // GL_DEPTH_COMPONENT32, single channel, already in [0,1] - but it's non-linear
+        // NDC depth (the classic 1/z falloff), not a linear distance, so nearby geometry
+        // reads much darker than the raw distance would suggest. Displayed as-is (no
+        // linearization) since that's the standard quick depth-debug convention.
+        std::vector<float> depth(pixelCount);
+        glBindTexture(GL_TEXTURE_2D, m_FrameBuffer.getGBufferDepthTexture());
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, GL_FLOAT, depth.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        pixels.resize(pixelCount * kChannels);
+        for (size_t i = 0; i < pixelCount; i++) {
+            unsigned char v = static_cast<unsigned char>(std::clamp(depth[i], 0.0f, 1.0f) * 255.0f);
+            pixels[i * 3 + 0] = v;
+            pixels[i * 3 + 1] = v;
+            pixels[i * 3 + 2] = v;
+        }
+    }
+    else if (target == "albedo" || target == "normal") {
+        // Both attachments are GL_RGBA32F - raw linear data, not display-ready.
+        FrameBufferType type = (target == "albedo") ? FrameBufferType::Albedo : FrameBufferType::Normal;
+        std::vector<float> rgba(pixelCount * 4);
+        glBindTexture(GL_TEXTURE_2D, m_FrameBuffer.getGBufferTexture(type));
+        glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_FLOAT, rgba.data());
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        pixels.resize(pixelCount * kChannels);
+        for (size_t i = 0; i < pixelCount; i++) {
+            float r = rgba[i * 4 + 0], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2];
+            if (target == "albedo") {
+                // Linear colour - gamma-encode for a natural-looking preview, matching
+                // how the real lit output eventually gets encoded too (hdr_tonemap.frag).
+                r = std::pow(std::clamp(r, 0.0f, 1.0f), 1.0f / 2.2f);
+                g = std::pow(std::clamp(g, 0.0f, 1.0f), 1.0f / 2.2f);
+                b = std::pow(std::clamp(b, 0.0f, 1.0f), 1.0f / 2.2f);
+            }
+            else {
+                // World-space normal in [-1,1] per channel - remap to [0,1] for display,
+                // the standard normal-map-visualization convention.
+                r = r * 0.5f + 0.5f;
+                g = g * 0.5f + 0.5f;
+                b = b * 0.5f + 0.5f;
+            }
+            pixels[i * 3 + 0] = static_cast<unsigned char>(std::clamp(r, 0.0f, 1.0f) * 255.0f);
+            pixels[i * 3 + 1] = static_cast<unsigned char>(std::clamp(g, 0.0f, 1.0f) * 255.0f);
+            pixels[i * 3 + 2] = static_cast<unsigned char>(std::clamp(b, 0.0f, 1.0f) * 255.0f);
+        }
+    }
+    else {
+        return false; // unrecognised target
+    }
 
     // OpenGL's row 0 is the bottom of the image; PNG expects row 0 at the top -
     // stb_image_write's own flip flag handles this (this vcpkg build doesn't expose

@@ -29,18 +29,21 @@ public:
     // as EC_VoxelChunkSystem::shutdown() - see its own comment).
     void shutdown();
 
-    // GET /screenshot needs GL work (glReadPixels) that's only valid on the GL/main
-    // thread, but the handler runs on one of httplib's own worker threads - this is the
-    // single-slot rendezvous that bridges the two. Called from the HTTP handler thread:
-    // blocks until the main thread services the request (hasPendingCapture/
-    // completeCapture below) or ~5s elapses. A mutex-held single slot rather than a real
-    // queue - this is a low-traffic dev tool, not perf-sensitive, so concurrent requests
-    // simply serialize behind each other rather than needing real batching.
-    std::vector<unsigned char> requestCapture();
+    // GET /screenshot[?target=<name>] needs GL work (glReadPixels/glGetTexImage) that's
+    // only valid on the GL/main thread, but the handler runs on one of httplib's own
+    // worker threads - this is the single-slot rendezvous that bridges the two. Called
+    // from the HTTP handler thread: blocks until the main thread services the request
+    // (hasPendingCapture/completeCapture below) or ~5s elapses. A mutex-held single slot
+    // rather than a real queue - this is a low-traffic dev tool, not perf-sensitive, so
+    // concurrent requests simply serialize behind each other rather than needing real
+    // batching. `target` is passed straight through to Renderer::captureFrame - see its
+    // comment for the recognised names ("", "final", "albedo", "normal", "depth").
+    std::vector<unsigned char> requestCapture(const std::string& target);
 
     // Called from the main thread once per frame (see EC_Game::update()). Returns true
-    // if an HTTP thread is currently blocked in requestCapture() waiting on a result.
-    bool hasPendingCapture();
+    // (and fills outTarget) if an HTTP thread is currently blocked in requestCapture()
+    // waiting on a result.
+    bool hasPendingCapture(std::string& outTarget);
     // Called from the main thread right after producing (or failing to produce) the
     // capture hasPendingCapture() just reported - wakes the waiting HTTP thread.
     void completeCapture(std::vector<unsigned char> pngBytes, bool ok);
@@ -60,5 +63,6 @@ private:
     bool m_CapturePending = false;
     bool m_CaptureResultReady = false;
     bool m_CaptureOk = false;
+    std::string m_CaptureTarget;
     std::vector<unsigned char> m_CaptureResult;
 };

@@ -42,7 +42,7 @@ public:
     float getExposure() const { return m_Exposure; }
     void setAmbientColour(const glm::vec3& colour) { m_AmbientColour = colour; }
     glm::vec3 getAmbientColour() const { return m_AmbientColour; }
-    virtual bool captureFrame(std::vector<unsigned char>& outPNGBytes) override;
+    virtual bool captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes) override;
 
 private:
     void geometryPass(EC_GameScene& scene);

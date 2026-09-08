@@ -35,8 +35,9 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port)
     // GL/main thread - requestCapture() bridges this handler's own thread (one of
     // httplib's worker threads) to the main thread via the mutex+condvar rendezvous
     // below, serviced once per frame from EC_Game::update().
-    m_Server->Get("/screenshot", [this](const httplib::Request&, httplib::Response& res) {
-        std::vector<unsigned char> png = requestCapture();
+    m_Server->Get("/screenshot", [this](const httplib::Request& req, httplib::Response& res) {
+        std::string target = req.has_param("target") ? req.get_param_value("target") : "";
+        std::vector<unsigned char> png = requestCapture(target);
         if (png.empty()) {
             res.status = 503;
             res.set_content("screenshot capture failed or timed out", "text/plain");
@@ -66,7 +67,7 @@ void EC_DebugHTTPServer::shutdown() {
     if (m_Server) m_Server->stop();
 }
 
-std::vector<unsigned char> EC_DebugHTTPServer::requestCapture() {
+std::vector<unsigned char> EC_DebugHTTPServer::requestCapture(const std::string& target) {
     std::unique_lock<std::mutex> lock(m_CaptureMutex);
     // Serializes concurrent requesters behind each other rather than needing a real
     // multi-slot queue - see the class comment for why that's fine for this tool.
@@ -74,6 +75,7 @@ std::vector<unsigned char> EC_DebugHTTPServer::requestCapture() {
 
     m_CapturePending = true;
     m_CaptureResultReady = false;
+    m_CaptureTarget = target;
     m_CaptureResult.clear();
 
     bool completed = m_CaptureCV.wait_for(lock, std::chrono::seconds(5),
@@ -90,9 +92,11 @@ std::vector<unsigned char> EC_DebugHTTPServer::requestCapture() {
     return result;
 }
 
-bool EC_DebugHTTPServer::hasPendingCapture() {
+bool EC_DebugHTTPServer::hasPendingCapture(std::string& outTarget) {
     std::lock_guard<std::mutex> lock(m_CaptureMutex);
-    return m_CapturePending && !m_CaptureResultReady;
+    if (!m_CapturePending || m_CaptureResultReady) return false;
+    outTarget = m_CaptureTarget;
+    return true;
 }
 
 void EC_DebugHTTPServer::completeCapture(std::vector<unsigned char> pngBytes, bool ok) {

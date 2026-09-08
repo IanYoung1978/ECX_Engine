@@ -158,9 +158,10 @@ void EC_Game::update(const float& deltaTimeS)
         // (scene, skybox, debug overlay, UI) at this exact point. See
         // EC_DebugHTTPServer::requestCapture()'s comment for why this hand-off exists at
         // all (glReadPixels is only valid on this, the GL/main, thread).
-        if (m_DebugHTTPServer && m_DebugHTTPServer->hasPendingCapture()) {
+        std::string pendingCaptureTarget;
+        if (m_DebugHTTPServer && m_DebugHTTPServer->hasPendingCapture(pendingCaptureTarget)) {
             std::vector<unsigned char> pngBytes;
-            bool ok = m_SceneManager.captureFrame(pngBytes);
+            bool ok = m_SceneManager.captureFrame(pendingCaptureTarget, pngBytes);
             m_DebugHTTPServer->completeCapture(std::move(pngBytes), ok);
         }
 

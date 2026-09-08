@@ -37,6 +37,7 @@ public:
 	void BindBloomUpsampleTarget(int level) { m_BloomChain.bindUpsampleTarget(level); }
 	void EndBloomChain();
 	unsigned int getGBufferDepthTexture() { return m_GBuffer.getDepthTexture(); }
+	unsigned int getGBufferTexture(FrameBufferType type) { return m_GBuffer.getGBufferTexture(type); }
 	unsigned int getFrameBuffer1Texture() { return m_FrameBuffer1.getBufferTexture(); }
 	~FrameBufferSet();
 private:
