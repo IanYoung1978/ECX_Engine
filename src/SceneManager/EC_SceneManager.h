@@ -45,7 +45,7 @@ public:
     bool isSceneActive(const std::string& alias) const;
     // Forwards to the active Renderer - see Renderer::captureFrame's own comment. Must be
     // called from the GL/main thread.
-    bool captureFrame(std::vector<unsigned char>& outPNGBytes);
+    bool captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes);
 
     void receive(ECXCommand& command) override;
 
