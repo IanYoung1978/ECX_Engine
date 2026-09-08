@@ -43,6 +43,9 @@ public:
     // now" (e.g. EC_VoxelChunkSystem tying its chunks' visibility to voxelchunkdemo) don't
     // need special-case handling for a typo'd or not-yet-registered alias.
     bool isSceneActive(const std::string& alias) const;
+    // Forwards to the active Renderer - see Renderer::captureFrame's own comment. Must be
+    // called from the GL/main thread.
+    bool captureFrame(std::vector<unsigned char>& outPNGBytes);
 
     void receive(ECXCommand& command) override;
 

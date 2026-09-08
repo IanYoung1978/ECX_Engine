@@ -152,6 +152,18 @@ void EC_Game::update(const float& deltaTimeS)
         m_SceneManager.update(deltaTimeS, *this);
         m_Controls->update(deltaTimeS, *this);
         m_UIInput.update(*this, m_Messenger);
+
+        // Must run after all of this frame's rendering-relevant work (above) but before
+        // present()'s swap - GL_BACK still holds this frame's fully composited image
+        // (scene, skybox, debug overlay, UI) at this exact point. See
+        // EC_DebugHTTPServer::requestCapture()'s comment for why this hand-off exists at
+        // all (glReadPixels is only valid on this, the GL/main, thread).
+        if (m_DebugHTTPServer && m_DebugHTTPServer->hasPendingCapture()) {
+            std::vector<unsigned char> pngBytes;
+            bool ok = m_SceneManager.captureFrame(pngBytes);
+            m_DebugHTTPServer->completeCapture(std::move(pngBytes), ok);
+        }
+
         m_Window->present();
     }
 }
