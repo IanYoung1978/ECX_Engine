@@ -36,6 +36,11 @@ private:
 		// reading live component arrays from another thread at request time.
 		EC_DOD_Collider collider;
 		EC_DOD_Spatial spatial;
+		// Only populated (non-null shared_ptrs) when collider.type == Mesh - see
+		// EC_DOD_MeshCollisionData's own comment. Cheap to snapshot alongside
+		// collider/spatial above since it's just three shared_ptr copies (refcount
+		// bumps), not the underlying mesh data itself.
+		EC_DOD_MeshCollisionData meshCollisionData;
 	};
 
 	// castsShadow (EC_DOD_GraphicsData::castsShadow) is looked up live, on demand, only for

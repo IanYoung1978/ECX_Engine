@@ -43,6 +43,7 @@ add_subdirectory(src/Entity)
 add_subdirectory(src/Graphics)
 add_subdirectory(src/Logging)
 add_subdirectory(src/Messaging)
+add_subdirectory(src/Procedural)
 add_subdirectory(src/SceneManager)
 add_subdirectory(src/Spatial)
 add_subdirectory(src/TaskManager)
@@ -177,17 +178,21 @@ add_executable(ECX_UnitTests
     tests/EC_SpatialGrid_Tests.cpp
     tests/EC_Frustum_Tests.cpp
     tests/EC_MarchingCubes_Tests.cpp
-    tests/EC_TerrainWorldDensity_Tests.cpp
+    tests/EC_RayIntersection_Tests.cpp
+    tests/EC_Noise3D_Tests.cpp
+    tests/EC_VolumeNode_Tests.cpp
     src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
     src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
     src/Engine/Subsystems/CollisionSystems/EC_CollisionChecks.cpp
     src/Engine/Subsystems/CollisionSystems/EC_VClip.cpp
     src/Engine/Subsystems/CollisionSystems/EC_PairManager.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_RayIntersection.cpp
     src/Spatial/EC_SpatialGrid.cpp
     src/Spatial/EC_Frustum.cpp
     src/Terrain/EC_MarchingCubesTables.cpp
     src/Terrain/EC_MarchingCubesMesher.cpp
-    src/Terrain/EC_TerrainWorldDensity.cpp
+    src/Procedural/EC_Noise3D.cpp
+    src/Procedural/EC_VolumeNode.cpp
 )
 set_property(TARGET ECX_UnitTests PROPERTY CXX_STANDARD 17)
 target_include_directories(ECX_UnitTests PRIVATE ${SOURCE_DIR})

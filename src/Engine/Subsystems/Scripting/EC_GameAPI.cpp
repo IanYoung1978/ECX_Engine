@@ -4,7 +4,6 @@
 #include "Engine/Subsystems/Scripting/EC_EntityAPI.h"
 #include "UI/EC_UI_Components.h"
 #include "Logging/ECX_Logging.h"
-#include "Graphics/Renderers/DebugVisualization.h"
 #include "Game.h"
 #include "Messaging/ECXMessenger.h"
 #include <algorithm>
@@ -265,19 +264,18 @@ namespace ScriptAPI
     }
 
     void GameAPI::showDebugRay(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance) {
-        if (!messenger) return;
-        ECXCommand cmd;
-        cmd.type = ECXCommandType::GraphicsShowDebugRay;
-        cmd.args[0] = DebugRayVisualization{ glm::vec3(ox, oy, oz), glm::normalize(glm::vec3(dx, dy, dz)), maxDistance };
-        messenger->publish(cmd);
+        if (!game) return;
+        game->showDebugRay(glm::vec3(ox, oy, oz), glm::vec3(dx, dy, dz), maxDistance);
     }
 
     void GameAPI::showDebugCone(float ax, float ay, float az, float dx, float dy, float dz, float halfAngleDegrees, float maxDistance) {
-        if (!messenger) return;
-        ECXCommand cmd;
-        cmd.type = ECXCommandType::GraphicsShowDebugCone;
-        cmd.args[0] = DebugConeVisualization{ glm::vec3(ax, ay, az), glm::normalize(glm::vec3(dx, dy, dz)), glm::radians(halfAngleDegrees), maxDistance };
-        messenger->publish(cmd);
+        if (!game) return;
+        game->showDebugCone(glm::vec3(ax, ay, az), glm::vec3(dx, dy, dz), halfAngleDegrees, maxDistance);
+    }
+
+    void GameAPI::regenerateTerrain() {
+        if (!game) return;
+        game->regenerateTerrain();
     }
 
     void GameAPI::updateDepth(EntityID entity, uint32_t depth) {

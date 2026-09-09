@@ -239,6 +239,31 @@ namespace XML
 		return true;
 	}
 
+	// EngineConfig.xml's <Startup pauseOnStart=""/> - whether EC_SceneManager::update()
+	// auto-pauses the engine right after the first scene finishes loading (see that call
+	// site's own comment for why that pause exists at all). Defaults to true (existing
+	// behaviour) on any missing file/section/attribute, so only an explicit opt-out
+	// changes anything.
+	inline bool loadPauseOnStartSetting(const std::string& file)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return true;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return true;
+
+		auto startup = root->FirstChildElement("Startup");
+		if (!startup)
+			return true;
+
+		const char* pauseAttr = startup->Attribute("pauseOnStart");
+		if (pauseAttr)
+			return strcmp(pauseAttr, "false") != 0;
+
+		return true;
+	}
+
 	inline bool loadGameConfig(const std::string& file, GameSettings& settings)
 	{
 		TiXmlDocument doc(file.c_str());

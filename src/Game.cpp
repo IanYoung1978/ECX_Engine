@@ -8,6 +8,7 @@
 #include "Messaging/ECXRequest.h"
 #include "Messaging/ECXResponse.h"
 #include "Messaging/ECXRequestType.h"
+#include "Graphics/Renderers/DebugVisualization.h"
 #include <cmath>
 
 EC_Game::EC_Game() : m_Running(true) {}
@@ -50,7 +51,7 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
     XML::loadDebugHTTPSettings(m_SceneManager.getEngineConfigPath(), debugHttpSettings);
     if (debugHttpSettings.enabled)
     {
-        m_DebugHTTPServer = std::make_shared<EC_DebugHTTPServer>("127.0.0.1", debugHttpSettings.port);
+        m_DebugHTTPServer = std::make_shared<EC_DebugHTTPServer>("127.0.0.1", debugHttpSettings.port, this);
         m_threadmanager.addTask(m_DebugHTTPServer);
         m_threadmanager.executeTasks();
     }
@@ -239,6 +240,37 @@ std::vector<RayQueryHit> EC_Game::queryCone(const glm::vec3& apex, const glm::ve
     catch (const std::bad_any_cast&) {
         return {};
     }
+}
+
+void EC_Game::showDebugRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance)
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::GraphicsShowDebugRay;
+    cmd.args[0] = DebugRayVisualization{ origin, glm::normalize(direction), maxDistance };
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::showDebugCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees, float maxDistance)
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::GraphicsShowDebugCone;
+    cmd.args[0] = DebugConeVisualization{ apex, glm::normalize(direction), glm::radians(halfAngleDegrees), maxDistance };
+    m_Messenger.publish(cmd);
+}
+
+bool EC_Game::runLuaScriptOnce(const std::string& filename)
+{
+    return m_SceneManager.runLuaScriptOnce(filename);
+}
+
+std::shared_ptr<EC_VolumeNode> EC_Game::getVolumeRoot() const
+{
+    return m_SceneManager.getVolumeRoot();
+}
+
+void EC_Game::regenerateTerrain()
+{
+    m_VoxelChunkSystem.requestRegenerate();
 }
 
 std::shared_ptr<Window> EC_Game::getWindow()

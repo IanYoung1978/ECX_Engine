@@ -76,9 +76,16 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
                 // Compute world-space AABB from collider bounds
                 AABB worldAABB = computeWorldAABB(collider, spatial);
 
+                EC_DOD_MeshCollisionData meshCollisionData;
+                if (collider.type == EC_DOD_Collider::Type::Mesh &&
+                    EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_MeshCollisionData>(entityId))
+                {
+                    meshCollisionData = EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_MeshCollisionData>(entityId);
+                }
+
                 localIndex[entityId] = localAABBs.size();
                 localAABBs.push_back({ entityId, worldAABB, collider.collisionLayer, collider.collisionMask,
-                    collider, spatial });
+                    collider, spatial, meshCollisionData });
                 localGrid.insert(entityId, worldAABB);
             }
 
@@ -310,7 +317,7 @@ std::vector<RayQueryHit> EC_BroadPhase::castRay(const glm::vec3& origin, const g
 			if (requireCastsShadow && !entityCastsShadow(candidate))
 				continue;
 
-			RayIntersectionResult result = EC_RayIntersection::rayVsCollider(origin, dir, entry.collider, entry.spatial);
+			RayIntersectionResult result = EC_RayIntersection::rayVsCollider(origin, dir, entry.collider, entry.spatial, entry.meshCollisionData);
 			if (!result.hit || result.distance > maxDistance)
 				continue;
 
@@ -443,13 +450,49 @@ ECXResponse EC_BroadPhase::handleConeCheck(ECXRequest& request)
 				continue;
 			if (castsShadowOnly && !entityCastsShadow(candidate))
 				continue;
-			// Plane/Frustum/None have no bounded support function (colliderSupport()'s
+			// Plane/Frustum/Mesh/None have no bounded support function (colliderSupport()'s
 			// degenerate single-point fallback would misrepresent them in a real GJK
-			// test) - not valid cone targets, matching rayVsCollider's exclusion.
+			// test) - not valid GJK cone targets, matching rayVsCollider's exclusion. Mesh
+			// gets its own containment test below instead (non-convex, same reason it
+			// can't use GJK for ray casting either).
 			if (entry.collider.type == EC_DOD_Collider::Type::Plane ||
 				entry.collider.type == EC_DOD_Collider::Type::Frustum ||
 				entry.collider.type == EC_DOD_Collider::Type::None)
 				continue;
+
+			if (entry.collider.type == EC_DOD_Collider::Type::Mesh)
+			{
+				// Vertex-only (not full triangle) containment - cheaper, and consistent
+				// with this query's existing approximate character (every candidate
+				// already reports just its collider center as the result position, not
+				// the exact touched point - see candidatePos below).
+				if (!entry.meshCollisionData.positions)
+					continue;
+				bool anyVertexInCone = false;
+				for (const glm::vec3& vertex : *entry.meshCollisionData.positions)
+				{
+					// Vertices are chunk-local (0..kChunkWorldSize) - same reasoning as
+					// EC_RayIntersection::rayVsCollider's Mesh branch - must be offset into
+					// world space before comparing against the cone's world-space apex.
+					glm::vec3 worldVertex = vertex + entry.spatial.position;
+					glm::vec3 toVertex = worldVertex - apex;
+					float distSq = glm::dot(toVertex, toVertex);
+					if (distSq < 1e-8f || distSq > maxDistance * maxDistance)
+						continue;
+					float cosAngle = glm::dot(toVertex, direction) / std::sqrt(distSq);
+					if (cosAngle >= std::cos(halfAngleRadians))
+					{
+						anyVertexInCone = true;
+						break;
+					}
+				}
+				if (!anyVertexInCone)
+					continue;
+
+				glm::vec3 meshCandidatePos = entry.spatial.position + entry.collider.center;
+				candidatesInCone.emplace_back(candidate, meshCandidatePos);
+				continue;
+			}
 
 			EC_GJK::SupportFn shapeSupport = [&entry](const glm::vec3& dir) {
 				return EC_RayIntersection::colliderSupport(entry.collider, entry.spatial, dir);
@@ -510,8 +553,11 @@ AABB EC_BroadPhase::computeWorldAABB(const EC_DOD_Collider& collider,
         break;
     }
 
-    case EC_DOD_Collider::Type::AABB: {
-        // AABB in world space (axis-aligned, no rotation)
+    case EC_DOD_Collider::Type::AABB:
+    case EC_DOD_Collider::Type::Mesh: {
+        // Mesh's center/extents describe its broad-phase bounding box exactly like
+        // AABB's do - only the precise per-candidate test differs (see
+        // EC_RayIntersection::rayMesh / EC_BroadPhase::handleConeCheck).
         worldAABB.min = worldCenter - collider.extents;
         worldAABB.max = worldCenter + collider.extents;
         break;

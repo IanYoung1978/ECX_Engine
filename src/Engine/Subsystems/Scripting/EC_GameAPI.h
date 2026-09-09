@@ -76,6 +76,11 @@ namespace ScriptAPI
         void showDebugRay(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance);
         void showDebugCone(float ax, float ay, float az, float dx, float dy, float dz, float halfAngleDegrees, float maxDistance);
 
+        // Re-runs TerrainGeneration.lua and re-schedules every voxel chunk against the new
+        // shape - see EC_VoxelChunkSystem::requestRegenerate(). Safe to call from any
+        // script context; only takes effect on the next chunk-system update tick.
+        void regenerateTerrain();
+
     private:
         std::vector<RayQueryHit> m_LastRayHits;
         std::vector<RayQueryHit> m_LastConeHits;

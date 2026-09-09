@@ -64,4 +64,12 @@ function onKeyDown(entity, event)
         game:activateScene(sceneCycleNames[sceneCycleIndex])
         print("CycleScenes: active scene " .. sceneCycleNames[sceneCycleIndex])
     end
+    if key == "T" then
+        -- Re-runs TerrainGeneration.lua and regenerates every voxel chunk live - see
+        -- EC_VoxelChunkSystem::requestRegenerate(). Only requests it (flag checked once
+        -- per frame on the main thread), so chunks visibly update over the next few
+        -- frames, not instantly.
+        game:regenerateTerrain()
+        print("RegenerateTerrain: requested")
+    end
 end

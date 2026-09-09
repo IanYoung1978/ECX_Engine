@@ -1,7 +1,6 @@
 #include "Terrain/EC_VoxelChunkWorker.h"
 #include "Terrain/EC_DensityField.h"
 #include "Terrain/EC_MarchingCubesMesher.h"
-#include "Terrain/EC_TerrainWorldDensity.h"
 #include "Terrain/EC_VoxelChunkSystem.h"
 
 EC_VoxelChunkWorker::EC_VoxelChunkWorker()
@@ -67,7 +66,7 @@ void EC_VoxelChunkWorker::execute() {
                 for (int x = -EC_DensityField::Padding; x < size + EC_DensityField::Padding; x++) {
                     glm::vec3 worldPos = chunkOrigin + glm::vec3(
                         static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-                    field.at(x, y, z) = EC_TerrainWorldDensity::sampleWorldDensity(worldPos);
+                    field.at(x, y, z) = m_Root ? m_Root->evaluate(worldPos) : 1.0f;
                 }
             }
         }

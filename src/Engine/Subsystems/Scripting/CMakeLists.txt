@@ -8,4 +8,6 @@ target_sources(ECX PRIVATE
     EC_LuaScriptingSystem.cpp
     EC_LuaScriptingSystem.h
     EC_ScriptAPI.h
+    EC_VolumeAPI.cpp
+    EC_VolumeAPI.h
 )

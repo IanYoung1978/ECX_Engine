@@ -2,6 +2,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <string>
+#include <memory>
+#include <vector>
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Graphics/Textures/TextureSet.h"
 #include "Graphics/Models/ObjModel.h"
@@ -42,6 +44,11 @@ struct EC_DOD_Collider {
         Cylinder,
         Frustum,
         Plane,
+        // Real ray/cone testing against EC_DOD_MeshCollisionData's actual triangles,
+        // rather than any convex-primitive approximation - see that component's own
+        // comment. `center`/`extents` still describe this collider's broad-phase bounding
+        // box exactly as AABB's do; only the precise per-candidate test differs.
+        Mesh,
         None
     };
     Type type = Type::OBB;
@@ -51,6 +58,20 @@ struct EC_DOD_Collider {
     float height = 2.0f;
     uint32_t collisionLayer = 1;
     uint32_t collisionMask = 0xFFFFFFFF;
+};
+
+// Real triangle-mesh geometry for entities whose Collider::Type is Mesh - deliberately
+// generic (not terrain-named): today only EC_VoxelChunkSystem populates this (retaining
+// the marching-cubes output it would otherwise discard after uploading to the GPU, since
+// ObjModel keeps no public accessor to its own vertex data), but nothing about this
+// component assumes voxel terrain specifically. shared_ptr rather than owning the
+// vectors directly - EC_DOD_Collider-adjacent components get copied around by collision
+// code, and this keeps that cheap (a refcount bump, not a data copy) regardless of mesh
+// size.
+struct EC_DOD_MeshCollisionData {
+    std::shared_ptr<std::vector<glm::vec3>> positions;
+    std::shared_ptr<std::vector<glm::vec3>> normals;
+    std::shared_ptr<std::vector<uint32_t>> indices;
 };
 
 struct EC_DOD_Spatial {

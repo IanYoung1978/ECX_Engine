@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <mutex>
 #include <atomic>
+#include <memory>
 #include "Engine/Subsystems/EC_System.h"
 #include "Messaging/IEventListener.h"
 
@@ -13,7 +14,8 @@
 // doesn't have to recompile against ~1,200 lines of Lua binding machinery
 // every time this file changes.
 struct lua_State;
-namespace ScriptAPI { struct GameAPI; }
+namespace ScriptAPI { struct GameAPI; struct VolumeAPI; }
+class EC_VolumeNode;
 
 class EC_LuaScriptSystem : public EC_System, public IEventListener {
 public:
@@ -24,10 +26,23 @@ public:
     void update(const float& deltaTimeS, EC_Game& game) override;
     void receive(ECXEvent& event) override;
 
+    // Runs a script exactly once, straight through (plain luaL_dofile against the same
+    // shared lua_State every other script uses) - unlike loadScript() below, this does NOT
+    // capture named handler functions for repeated per-frame/per-event calls. For one-shot
+    // setup scripts (e.g. procedural generation authoring - see EC_VolumeAPI) that just make
+    // imperative calls into an exposed API and are done; safe to call multiple times (each
+    // call re-runs the file). Returns false on a Lua error (logged).
+    bool runScriptOnce(const std::string& filename);
+
+    // Valid only after runScriptOnce() on a script that called volume.setRoot(...) - null
+    // otherwise. See EC_VolumeAPI::setRoot/getRoot.
+    std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+
 private:
     std::atomic<bool> m_shuttingDown{ false };
     lua_State* m_luaState;
     ScriptAPI::GameAPI* m_game;
+    ScriptAPI::VolumeAPI* m_volumeAPI;
     std::unordered_map<std::string, bool> m_loadedScripts;
     // Per-script-file handler functions, captured out of the shared global table right
     // after that file loads (see loadScript()) - every Lua script in the game executes

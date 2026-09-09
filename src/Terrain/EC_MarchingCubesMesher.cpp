@@ -158,6 +158,7 @@ EC_TerrainMeshData stripSmallComponents(const EC_TerrainMeshData& mesh, size_t m
             uint32_t srcIndex = mesh.indices[t * 3 + corner];
             result.positions.push_back(mesh.positions[srcIndex]);
             result.normals.push_back(mesh.normals[srcIndex]);
+            result.materialIds.push_back(mesh.materialIds[srcIndex]);
             result.indices.push_back(static_cast<uint32_t>(result.positions.size() - 1));
         }
     }
@@ -199,6 +200,7 @@ void weldVertices(EC_TerrainMeshData& mesh)
     welded.positions.reserve(mesh.positions.size());
     welded.normals.reserve(mesh.normals.size());
     welded.indices.reserve(mesh.indices.size());
+    welded.materialIds.reserve(mesh.materialIds.size());
 
     for (uint32_t oldIndex : mesh.indices) {
         glm::vec3 key = quantize(mesh.positions[oldIndex]);
@@ -210,6 +212,7 @@ void weldVertices(EC_TerrainMeshData& mesh)
         uint32_t newIndex = static_cast<uint32_t>(welded.positions.size());
         welded.positions.push_back(mesh.positions[oldIndex]);
         welded.normals.push_back(mesh.normals[oldIndex]);
+        welded.materialIds.push_back(mesh.materialIds[oldIndex]);
         welded.indices.push_back(newIndex);
         firstIndexAtPosition[key] = newIndex;
     }
@@ -252,9 +255,9 @@ void emitTriangle(const EC_DensityField& field, EC_TerrainMeshData& mesh,
         std::swap(n1, n2);
     }
 
-    mesh.positions.push_back(p0); mesh.normals.push_back(n0);
-    mesh.positions.push_back(p1); mesh.normals.push_back(n1);
-    mesh.positions.push_back(p2); mesh.normals.push_back(n2);
+    mesh.positions.push_back(p0); mesh.normals.push_back(n0); mesh.materialIds.push_back(0);
+    mesh.positions.push_back(p1); mesh.normals.push_back(n1); mesh.materialIds.push_back(0);
+    mesh.positions.push_back(p2); mesh.normals.push_back(n2); mesh.materialIds.push_back(0);
     uint32_t base = static_cast<uint32_t>(mesh.positions.size()) - 3;
     mesh.indices.push_back(base); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
 }

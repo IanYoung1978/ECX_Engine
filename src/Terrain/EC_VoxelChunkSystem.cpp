@@ -19,6 +19,8 @@ namespace {
     // all uploaded in one go - matches the throttling rationale behind
     // EC_DOD_EntityFactory::finalizePendingGraphics(maxPerCall).
     constexpr int kMaxUploadsPerFrame = 2;
+
+    constexpr const char* kTerrainScript = "data/scripts/LUA/TerrainGeneration.lua";
 }
 
 EC_VoxelChunkSystem::EC_VoxelChunkSystem() {
@@ -41,6 +43,8 @@ void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
     }
 
     m_Worker = std::make_shared<EC_VoxelChunkWorker>();
+    loadVolumeScript(game);
+
     m_ThreadManager.addTask(m_Worker);
     m_ThreadManager.executeTasks();
 
@@ -88,8 +92,47 @@ void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
     }
 }
 
+void EC_VoxelChunkSystem::loadVolumeScript(EC_Game& game) {
+    // Author-controlled shape (Stage 1/2 of the terrain generation plan): run the active
+    // game's generation script once, synchronously, before scheduling any chunk jobs, then
+    // hand the resulting tree to the worker. Runs on the main thread - the same thread
+    // EC_LuaScriptSystem's shared lua_State always executes on - so this is safe even
+    // though EC_VoxelChunkWorker::execute() runs on a background thread afterward; the tree
+    // itself is pure/stateless once built (see EC_VolumeNode's own comment).
+    if (!game.runLuaScriptOnce(kTerrainScript)) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "EC_VoxelChunkSystem: failed to run " + std::string(kTerrainScript) + " - chunks will generate as empty space",
+            LOGGING::LogLevel::SEVERE);
+    }
+    m_Worker->setVolumeRoot(game.getVolumeRoot());
+}
+
+void EC_VoxelChunkSystem::regenerate(EC_Game& game) {
+    if (!m_Worker) return;
+
+    loadVolumeScript(game);
+
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    for (EntityID entity : m_ChunkEntities) {
+        if (!manager.isAlive(entity)) continue;
+        if (!manager.hasComponent<EC_DOD_VoxelChunk>(entity)) continue;
+
+        auto& chunk = manager.getComponent<EC_DOD_VoxelChunk>(entity);
+        chunk.state = EC_DOD_VoxelChunk::State::Generating;
+        m_Worker->scheduleChunk(chunk.chunkCoord, entity);
+    }
+
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "EC_VoxelChunkSystem: regenerating " + std::to_string(m_ChunkEntities.size()) + " chunks from " + kTerrainScript,
+        LOGGING::LogLevel::INFORMATION);
+}
+
 void EC_VoxelChunkSystem::update(const float& deltaTimeS, EC_Game& game) {
     if (!m_Worker) return;
+
+    if (m_RegenerateRequested.exchange(false)) {
+        regenerate(game);
+    }
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
@@ -118,22 +161,34 @@ void EC_VoxelChunkSystem::update(const float& deltaTimeS, EC_Game& game) {
 
         // Renderable so EC_BroadPhase's spatial index (and thus frustum culling) can find
         // this entity at all - constructEntity() does this automatically for XML-authored
-        // entities, but chunks bypass that path entirely. Left collidable (default mask)
-        // rather than mask=0 (render-only) since a chunk is meant to be a real, solid
-        // piece of ground once gameplay collision exists - not yet exercised by the
-        // current free-fly debug camera, which has no physics body of its own.
+        // entities, but chunks bypass that path entirely. Type::Mesh so ray/cone queries
+        // resolve against the real terrain surface (see EC_DOD_MeshCollisionData below)
+        // instead of this bounding box - center/extents still describe that box, which is
+        // all broad-phase itself needs.
         EC_DOD_Collider collider;
-        collider.type = EC_DOD_Collider::Type::AABB;
+        collider.type = EC_DOD_Collider::Type::Mesh;
         float half = static_cast<float>(kChunkWorldSize) * 0.5f;
         collider.extents = glm::vec3(half);
         collider.center = glm::vec3(half);
         collider.collisionLayer |= CollisionLayers::Renderable;
         manager.addComponent(entity, collider);
 
+        size_t vertexCount = meshData.positions.size(); // meshData is moved-from below
+
+        // Retained for ray/cone testing (EC_RayIntersection::rayMesh,
+        // EC_BroadPhase::handleConeCheck) - ObjModel keeps no public accessor to the
+        // vertex data it just uploaded, so this is the only copy that survives past this
+        // function.
+        EC_DOD_MeshCollisionData meshCollision;
+        meshCollision.positions = std::make_shared<std::vector<glm::vec3>>(std::move(meshData.positions));
+        meshCollision.normals = std::make_shared<std::vector<glm::vec3>>(std::move(meshData.normals));
+        meshCollision.indices = std::make_shared<std::vector<uint32_t>>(std::move(meshData.indices));
+        manager.addComponent(entity, meshCollision);
+
         manager.getComponent<EC_DOD_VoxelChunk>(entity).state = EC_DOD_VoxelChunk::State::Ready;
 
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "EC_VoxelChunkSystem: chunk ready (" + std::to_string(meshData.positions.size()) + " vertices)",
+            "EC_VoxelChunkSystem: chunk ready (" + std::to_string(vertexCount) + " vertices)",
             LOGGING::LogLevel::INFORMATION);
     }
 }
