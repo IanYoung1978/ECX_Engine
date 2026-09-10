@@ -171,6 +171,32 @@ namespace {
         }
       }
     },
+    "/capsuleQuery": {
+      "get": {
+        "summary": "Test a capsule against real scene geometry, terrain (Mesh) included",
+        "description": "Static overlap test (not a sweep) between a capsule (segment ax,ay,az to bx,by,bz, radius) and every broad-phase candidate's actual collider - dispatches to EC_CollisionChecks::CapsuleVsSphere/AABB/OBB/Capsule/Mesh per candidate's own type. Unlike rayQuery/coneQuery, 'distance' in each hit means penetration depth and 'normal' points away from the capsule toward whatever it's touching.",
+        "parameters": [
+          { "name": "ax", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Capsule segment start X." },
+          { "name": "ay", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Capsule segment start Y." },
+          { "name": "az", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Capsule segment start Z." },
+          { "name": "bx", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Capsule segment end X." },
+          { "name": "by", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Capsule segment end Y." },
+          { "name": "bz", "in": "query", "required": true, "schema": { "type": "number" }, "description": "Capsule segment end Z." },
+          { "name": "radius", "in": "query", "required": false, "schema": { "type": "number", "default": 0.5 }, "description": "Capsule radius." },
+          { "name": "firstHitOnly", "in": "query", "required": false, "schema": { "type": "boolean", "default": false }, "description": "Return only the deepest-penetrating contact instead of every overlapping candidate." }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of hits (distance = penetration depth, normal points away from the capsule).",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "type": "object" } } } }
+          },
+          "400": {
+            "description": "Missing a required parameter, or no live EC_Game to query against.",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    },
     "/regenerateTerrain": {
       "get": {
         "summary": "Re-run the terrain generation script and regenerate every voxel chunk",
@@ -303,6 +329,37 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port, EC_Game* game
 
         m_Game->showDebugCone(apex, direction, halfAngleDegrees, maxDistance);
         std::vector<RayQueryHit> hits = m_Game->queryCone(apex, direction, halfAngleDegrees, maxDistance, castsShadowOnly, checkOcclusion);
+        res.set_content(hitsToJson(hits), "application/json");
+    });
+
+    // Real capsule-vs-scene-geometry overlap query (see EC_Game::queryCapsule) - a static
+    // test, not a sweep, so hitsToJson's "distance" field here means penetration depth and
+    // "normal" points away from the capsule, not the ray/cone meaning of those fields.
+    m_Server->Get("/capsuleQuery", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!m_Game) {
+            res.status = 400;
+            res.set_content("no live EC_Game to query against", "text/plain");
+            return;
+        }
+        if (!req.has_param("ax") || !req.has_param("ay") || !req.has_param("az") ||
+            !req.has_param("bx") || !req.has_param("by") || !req.has_param("bz") ||
+            !req.has_param("radius")) {
+            res.status = 400;
+            res.set_content("missing required parameter(s): ax, ay, az, bx, by, bz, radius", "text/plain");
+            return;
+        }
+
+        glm::vec3 pointA(paramFloat(req, "ax", 0.0f), paramFloat(req, "ay", 0.0f), paramFloat(req, "az", 0.0f));
+        glm::vec3 pointB(paramFloat(req, "bx", 0.0f), paramFloat(req, "by", 0.0f), paramFloat(req, "bz", 0.0f));
+        float radius = paramFloat(req, "radius", 0.5f);
+        bool firstHitOnly = paramBool(req, "firstHitOnly", false);
+        EntityID excludeEntity = INVALID_ENTITY;
+        if (req.has_param("excludeEntity")) {
+            try { excludeEntity = static_cast<EntityID>(std::stoul(req.get_param_value("excludeEntity"))); }
+            catch (...) { excludeEntity = INVALID_ENTITY; }
+        }
+
+        std::vector<RayQueryHit> hits = m_Game->queryCapsule(pointA, pointB, radius, firstHitOnly, 0xFFFFFFFFu, excludeEntity);
         res.set_content(hitsToJson(hits), "application/json");
     });
 

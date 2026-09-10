@@ -81,9 +81,25 @@ namespace ScriptAPI
         // script context; only takes effect on the next chunk-system update tick.
         void regenerateTerrain();
 
+        // Real capsule-vs-scene-geometry overlap query (see EC_Game::queryCapsule) -
+        // includes real Mesh/terrain collision via EC_CollisionChecks::CapsuleVsMesh, not
+        // a raycast stand-in. Static overlap test, not a sweep: getCapsuleHitDistance
+        // returns penetration depth, and getCapsuleHitNormal points away from the capsule
+        // toward whatever it's touching. Same caching pattern as rayQuery/coneQuery above.
+        // excludeEntityId skips one entity (its own ID, typically) so a capsule querying
+        // its own surroundings doesn't find itself - pass 0 (INVALID_ENTITY) for no
+        // exclusion.
+        int capsuleQuery(float ax, float ay, float az, float bx, float by, float bz, float radius,
+            bool firstHitOnly = false, unsigned int excludeEntityId = 0);
+        EntityAPI getCapsuleHitEntity(int index);
+        glm::vec3 getCapsuleHitPosition(int index);
+        glm::vec3 getCapsuleHitNormal(int index);
+        float getCapsuleHitDistance(int index);
+
     private:
         std::vector<RayQueryHit> m_LastRayHits;
         std::vector<RayQueryHit> m_LastConeHits;
+        std::vector<RayQueryHit> m_LastCapsuleHits;
         void updateDepth(EntityID entity, uint32_t depth);
     };
 }

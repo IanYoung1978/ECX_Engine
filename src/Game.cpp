@@ -242,6 +242,32 @@ std::vector<RayQueryHit> EC_Game::queryCone(const glm::vec3& apex, const glm::ve
     }
 }
 
+std::vector<RayQueryHit> EC_Game::queryCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
+    bool firstHitOnly, uint32_t layerMask, EntityID excludeEntity)
+{
+    ECXRequest request;
+    request.type = ECXRequestType::CapsuleCheck;
+    request.args[0] = pointA;
+    request.args[1] = pointB;
+    request.args[2] = radius;
+    request.args[3] = layerMask;
+    request.args[4] = firstHitOnly;
+    request.args[5] = excludeEntity;
+
+    ECXResponse response;
+    m_Messenger.publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        return std::any_cast<std::vector<RayQueryHit>>(response.responseData[0]);
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
+}
+
 void EC_Game::showDebugRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance)
 {
     ECXCommand cmd;

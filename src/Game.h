@@ -50,6 +50,16 @@ public:
     // fused with, containment: default false returns pure geometric containment.
     std::vector<RayQueryHit> queryCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees,
         float maxDistance, bool castsShadowOnly = true, bool checkOcclusion = false, uint32_t layerMask = 0xFFFFFFFFu);
+    // Real capsule-vs-scene-geometry overlap query (see EC_BroadPhase::castCapsule) - the
+    // capsule's own segment/radius against every candidate's actual collider, Mesh
+    // (terrain) included via EC_CollisionChecks::CapsuleVsMesh. Unlike queryRay/queryCone,
+    // this is a static overlap test, not a sweep - RayQueryHit::distance is repurposed as
+    // penetration depth and ::normal points away from the capsule.
+    // excludeEntity skips one candidate (INVALID_ENTITY = exclude nothing) - pass an
+    // entity's own ID when it's querying its own capsule's surroundings, otherwise it
+    // finds itself and reports a trivial full-penetration self-hit.
+    std::vector<RayQueryHit> queryCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
+        bool firstHitOnly = false, uint32_t layerMask = 0xFFFFFFFFu, EntityID excludeEntity = INVALID_ENTITY);
     // Debug-draw the last ray/cone query (Issues #30/#29) - the single implementation
     // both EC_GameAPI's Lua bindings and the debug HTTP server's /rayQuery and /coneQuery
     // routes call into, so Lua and HTTP callers share one code path instead of each

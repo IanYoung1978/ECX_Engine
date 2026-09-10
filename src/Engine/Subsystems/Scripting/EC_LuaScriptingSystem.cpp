@@ -441,6 +441,11 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("showDebugRay", &ScriptAPI::GameAPI::showDebugRay)
         .addFunction("showDebugCone", &ScriptAPI::GameAPI::showDebugCone)
         .addFunction("regenerateTerrain", &ScriptAPI::GameAPI::regenerateTerrain)
+        .addFunction("capsuleQuery", &ScriptAPI::GameAPI::capsuleQuery)
+        .addFunction("getCapsuleHitEntity", &ScriptAPI::GameAPI::getCapsuleHitEntity)
+        .addFunction("getCapsuleHitPosition", &ScriptAPI::GameAPI::getCapsuleHitPosition)
+        .addFunction("getCapsuleHitNormal", &ScriptAPI::GameAPI::getCapsuleHitNormal)
+        .addFunction("getCapsuleHitDistance", &ScriptAPI::GameAPI::getCapsuleHitDistance)
         .endClass()
 
         // Lua-visible value type wrapping an EC_VolumeNodePtr - see EC_VolumeAPI.h. No

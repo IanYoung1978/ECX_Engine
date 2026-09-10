@@ -4,6 +4,7 @@
 #include "Messaging/ECXResponse.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include "EC_CollisionShapes.h"
+#include "EC_CollisionChecks.h"
 #include "EC_RayIntersection.h"
 #include "EC_GJK.h"
 #include "EC_ConvexSupport.h"
@@ -149,6 +150,7 @@ void EC_BroadPhase::init(ECXMessenger& messenger)
 	messenger.Subscribe(*this, ECXRequestType::EntitySearch);
 	messenger.Subscribe(*this, ECXRequestType::RayCheck);
 	messenger.Subscribe(*this, ECXRequestType::ConeCheck);
+	messenger.Subscribe(*this, ECXRequestType::CapsuleCheck);
 }
 
 ECXResponse EC_BroadPhase::receive(ECXRequest& request)
@@ -163,6 +165,8 @@ ECXResponse EC_BroadPhase::receive(ECXRequest& request)
 		return handleRayCheck(request);
 	case ECXRequestType::ConeCheck:
 		return handleConeCheck(request);
+	case ECXRequestType::CapsuleCheck:
+		return handleCapsuleCheck(request);
 	default:
 	{
 		ECXResponse response;
@@ -381,6 +385,152 @@ ECXResponse EC_BroadPhase::handleRayCheck(ECXRequest& request)
 
 	std::vector<RayQueryHit> hits = castRay(origin, direction, maxDistance, layerMask,
 		/*requireCastsShadow*/ false, firstHitOnly);
+
+	response.response = ECXResponseType::Success;
+	response.responseData.push_back(hits);
+	return response;
+}
+
+// Real capsule-vs-scene-geometry overlap test - see this method's own declaration comment
+// for why RayQueryHit's fields are repurposed (distance = penetration depth) and why this
+// dispatches per-candidate to EC_CollisionChecks::CapsuleVsX rather than reusing castRay.
+std::vector<RayQueryHit> EC_BroadPhase::castCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
+	uint32_t layerMask, bool firstHitOnly, EntityID excludeEntity)
+{
+	std::vector<RayQueryHit> hits;
+
+	const glm::vec3 radiusVec(radius);
+	AABB queryBounds{ glm::min(pointA, pointB) - radiusVec, glm::max(pointA, pointB) + radiusVec };
+	const Capsule capsule{ pointA, pointB, radius };
+
+	bool haveBest = false;
+	RayQueryHit best;
+
+	{
+		std::lock_guard<std::mutex> lock(m_Mutex);
+		auto candidates = m_SpatialGrid.queryAABB(queryBounds);
+
+		for (EntityID candidate : candidates)
+		{
+			if (candidate == excludeEntity)
+				continue;
+			auto it = m_EntityIndex.find(candidate);
+			if (it == m_EntityIndex.end())
+				continue;
+			const EntityAABB& entry = m_EntityAABBs[it->second];
+			if ((entry.collisionLayer & layerMask) == 0)
+				continue;
+
+			CollisionManifold manifold;
+			bool hit = false;
+
+			// capsule's pointA/pointB are already world-space (capsulePos = origin below),
+			// matching how EC_CollisionChecks::CapsuleVsX's own local+pos convention
+			// degenerates to "already world space" with a zero offset.
+			switch (entry.collider.type)
+			{
+			case EC_DOD_Collider::Type::Sphere:
+				hit = EC_CollisionChecks::CapsuleVsSphere(capsule, glm::vec3(0.0f),
+					Sphere{ entry.collider.center, entry.collider.radius }, entry.spatial.position, manifold);
+				break;
+			case EC_DOD_Collider::Type::AABB:
+				hit = EC_CollisionChecks::CapsuleVsAABB(capsule, glm::vec3(0.0f),
+					AABB{ entry.collider.center - entry.collider.extents, entry.collider.center + entry.collider.extents },
+					entry.spatial.position, manifold);
+				break;
+			case EC_DOD_Collider::Type::OBB:
+			{
+				glm::mat3 orientation = glm::mat3(glm::normalize(entry.spatial.right),
+					glm::normalize(entry.spatial.up), glm::normalize(entry.spatial.direction));
+				hit = EC_CollisionChecks::CapsuleVsOBB(capsule, glm::vec3(0.0f),
+					OBB{ entry.collider.center, entry.collider.extents, orientation }, entry.spatial.position, manifold);
+				break;
+			}
+			case EC_DOD_Collider::Type::Capsule:
+			{
+				glm::vec3 halfHeight = glm::normalize(entry.spatial.up) * (entry.collider.height * 0.5f);
+				hit = EC_CollisionChecks::CapsuleVsCapsule(capsule, glm::vec3(0.0f),
+					Capsule{ entry.collider.center - halfHeight, entry.collider.center + halfHeight, entry.collider.radius },
+					entry.spatial.position, manifold);
+				break;
+			}
+			case EC_DOD_Collider::Type::Mesh:
+				if (entry.meshCollisionData.positions && entry.meshCollisionData.normals && entry.meshCollisionData.indices)
+				{
+					hit = EC_CollisionChecks::CapsuleVsMesh(capsule, glm::vec3(0.0f),
+						*entry.meshCollisionData.positions, *entry.meshCollisionData.normals, *entry.meshCollisionData.indices,
+						entry.spatial.position, manifold);
+				}
+				break;
+			default:
+				break; // Plane/Frustum/Cylinder/None - not supported by this query yet
+			}
+
+			if (!hit)
+				continue;
+
+			glm::vec3 contactPos = manifold.contactPoints.empty()
+				? entry.spatial.position + entry.collider.center
+				: manifold.contactPoints[0];
+			RayQueryHit result{ candidate, contactPos, manifold.contactNormal, manifold.penetrationDepth };
+
+			if (firstHitOnly)
+			{
+				// Deepest penetration is the most significant contact for a static overlap
+				// query - unlike castRay's "nearest along the ray", there's no natural
+				// distance ordering here.
+				if (!haveBest || result.distance > best.distance)
+				{
+					best = result;
+					haveBest = true;
+				}
+			}
+			else
+			{
+				hits.push_back(result);
+			}
+		}
+	}
+
+	if (firstHitOnly)
+	{
+		if (haveBest)
+			hits.push_back(best);
+		return hits;
+	}
+
+	std::sort(hits.begin(), hits.end(), [](const RayQueryHit& a, const RayQueryHit& b) {
+		return a.distance > b.distance;
+		});
+	return hits;
+}
+
+ECXResponse EC_BroadPhase::handleCapsuleCheck(ECXRequest& request)
+{
+	ECXResponse response;
+	glm::vec3 pointA, pointB;
+	float radius = 0.0f;
+	uint32_t layerMask = 0xFFFFFFFFu;
+	bool firstHitOnly = false;
+	EntityID excludeEntity = INVALID_ENTITY;
+
+	try {
+		pointA = std::any_cast<glm::vec3>(request.args[0]);
+		pointB = std::any_cast<glm::vec3>(request.args[1]);
+		radius = std::any_cast<float>(request.args[2]);
+		if (request.args[3].has_value())
+			layerMask = std::any_cast<uint32_t>(request.args[3]);
+		if (request.args[4].has_value())
+			firstHitOnly = std::any_cast<bool>(request.args[4]);
+		if (request.args[5].has_value())
+			excludeEntity = std::any_cast<EntityID>(request.args[5]);
+	}
+	catch (const std::bad_any_cast&) {
+		response.response = ECXResponseType::Fail;
+		return response;
+	}
+
+	std::vector<RayQueryHit> hits = castCapsule(pointA, pointB, radius, layerMask, firstHitOnly, excludeEntity);
 
 	response.response = ECXResponseType::Success;
 	response.responseData.push_back(hits);
