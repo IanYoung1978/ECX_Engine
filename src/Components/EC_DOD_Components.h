@@ -6,7 +6,6 @@
 #include <vector>
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Graphics/Textures/TextureSet.h"
-#include "Graphics/Models/ObjModel.h"
 #include "Graphics/Shaders/Shader.h"
 #include "Messaging/ECXEventType.h"
 
@@ -180,8 +179,15 @@ struct EC_DOD_GraphicsData {
     bool castsShadow = true;
     bool receivesShadow = true;
     float emissiveIntensity = 1.0f;
-    uint32_t getMeshHandle() const { return model ? model->getHandle() : 0; }
-    uint32_t getVertexCount() const { return model ? model->getVertCount() : 0; }
+    // Defined out-of-line in EC_DOD_Components.cpp, not inline here, so this header only
+    // needs ObjModel forward-declared - EC_RayIntersection.h/.cpp pull this header in for
+    // unrelated structs (EC_DOD_Collider etc.) and are built into ECX_UnitTests, whose
+    // whole point (see CMakeLists.txt's ECX_BUILD_ENGINE option) is staying free of the
+    // full engine's SDL2/GLEW/assimp/Lua/OpenGL/Stb toolchain - an inline definition here
+    // would need ObjModel.h's full definition (and therefore assimp/scene.h) in every
+    // translation unit that includes this header, engine or not.
+    uint32_t getMeshHandle() const;
+    uint32_t getVertexCount() const;
 };
 
 // A voxel terrain chunk entity - the real, permanent integration (see

@@ -9,6 +9,7 @@
 #include "EC_GJK.h"
 #include "EC_ConvexSupport.h"
 #include "Spatial/EC_Frustum.h"
+#include <algorithm>
 #include <limits>
 #include <cmath>
 
