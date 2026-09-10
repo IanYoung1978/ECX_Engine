@@ -92,7 +92,16 @@ void main()
         position = vec4(indata.WSVertex, 1.0);
         albedo = incolour;
         nColour = vec4(indata.WSNormal, 1.0);
-        PBR = vec4(1.0, 1.0, 1.0, 1.0);
+        // roughness=1 (fully matte), metal=0 (dielectric), ao=1 - NOT vec4(1,1,1,1). The
+        // lighting shaders read PBR as (roughness, metal, ao): kD *= (1-metal) zeroes out
+        // diffuse entirely at metal=1, and F0 = mix(F0, albedo, metal) turns the surface
+        // into an albedo-tinted mirror - so an all-ones "safe-looking" default silently
+        // rendered every untextured mesh (this engine's procedural voxel terrain included)
+        // as 100% specular with zero diffuse. On curved geometry under a single light,
+        // that showed up as sharp, view-dependent bright/dark patches tracking curvature -
+        // it looked exactly like a mesh/normal bug (both the position and normal G-buffers
+        // were independently confirmed clean) but was purely this material default.
+        PBR = vec4(1.0, 0.0, 1.0, 1.0);
         glow = vec4(0.0, 0.0, 0.0, 1.0);
     }
 }

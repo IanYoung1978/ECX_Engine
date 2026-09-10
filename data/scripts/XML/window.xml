@@ -6,5 +6,13 @@
 	<fullscreen>false</fullscreen>
 	<glMajor>4</glMajor>
 	<glMinor>3</glMinor>
-	<AA>4</AA>
+	<!-- No <AA> tag: the whole pipeline (G-buffer, HDR ping-pong buffers) is single-sample
+	     by design - window-level MSAA served no purpose here and, worse, made
+	     FrameBufferSet::FinalPass()'s glBlitFramebuffer calls spec-invalid (blitting a
+	     single-sample source into a multisample destination is undefined per the OpenGL
+	     spec - only the reverse, a multisample resolve, is defined). That undefined depth
+	     blit fed the skybox pass's depth test garbage right at geometry silhouettes,
+	     producing an inconsistent dark/discoloured fringe along terrain ridgelines that
+	     looked like a mesh or lighting bug but wasn't - both the normal and depth G-buffers
+	     were independently confirmed clean at that exact location. -->
 </Window>

@@ -6,6 +6,7 @@
 		<LuaScript alias="keyup">data/scripts/LUA/OnKeyUp.lua</LuaScript>
 		<LuaScript alias="keyheld">data/scripts/LUA/OnKeyHeld.lua</LuaScript>
 		<LuaScript alias="mousemove">data/scripts/LUA/onMouseMove.lua</LuaScript>
+		<LuaScript alias="gravity">data/scripts/LUA/ArcadeGravity.lua</LuaScript>
 	</Manifest>
 
 	<!-- Verification scene for EC_VoxelChunkSystem (see the "Voxel terrain: entity-per-
@@ -16,6 +17,9 @@
 	<Entity uid="400" name="voxelchunk_skybox">
 		<Skybox>
 			<HDR alias="nightsky"/>
+			<!-- Aligns the HDR panorama's own baked-in sun with voxelchunk_sun's new,
+			     near-horizon light direction - tuned by eye, adjust if they drift apart. -->
+			<Rotation>0.0</Rotation>
 		</Skybox>
 	</Entity>
 
@@ -25,24 +29,39 @@
 			<DrawDistance>300.0</DrawDistance>
 		</Camera>
 		<Spatial>
-			<Position>0.0,25.0,-60.0</Position>
+			<!-- Centered over the box terrain (TerrainGeneration.lua's box is centered at
+			     16,9,16, top surface roughly y=6..16) and well above it, so ArcadeGravity.lua
+			     has a real fall to demonstrate before the capsule settles onto the surface. -->
+			<Position>16.0,30.0,16.0</Position>
 			<Orientation>0.0,0.0,0.0</Orientation>
 		</Spatial>
+		<!-- Human-ish capsule (0.5 radius, 2.0 total height) around the camera, so it has
+		     real collision geometry to fall and rest on rather than just being a viewpoint. -->
+		<Collider>
+			<Type>Capsule</Type>
+			<Radius>0.5</Radius>
+			<Height>2.0</Height>
+			<Center>0.0,0.0,0.0</Center>
+		</Collider>
 		<ScriptComponent>
 			<OnKeyDown alias="keydown"/>
 			<OnKeyUp alias="keyup"/>
 			<OnKeyHeld alias="keyheld"/>
 			<OnMouseMove alias="mousemove"/>
+			<OnUpdate alias="gravity"/>
 		</ScriptComponent>
 	</Entity>
 
 	<Entity uid="402" name="voxelchunk_sun">
 		<Light>
 			<Type>Directional</Type>
-			<Direction>0.3,-1.0,0.2,0.0</Direction>
+			<!-- Low, near-horizon sun (mostly horizontal, small downward tilt) so shadows
+			     stretch long across the hills - a good stress test for the shadow bias
+			     tuning at grazing angles, not just the near-overhead case. -->
+			<Direction>0.95,-0.12,0.3,0.0</Direction>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 			<Intensity>1.0</Intensity>
-			<CastsShadow>false</CastsShadow>
+			<CastsShadow>true</CastsShadow>
 			<Dynamic>false</Dynamic>
 		</Light>
 	</Entity>

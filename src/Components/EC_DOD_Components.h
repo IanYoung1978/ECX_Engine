@@ -260,4 +260,9 @@ struct EC_DOD_Skybox {
     unsigned int cubemapHandle = 0;
     unsigned int targetCubemapHandle = 0;
     float blendFactor = 1.0f;
+    // Degrees, rotation about world Y - the HDR panorama's own baked-in sun position is
+    // fixed at load time, so this is the only way to align it with a scene's actual
+    // directional light direction (e.g. after changing the light to a low, near-horizon
+    // angle for long shadows) without re-exporting the HDR asset itself.
+    float rotationYDegrees = 0.0f;
 };

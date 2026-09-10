@@ -55,7 +55,8 @@ void GL_SkyboxRenderer::render(const glm::mat4& view, const glm::mat4& projectio
     if (skybox.targetCubemapHandle == 0 && !skybox.targetHdrPath.empty())
         skybox.targetCubemapHandle = EC_DOD_EntityFactory::s_CubemapManager.getCubemap(skybox.targetHdrPath);
 
-    glm::mat4 skyView = glm::mat4(glm::mat3(view));
+    glm::mat4 skyView = glm::mat4(glm::mat3(view))
+        * glm::rotate(glm::mat4(1.0f), glm::radians(skybox.rotationYDegrees), glm::vec3(0.0f, 1.0f, 0.0f));
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);

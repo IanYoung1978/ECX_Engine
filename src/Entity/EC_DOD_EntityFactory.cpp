@@ -926,6 +926,9 @@ void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {
                 s_CubemapManager.loadHDR(skybox.hdrPath);
             }
         }
+        else if (strcmp(child->Value(), "Rotation") == 0 && child->GetText()) {
+            skybox.rotationYDegrees = std::stof(child->GetText());
+        }
         child = child->NextSiblingElement();
     }
 

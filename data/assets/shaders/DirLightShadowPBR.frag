@@ -155,7 +155,16 @@ float computeOcclusion(vec4 shadowCoords, vec3 normal, vec3 lightDir)
 	// 2.0/depthRange (an earlier version of this file used 2.0 here, effectively doubling
 	// the intended bias - the mix() values below are already calibrated against the
 	// corrected 1.0 factor).
-	float worldBias 	= mix(0.1, 0.001, max(dot(normal, lightDir), 0.0));
+	// Raised from mix(0.1, 0.001, ...): those values produced severe shadow acne (a dense
+	// self-shadowing herringbone pattern) across the voxel terrain's rolling hills, worst on
+	// nearby geometry. Root cause is texel density, not a bias-formula bug: the shadow box
+	// is fit to the camera's frustum out to dirShadowDistance (50 units by default) via a
+	// bounding-sphere fit, so a wide, undulating terrain divides a single 1024-texel tile
+	// across a large world-space area - coarser than whatever scene these constants were
+	// originally tuned against. A real fix (cascaded shadow maps, giving high resolution
+	// near the camera without sacrificing shadow distance) is out of scope for a bias tweak;
+	// this raises the floor enough to clean up self-shadowing at the terrain's actual scale.
+	float worldBias 	= mix(0.4, 0.05, max(dot(normal, lightDir), 0.0));
 	float ndcBias 		= worldBias * (1.0 / max(ShadowDepthRange, 1.0));
 
 	// Software PCF: average a 3x3 neighbourhood of shadow-map texels instead of relying on

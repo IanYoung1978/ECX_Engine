@@ -101,8 +101,20 @@ vec3 computeLight(
 	vec3 kD = vec3(1.0) - kS;
 	kD *= 1.0 - metal;
 
+	// Strict clamp for specular (unchanged) - a highlight should never appear on a face
+	// pointed away from the light, so this stays a hard cutoff at the true terminator.
 	float NdotL = max(dot(normal, Ldirection), 0.0);
-	vec3 Lo = (kD * albedo / PI + specular) * radiance * NdotL;
+	// Half-Lambert wrap for diffuse only: a single hard directional light with no bounce/
+	// fill light and a flat, low ambient floor makes the ordinary max(dot(N,L),0) cutoff
+	// read as a sharp near-black band wherever a curved surface's normal crosses the
+	// terminator within a few screen pixels - exactly what a rolling-hill ridge does, and
+	// exactly what this was mistaken for a mesh/normal bug earlier (both G-buffers were
+	// confirmed clean there). This remaps dot(N,L) from [-1,1] to [0,1] instead of clamping
+	// it, so the diffuse term fades out smoothly through the terminator rather than
+	// snapping straight to the ambient floor - a standard, deliberately non-physical fix
+	// (raising the ambient floor alone only made the band less dark, not less sharp).
+	float wrapNdotL = clamp(dot(normal, Ldirection) * 0.5 + 0.5, 0.0, 1.0);
+	vec3 Lo = kD * albedo / PI * radiance * wrapNdotL + specular * radiance * NdotL;
 	return Lo;
 }
 
