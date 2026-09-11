@@ -360,6 +360,8 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("getString", &ScriptAPI::EntityAPI::getString)
         .addFunction("getColour", &ScriptAPI::EntityAPI::getColour)
         .addFunction("setColour", &ScriptAPI::EntityAPI::setColour)
+        .addFunction("getColliderRadius", &ScriptAPI::EntityAPI::getColliderRadius)
+        .addFunction("getColliderHeight", &ScriptAPI::EntityAPI::getColliderHeight)
         .addFunction("hasParent", &ScriptAPI::EntityAPI::hasParent)
         .addFunction("getParentID", &ScriptAPI::EntityAPI::getParentID)
         .addFunction("getDepth", &ScriptAPI::EntityAPI::getDepth)

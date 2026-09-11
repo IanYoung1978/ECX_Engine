@@ -43,6 +43,13 @@ namespace ScriptAPI
         glm::vec4 getColour();
         void setColour(float r, float g, float b, float a = 1.0f);
 
+        // Issue #98 - lets a reusable script (e.g. ArcadeGravity.lua) read an entity's own
+        // authored collider dimensions back, instead of hand-keeping a separate hardcoded
+        // copy in sync with whatever <Collider><Radius>/<Height> the entity was actually
+        // given. 0 for an entity with no Collider component at all.
+        float getColliderRadius();
+        float getColliderHeight();
+
         // Hierarchy queries
         bool hasParent();
         unsigned int getParentID();

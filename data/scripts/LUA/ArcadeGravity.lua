@@ -43,15 +43,6 @@ local GROUND_SKIN = 0.02 -- small persistent overlap kept after snapping, so the
 local MIN_STANDING_NORMAL_Y = 0.3 -- how "upward-facing" a contact normal must be to count
                                     -- as ground to stand on, vs. a wall/steep slope
 
--- Capsule dimensions are fixed module-level constants, not read per-entity: there's no
--- Lua binding today to read a collider's own radius/height back off an entity (only to
--- author one via XML). Must match whatever <Collider><Radius>/<Height> every entity using
--- this script was actually given - currently just VoxelChunkDemo.xml's camera capsule
--- (0.5 / 2.0). A future getColliderRadius()/getColliderHeight() binding would let this
--- read real per-entity values instead.
-local CAPSULE_RADIUS = 0.5
-local CAPSULE_HALF_HEIGHT = 1.0
-
 local LOG_INTERVAL = 0.5 -- throttled so this doesn't spam the log at 60+ lines/sec
 
 -- Hysteresis on LEAVING grounded state only (entering is instant - see update() below).
@@ -74,10 +65,23 @@ local UNGROUNDED_FRAMES_TO_RELEASE = 4
 local debugTextID = nil
 local debugTextReady = false
 
-local function getState(entityId)
+-- Capsule dimensions are read from the entity's own Collider (issue #98 - previously fixed
+-- module-level constants that had to be hand-kept in sync with whatever <Collider>
+-- <Radius>/<Height> an entity using this script was actually given, silently wrong the
+-- moment they drifted apart). Read once per entity, at first update(), and cached in that
+-- entity's own state table - the collider is authored once in XML and not expected to
+-- change at runtime, so there's no need to re-query every frame. getColliderHeight()
+-- returns the full capsule height (cylinder-axis segment length, not including the
+-- hemispherical caps - see EC_DOD_EntityFactory::parseCollider), so half of it is what the
+-- capsuleQuery segment below actually wants.
+local function getState(entityId, entity)
     local s = states[entityId]
     if not s then
-        s = { fallSpeed = 0.0, grounded = false, ungroundedStreak = 0, logTimer = 0.0 }
+        s = {
+            fallSpeed = 0.0, grounded = false, ungroundedStreak = 0, logTimer = 0.0,
+            capsuleRadius = entity:getColliderRadius(),
+            capsuleHalfHeight = entity:getColliderHeight() * 0.5,
+        }
         states[entityId] = s
     end
     return s
@@ -85,7 +89,7 @@ end
 
 function update(entity, deltaTime)
     local entityId = entity:getID()
-    local state = getState(entityId)
+    local state = getState(entityId, entity)
     local pos = entity:getPosition()
     local wasGrounded = state.grounded
 
@@ -98,9 +102,9 @@ function update(entity, deltaTime)
     local newY = pos.y - state.fallSpeed * deltaTime
 
     local hits = game:capsuleQuery(
-        pos.x, newY - CAPSULE_HALF_HEIGHT, pos.z,
-        pos.x, newY + CAPSULE_HALF_HEIGHT, pos.z,
-        CAPSULE_RADIUS, true, entityId)
+        pos.x, newY - state.capsuleHalfHeight, pos.z,
+        pos.x, newY + state.capsuleHalfHeight, pos.z,
+        state.capsuleRadius, true, entityId)
 
     if hits > 0 then
         local normal = game:getCapsuleHitNormal(0)
