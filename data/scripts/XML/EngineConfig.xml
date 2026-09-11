@@ -1,5 +1,10 @@
 <?xml version="1.0"?>
 <EngineSettings>
+	<!-- Whether EC_SceneManager auto-pauses right after the first scene loads (baking one
+	     correct frame, then freezing until the player resumes - see EC_SceneManager.cpp's
+	     own comment). false while iterating on live-generated content (e.g. terrain
+	     generation scripts) so changes are visible immediately without a manual unpause. -->
+	<Startup pauseOnStart="false"/>
 	<Spatial></Spatial>
 	<Collision>
 		<!-- brodphase algorithm: octree/SAP/hybrid-->
@@ -46,8 +51,8 @@
 		</Debug>
 	</Physics>
 
-	<!-- Dev-build-only debug HTTP server (Issue #87's first slice) - GET /log only,
-	     read-only, localhost-bound, no authentication. Off by default; must be
+	<!-- Dev-build-only debug HTTP server (Issue #87) - GET-only, localhost-bound, no
+	     authentication. See GET /docs for the full route list. Off by default; must be
 	     explicitly enabled per-machine. -->
 	<DebugHTTP enabled="false" port="8089"/>
 

@@ -50,6 +50,31 @@ public:
     // fused with, containment: default false returns pure geometric containment.
     std::vector<RayQueryHit> queryCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees,
         float maxDistance, bool castsShadowOnly = true, bool checkOcclusion = false, uint32_t layerMask = 0xFFFFFFFFu);
+    // Real capsule-vs-scene-geometry overlap query (see EC_BroadPhase::castCapsule) - the
+    // capsule's own segment/radius against every candidate's actual collider, Mesh
+    // (terrain) included via EC_CollisionChecks::CapsuleVsMesh. Unlike queryRay/queryCone,
+    // this is a static overlap test, not a sweep - RayQueryHit::distance is repurposed as
+    // penetration depth and ::normal points away from the capsule.
+    // excludeEntity skips one candidate (INVALID_ENTITY = exclude nothing) - pass an
+    // entity's own ID when it's querying its own capsule's surroundings, otherwise it
+    // finds itself and reports a trivial full-penetration self-hit.
+    std::vector<RayQueryHit> queryCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
+        bool firstHitOnly = false, uint32_t layerMask = 0xFFFFFFFFu, EntityID excludeEntity = INVALID_ENTITY);
+    // Debug-draw the last ray/cone query (Issues #30/#29) - the single implementation
+    // both EC_GameAPI's Lua bindings and the debug HTTP server's /rayQuery and /coneQuery
+    // routes call into, so Lua and HTTP callers share one code path instead of each
+    // publishing their own copy of the same command.
+    void showDebugRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance);
+    void showDebugCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees, float maxDistance);
+    // Forwards to the scene manager's scripting system - see EC_LuaScriptSystem::
+    // runScriptOnce/getVolumeRoot. Used by EC_VoxelChunkSystem::init() to run the active
+    // game's terrain-generation script once and retrieve the shape it authored.
+    bool runLuaScriptOnce(const std::string& filename);
+    std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+    // Re-runs the terrain generation script and re-schedules every existing chunk against
+    // the new shape, live - see EC_VoxelChunkSystem::regenerate(). Must be called from the
+    // main thread (same requirement as everything else that touches m_VoxelChunkSystem).
+    void regenerateTerrain();
     float getFPS() const { return m_Timer->getFPS(); }
     float getMSPF() const { return m_Timer->getMSPF(); }
     EntityID getEntityByUID(uint32_t uid) const;

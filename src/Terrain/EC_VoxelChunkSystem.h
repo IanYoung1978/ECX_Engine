@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <memory>
 #include <vector>
 #include "Engine/Subsystems/EC_System.h"
@@ -32,7 +33,28 @@ public:
     // thread parked in the worker's own condvar wait.
     void shutdown();
 
+    // Requests that terrain be regenerated from TerrainGeneration.lua, picked up on the
+    // next update() tick (main thread only - see regenerate()'s own comment for why).
+    // Thread-safe and cheap to call from anywhere: the debug HTTP server's
+    // /regenerateTerrain route runs on an httplib worker thread, and
+    // game:regenerateTerrain()'s Lua binding runs on the scripting subsystem's background
+    // thread (EC_ScriptingTask) - neither is the main thread, so this only ever flips an
+    // atomic flag rather than touching any ECS state itself.
+    void requestRegenerate() { m_RegenerateRequested = true; }
+
 private:
+    void loadVolumeScript(EC_Game& game);
+    // Re-runs the terrain generation script and re-schedules every existing chunk against
+    // the new shape - lets an author iterate on TerrainGeneration.lua without a full engine
+    // restart. Main-thread only: EC_DOD_EntityManager::getComponent() returns a raw
+    // reference with no lock held through its use (unlike EC_BroadPhase's deliberately
+    // snapshotted cross-thread reads), so mutating EC_DOD_VoxelChunk/collider/mesh
+    // components from any other thread while update() concurrently reads/writes them on
+    // the main thread would be a real data race. Only ever called from update(), which is
+    // itself guaranteed main-thread (see this class's own top comment).
+    void regenerate(EC_Game& game);
+
+    std::atomic<bool> m_RegenerateRequested{ false };
     EC_ThreadManager m_ThreadManager;
     std::shared_ptr<EC_VoxelChunkWorker> m_Worker;
     std::shared_ptr<Shader> m_ChunkShader;

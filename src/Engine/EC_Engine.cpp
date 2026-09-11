@@ -3,6 +3,7 @@
 #include "Engine/Subsystems/Transform/EC_TransformSystem.h"
 #include "Engine/Subsystems/Camera/EC_CameraSystem.h"
 #include "Engine/Subsystems/Scripting/EC_LuaScriptingSystem.h"
+#include "Procedural/EC_VolumeNode.h"
 #include "Engine/Subsystems/CollisionSystems/EC_CollisionSystem.h"
 #include "Engine/Subsystems/CollisionSystems/EC_PhysicsSystem.h"
 #include "TaskManager/EC_PhysicsThreadTask.h"
@@ -112,6 +113,18 @@ void EC_Engine::stepOnce(float deltaTimeS)
 			s->update(deltaTimeS, *m_game);
 		}
 	}
+}
+
+bool EC_Engine::runLuaScriptOnce(const std::string& filename)
+{
+	auto* scripting = static_cast<EC_LuaScriptSystem*>(m_Systems[(size_t)EC_SystemType::Scripting].get());
+	return scripting ? scripting->runScriptOnce(filename) : false;
+}
+
+std::shared_ptr<EC_VolumeNode> EC_Engine::getVolumeRoot() const
+{
+	auto* scripting = static_cast<EC_LuaScriptSystem*>(m_Systems[(size_t)EC_SystemType::Scripting].get());
+	return scripting ? scripting->getVolumeRoot() : nullptr;
 }
 
 EC_Engine::~EC_Engine()

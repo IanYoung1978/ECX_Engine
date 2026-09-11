@@ -2,9 +2,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <string>
+#include <memory>
+#include <vector>
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Graphics/Textures/TextureSet.h"
-#include "Graphics/Models/ObjModel.h"
 #include "Graphics/Shaders/Shader.h"
 #include "Messaging/ECXEventType.h"
 
@@ -42,6 +43,11 @@ struct EC_DOD_Collider {
         Cylinder,
         Frustum,
         Plane,
+        // Real ray/cone testing against EC_DOD_MeshCollisionData's actual triangles,
+        // rather than any convex-primitive approximation - see that component's own
+        // comment. `center`/`extents` still describe this collider's broad-phase bounding
+        // box exactly as AABB's do; only the precise per-candidate test differs.
+        Mesh,
         None
     };
     Type type = Type::OBB;
@@ -51,6 +57,20 @@ struct EC_DOD_Collider {
     float height = 2.0f;
     uint32_t collisionLayer = 1;
     uint32_t collisionMask = 0xFFFFFFFF;
+};
+
+// Real triangle-mesh geometry for entities whose Collider::Type is Mesh - deliberately
+// generic (not terrain-named): today only EC_VoxelChunkSystem populates this (retaining
+// the marching-cubes output it would otherwise discard after uploading to the GPU, since
+// ObjModel keeps no public accessor to its own vertex data), but nothing about this
+// component assumes voxel terrain specifically. shared_ptr rather than owning the
+// vectors directly - EC_DOD_Collider-adjacent components get copied around by collision
+// code, and this keeps that cheap (a refcount bump, not a data copy) regardless of mesh
+// size.
+struct EC_DOD_MeshCollisionData {
+    std::shared_ptr<std::vector<glm::vec3>> positions;
+    std::shared_ptr<std::vector<glm::vec3>> normals;
+    std::shared_ptr<std::vector<uint32_t>> indices;
 };
 
 struct EC_DOD_Spatial {
@@ -159,8 +179,15 @@ struct EC_DOD_GraphicsData {
     bool castsShadow = true;
     bool receivesShadow = true;
     float emissiveIntensity = 1.0f;
-    uint32_t getMeshHandle() const { return model ? model->getHandle() : 0; }
-    uint32_t getVertexCount() const { return model ? model->getVertCount() : 0; }
+    // Defined out-of-line in EC_DOD_Components.cpp, not inline here, so this header only
+    // needs ObjModel forward-declared - EC_RayIntersection.h/.cpp pull this header in for
+    // unrelated structs (EC_DOD_Collider etc.) and are built into ECX_UnitTests, whose
+    // whole point (see CMakeLists.txt's ECX_BUILD_ENGINE option) is staying free of the
+    // full engine's SDL2/GLEW/assimp/Lua/OpenGL/Stb toolchain - an inline definition here
+    // would need ObjModel.h's full definition (and therefore assimp/scene.h) in every
+    // translation unit that includes this header, engine or not.
+    uint32_t getMeshHandle() const;
+    uint32_t getVertexCount() const;
 };
 
 // A voxel terrain chunk entity - the real, permanent integration (see
@@ -239,4 +266,9 @@ struct EC_DOD_Skybox {
     unsigned int cubemapHandle = 0;
     unsigned int targetCubemapHandle = 0;
     float blendFactor = 1.0f;
+    // Degrees, rotation about world Y - the HDR panorama's own baked-in sun position is
+    // fixed at load time, so this is the only way to align it with a scene's actual
+    // directional light direction (e.g. after changing the light to a low, near-horizon
+    // angle for long shadows) without re-exporting the HDR asset itself.
+    float rotationYDegrees = 0.0f;
 };

@@ -7,6 +7,7 @@
 #include "TaskManager/EC_Task.h"
 
 namespace httplib { class Server; }
+class EC_Game;
 
 // A minimal, dev-build-only, read-only HTTP debug surface - Issue #87's first two slices,
 // currently GET /log and GET /screenshot. Shaped like EC_VoxelChunkWorker: a long-lived
@@ -18,7 +19,15 @@ namespace httplib { class Server; }
 // implements by closing the listening socket - the mechanism that actually unblocks it.
 class EC_DebugHTTPServer : public EC_Task {
 public:
-    EC_DebugHTTPServer(std::string host, int port);
+    // `game` is optional (nullptr disables /rayQuery and /coneQuery, returning 503) purely
+    // so tests/tools that don't have a live EC_Game can still construct this for its other
+    // routes - EC_Game::init always passes a real one. Ray/cone queries themselves
+    // (EC_Game::queryRay/queryCone) go through the same synchronous, mutex-guarded
+    // ECXRequestBroker::publish path EC_GameAPI's Lua bindings use, and showDebugRay/
+    // showDebugCone push onto the (also mutex-guarded) command queue EC_Game::run() drains
+    // once per frame - both safe to call directly from this handler's own httplib worker
+    // thread, unlike /screenshot's GL work, which is why no rendezvous is needed here.
+    EC_DebugHTTPServer(std::string host, int port, EC_Game* game = nullptr);
     ~EC_DebugHTTPServer() override;
 
     void execute() override;
@@ -51,6 +60,7 @@ public:
 private:
     std::string m_Host;
     int m_Port;
+    EC_Game* m_Game;
     // Constructed in the constructor (main thread, before this task is ever added to the
     // pool) rather than lazily inside execute() - httplib::Server's constructor touches
     // no sockets/threads (only listen() does), and constructing it early means shutdown()

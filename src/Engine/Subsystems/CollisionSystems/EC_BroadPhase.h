@@ -36,6 +36,11 @@ private:
 		// reading live component arrays from another thread at request time.
 		EC_DOD_Collider collider;
 		EC_DOD_Spatial spatial;
+		// Only populated (non-null shared_ptrs) when collider.type == Mesh - see
+		// EC_DOD_MeshCollisionData's own comment. Cheap to snapshot alongside
+		// collider/spatial above since it's just three shared_ptr copies (refcount
+		// bumps), not the underlying mesh data itself.
+		EC_DOD_MeshCollisionData meshCollisionData;
 	};
 
 	// castsShadow (EC_DOD_GraphicsData::castsShadow) is looked up live, on demand, only for
@@ -53,11 +58,26 @@ private:
 	ECXResponse handleEntitySearch(ECXRequest& request);
 	ECXResponse handleRayCheck(ECXRequest& request);
 	ECXResponse handleConeCheck(ECXRequest& request);
+	ECXResponse handleCapsuleCheck(ECXRequest& request);
 	// Shared broad+precise ray logic used directly by handleRayCheck and, for the
 	// "unobstructed line-of-sight to apex" test, by handleConeCheck - the code-level link
 	// satisfying Issue #29's stated dependency on Issue #30.
 	std::vector<RayQueryHit> castRay(const glm::vec3& origin, const glm::vec3& dir, float maxDistance,
 		uint32_t layerMask, bool requireCastsShadow, bool firstHitOnly);
+	// Real capsule-vs-scene-geometry collision detection (not a raycast stand-in) -
+	// dispatches to the matching EC_CollisionChecks::CapsuleVsX per broad-phase candidate's
+	// own collider type, Mesh included (EC_CollisionChecks::CapsuleVsMesh), so a capsule
+	// genuinely resting on uneven terrain gets a real contact normal/penetration depth, not
+	// an approximation. RayQueryHit's `distance` field is repurposed here as penetration
+	// depth (there's no "travel distance" for a static overlap query), and `normal` points
+	// away from the capsule, toward whatever it's touching, same as every CapsuleVsX
+	// function's own convention.
+	// excludeEntity skips one candidate entirely (INVALID_ENTITY = exclude nothing) - a
+	// capsule querying "what am I touching" using its OWN live position/radius would
+	// otherwise find itself among the candidates and report a trivial zero-distance,
+	// full-penetration self-hit.
+	std::vector<RayQueryHit> castCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
+		uint32_t layerMask, bool firstHitOnly, EntityID excludeEntity = INVALID_ENTITY);
 
 	EC_PairManager m_PairManager;
 

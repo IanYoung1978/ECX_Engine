@@ -10,6 +10,17 @@
 		</UIElement>
 	</UIElement>
 
+	<!-- Live readout for ArcadeGravity.lua's per-frame state (position/fallSpeed/grounded/
+	     contact) - polled via GET /screenshot instead of grepping the log file, since the
+	     physics/scripting thread is unthrottled and the bouncing behaviour is a per-frame
+	     phenomenon that log throttling was hiding. -->
+	<UIElement name="gravity_debug_panel" x="10" y="280" width="520" height="90" layer="0" visible="true">
+		<UIPanel colour="0.0,0.0,0.0,0.6"/>
+		<UIElement name="gravity_debug_text" x="10" y="10" width="500" height="70" layer="1">
+			<UIText colour="1.0,1.0,0.0,1.0"></UIText>
+		</UIElement>
+	</UIElement>
+
 	<UIElement name="ui_test_button" x="700" y="10" width="150" height="40" layer="0" visible="true">
 		<UIPanel colour="0.2,0.4,0.8,0.8"/>
 		<UIElement name="ui_test_button_label" x="10" y="10" width="130" height="20" layer="1">

@@ -11,7 +11,7 @@
 #include "Logging/ECX_Logging.h"
 #include "Engine/Subsystems/Scripting/EC_ScriptAPI.h"
 
-EC_LuaScriptSystem::EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr) {}
+EC_LuaScriptSystem::EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr), m_volumeAPI(nullptr) {}
 
 EC_LuaScriptSystem::~EC_LuaScriptSystem() {
     m_shuttingDown = true;
@@ -25,6 +25,10 @@ EC_LuaScriptSystem::~EC_LuaScriptSystem() {
     if (m_game) {
         delete m_game;
         m_game = nullptr;
+    }
+    if (m_volumeAPI) {
+        delete m_volumeAPI;
+        m_volumeAPI = nullptr;
     }
 }
 
@@ -63,6 +67,7 @@ void EC_LuaScriptSystem::init(ECXMessenger& messenger, EC_Game& game) {
     messenger.Subscribe(*this, allTypes);
 
     m_game = new ScriptAPI::GameAPI(&game, messenger);
+    m_volumeAPI = new ScriptAPI::VolumeAPI();
 
     m_luaState = luaL_newstate();
     luaL_openlibs(m_luaState);
@@ -435,6 +440,41 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("getConeHitDistance", &ScriptAPI::GameAPI::getConeHitDistance)
         .addFunction("showDebugRay", &ScriptAPI::GameAPI::showDebugRay)
         .addFunction("showDebugCone", &ScriptAPI::GameAPI::showDebugCone)
+        .addFunction("regenerateTerrain", &ScriptAPI::GameAPI::regenerateTerrain)
+        .addFunction("capsuleQuery", &ScriptAPI::GameAPI::capsuleQuery)
+        .addFunction("getCapsuleHitEntity", &ScriptAPI::GameAPI::getCapsuleHitEntity)
+        .addFunction("getCapsuleHitPosition", &ScriptAPI::GameAPI::getCapsuleHitPosition)
+        .addFunction("getCapsuleHitNormal", &ScriptAPI::GameAPI::getCapsuleHitNormal)
+        .addFunction("getCapsuleHitDistance", &ScriptAPI::GameAPI::getCapsuleHitDistance)
+        .endClass()
+
+        // Lua-visible value type wrapping an EC_VolumeNodePtr - see EC_VolumeAPI.h. No
+        // properties/constructor exposed: Lua only ever receives one from a volume.* call
+        // below, never constructs one directly.
+        .beginClass<ScriptAPI::VolumeHandle>("VolumeHandle")
+        .endClass()
+
+        // Author-facing procedural generation toolbox (Stage 1/2 of the terrain generation
+        // plan: "create a volume" / "subtract from it") - a growing library of tools meant
+        // to be invoked from a one-shot generation script (see runScriptOnce()), not a
+        // per-frame handler.
+        .beginClass<ScriptAPI::VolumeAPI>("volume")
+        .addFunction("constant", &ScriptAPI::VolumeAPI::constant)
+        .addFunction("noise", &ScriptAPI::VolumeAPI::noise)
+        .addFunction("sphere", &ScriptAPI::VolumeAPI::sphere)
+        .addFunction("box", &ScriptAPI::VolumeAPI::box)
+        .addFunction("halfspace", &ScriptAPI::VolumeAPI::halfspace)
+        .addFunction("cylinder", &ScriptAPI::VolumeAPI::cylinder)
+        .addFunction("add", &ScriptAPI::VolumeAPI::add)
+        .addFunction("scale", &ScriptAPI::VolumeAPI::scale)
+        .addFunction("union", &ScriptAPI::VolumeAPI::unionOf)
+        .addFunction("intersect", &ScriptAPI::VolumeAPI::intersect)
+        .addFunction("subtract", &ScriptAPI::VolumeAPI::subtract)
+        .addFunction("smoothUnion", &ScriptAPI::VolumeAPI::smoothUnion)
+        .addFunction("smoothIntersect", &ScriptAPI::VolumeAPI::smoothIntersect)
+        .addFunction("smoothSubtract", &ScriptAPI::VolumeAPI::smoothSubtract)
+        .addFunction("translate", &ScriptAPI::VolumeAPI::translate)
+        .addFunction("setRoot", &ScriptAPI::VolumeAPI::setRoot)
         .endClass();
 
     auto pushResult = luabridge::push(m_luaState, m_game);
@@ -445,4 +485,40 @@ void EC_LuaScriptSystem::registerAPI() {
         );
     }
     lua_setglobal(m_luaState, "game");
+
+    auto volumePushResult = luabridge::push(m_luaState, m_volumeAPI);
+    if (!volumePushResult) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Failed to push 'volume' global into Lua state: " + volumePushResult.message(),
+            LOGGING::LogLevel::SEVERE
+        );
+    }
+    lua_setglobal(m_luaState, "volume");
+}
+
+bool EC_LuaScriptSystem::runScriptOnce(const std::string& filename) {
+    std::lock_guard<std::mutex> lock(m_LuaMutex);
+
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Running one-shot script: " + filename,
+        LOGGING::LogLevel::INFORMATION
+    );
+
+    int result = luaL_dofile(m_luaState, filename.c_str());
+    if (result != LUA_OK) {
+        const char* error = lua_tostring(m_luaState, -1);
+        std::string errorMsg = error ? error : "Unknown error";
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Lua error running " + filename + ": " + errorMsg +
+            " (error code: " + std::to_string(result) + ")",
+            LOGGING::LogLevel::SEVERE
+        );
+        lua_pop(m_luaState, 1);
+        return false;
+    }
+    return true;
+}
+
+std::shared_ptr<EC_VolumeNode> EC_LuaScriptSystem::getVolumeRoot() const {
+    return m_volumeAPI ? m_volumeAPI->getRoot() : nullptr;
 }

@@ -10,6 +10,7 @@
 #include "Messaging/ECXCommand.h"
 #include "Messaging/ECXCommandType.h"
 #include "UI/EC_UI_Factory.h"
+#include "Procedural/EC_VolumeNode.h"
 
 namespace
 {
@@ -37,6 +38,7 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     }
 
     m_Engine.init(m_Settings.engine_settings, game, messenger);
+    m_PauseOnStart = XML::loadPauseOnStartSetting(m_Settings.engine_settings);
 
     EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
     EC_DOD_EntityFactory::loadManifestFile(m_Settings.physics_materials_file);
@@ -138,7 +140,7 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
             // or several seconds of unwatched physics) is what's shown until
             // the player resumes.
             m_Engine.stepOnce(1.0f / 60.0f);
-            m_Engine.pause();
+            if (m_PauseOnStart) m_Engine.pause();
             m_InitialPauseDone = true;
         }
     }
@@ -224,6 +226,16 @@ bool EC_SceneManager::captureFrame(const std::string& target, std::vector<unsign
 {
     if (!m_Renderer) return false;
     return m_Renderer->captureFrame(target, outPNGBytes);
+}
+
+bool EC_SceneManager::runLuaScriptOnce(const std::string& filename)
+{
+    return m_Engine.runLuaScriptOnce(filename);
+}
+
+std::shared_ptr<EC_VolumeNode> EC_SceneManager::getVolumeRoot() const
+{
+    return m_Engine.getVolumeRoot();
 }
 
 void EC_SceneManager::activateSceneByIndex(size_t index)

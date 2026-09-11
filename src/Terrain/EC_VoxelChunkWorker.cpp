@@ -1,7 +1,6 @@
 #include "Terrain/EC_VoxelChunkWorker.h"
 #include "Terrain/EC_DensityField.h"
 #include "Terrain/EC_MarchingCubesMesher.h"
-#include "Terrain/EC_TerrainWorldDensity.h"
 #include "Terrain/EC_VoxelChunkSystem.h"
 
 EC_VoxelChunkWorker::EC_VoxelChunkWorker()
@@ -67,12 +66,25 @@ void EC_VoxelChunkWorker::execute() {
                 for (int x = -EC_DensityField::Padding; x < size + EC_DensityField::Padding; x++) {
                     glm::vec3 worldPos = chunkOrigin + glm::vec3(
                         static_cast<float>(x), static_cast<float>(y), static_cast<float>(z));
-                    field.at(x, y, z) = EC_TerrainWorldDensity::sampleWorldDensity(worldPos);
+                    field.at(x, y, z) = m_Root ? m_Root->evaluate(worldPos) : 1.0f;
                 }
             }
         }
 
-        EC_TerrainMeshData meshData = EC_MarchingCubesMesher::polygonise(field, 0.0f);
+        // Hand the mesher the live volume tree (already known to be safe to evaluate from
+        // this worker thread - see setVolumeRoot's comment) so it can compute normals from
+        // the true continuous shape instead of differentiating the baked field's coarser
+        // trilinear reconstruction - see EC_MarchingCubesMesher.h's DensityFunction comment
+        // for why that distinction matters (it's what was producing black ridge-line
+        // artifacts). The field itself still drives isosurface placement unchanged.
+        EC_MarchingCubesMesher::DensityFunction analyticDensity;
+        if (m_Root) {
+            auto root = m_Root;
+            analyticDensity = [root, chunkOrigin](const glm::vec3& localPos) {
+                return root->evaluate(chunkOrigin + localPos);
+            };
+        }
+        EC_TerrainMeshData meshData = EC_MarchingCubesMesher::polygonise(field, 0.0f, analyticDensity);
 
         {
             std::lock_guard<std::mutex> lock(m_CompletedMutex);

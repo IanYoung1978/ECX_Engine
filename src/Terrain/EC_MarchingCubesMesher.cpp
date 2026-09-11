@@ -53,12 +53,31 @@ float sampleTrilinear(const EC_DensityField& field, const glm::vec3& p)
     return c0 * (1 - fz) + c1 * fz;
 }
 
-// Central-difference gradient of the density field at a (possibly fractional) position.
-// The field is low(negative)-inside/high(positive)-outside, so the gradient (direction of
-// increasing density) already points from inside to outside - the correct outward surface
-// normal - with no sign flip needed.
-glm::vec3 computeNormal(const EC_DensityField& field, const glm::vec3& p)
+// Central-difference gradient at a (possibly fractional) position, of either the density
+// field's own trilinear reconstruction or (when given) a continuous analytic density
+// function describing the same shape - see EC_MarchingCubesMesher.h's DensityFunction/
+// polygonise comments for why the analytic path exists. Either way, the field/function is
+// low(negative)-inside/high(positive)-outside, so the gradient (direction of increasing
+// density) already points from inside to outside - the correct outward surface normal -
+// with no sign flip needed.
+glm::vec3 computeNormal(const EC_DensityField& field, const glm::vec3& p,
+    const EC_MarchingCubesMesher::DensityFunction& analyticDensity)
 {
+    if (analyticDensity) {
+        // Much smaller epsilon than the field-based path below: a continuous function has
+        // no cell-boundary artifacts to avoid straddling, so a tight epsilon just gives a
+        // more locally-accurate gradient, right up to genuinely sharp features.
+        constexpr float e = 0.05f;
+        float dx = analyticDensity(p + glm::vec3(e, 0, 0)) - analyticDensity(p - glm::vec3(e, 0, 0));
+        float dy = analyticDensity(p + glm::vec3(0, e, 0)) - analyticDensity(p - glm::vec3(0, e, 0));
+        float dz = analyticDensity(p + glm::vec3(0, 0, e)) - analyticDensity(p - glm::vec3(0, 0, e));
+
+        glm::vec3 g(dx, dy, dz);
+        float len = glm::length(g);
+        if (len < 1e-8f) return glm::vec3(0.0f, 1.0f, 0.0f);
+        return g / len;
+    }
+
     constexpr float e = 0.5f;
     float dx = sampleTrilinear(field, p + glm::vec3(e, 0, 0)) - sampleTrilinear(field, p - glm::vec3(e, 0, 0));
     float dy = sampleTrilinear(field, p + glm::vec3(0, e, 0)) - sampleTrilinear(field, p - glm::vec3(0, e, 0));
@@ -158,6 +177,7 @@ EC_TerrainMeshData stripSmallComponents(const EC_TerrainMeshData& mesh, size_t m
             uint32_t srcIndex = mesh.indices[t * 3 + corner];
             result.positions.push_back(mesh.positions[srcIndex]);
             result.normals.push_back(mesh.normals[srcIndex]);
+            result.materialIds.push_back(mesh.materialIds[srcIndex]);
             result.indices.push_back(static_cast<uint32_t>(result.positions.size() - 1));
         }
     }
@@ -199,6 +219,7 @@ void weldVertices(EC_TerrainMeshData& mesh)
     welded.positions.reserve(mesh.positions.size());
     welded.normals.reserve(mesh.normals.size());
     welded.indices.reserve(mesh.indices.size());
+    welded.materialIds.reserve(mesh.materialIds.size());
 
     for (uint32_t oldIndex : mesh.indices) {
         glm::vec3 key = quantize(mesh.positions[oldIndex]);
@@ -210,6 +231,7 @@ void weldVertices(EC_TerrainMeshData& mesh)
         uint32_t newIndex = static_cast<uint32_t>(welded.positions.size());
         welded.positions.push_back(mesh.positions[oldIndex]);
         welded.normals.push_back(mesh.normals[oldIndex]);
+        welded.materialIds.push_back(mesh.materialIds[oldIndex]);
         welded.indices.push_back(newIndex);
         firstIndexAtPosition[key] = newIndex;
     }
@@ -238,12 +260,12 @@ constexpr int kTetraCorners[6][4] = {
 // triangle's own vertex-normal average, since the gradient-based normals are already known
 // to point outward. This matters more here, not less - the tetrahedron cases below are
 // derived from data flow, not by hand-checking each triangle's handedness.
-void emitTriangle(const EC_DensityField& field, EC_TerrainMeshData& mesh,
-    glm::vec3 p0, glm::vec3 p1, glm::vec3 p2)
+void emitTriangle(const EC_DensityField& field, const EC_MarchingCubesMesher::DensityFunction& analyticDensity,
+    EC_TerrainMeshData& mesh, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2)
 {
-    glm::vec3 n0 = computeNormal(field, p0);
-    glm::vec3 n1 = computeNormal(field, p1);
-    glm::vec3 n2 = computeNormal(field, p2);
+    glm::vec3 n0 = computeNormal(field, p0, analyticDensity);
+    glm::vec3 n1 = computeNormal(field, p1, analyticDensity);
+    glm::vec3 n2 = computeNormal(field, p2, analyticDensity);
 
     glm::vec3 windingNormal = glm::cross(p1 - p0, p2 - p0);
     glm::vec3 avgNormal = n0 + n1 + n2;
@@ -252,9 +274,9 @@ void emitTriangle(const EC_DensityField& field, EC_TerrainMeshData& mesh,
         std::swap(n1, n2);
     }
 
-    mesh.positions.push_back(p0); mesh.normals.push_back(n0);
-    mesh.positions.push_back(p1); mesh.normals.push_back(n1);
-    mesh.positions.push_back(p2); mesh.normals.push_back(n2);
+    mesh.positions.push_back(p0); mesh.normals.push_back(n0); mesh.materialIds.push_back(0);
+    mesh.positions.push_back(p1); mesh.normals.push_back(n1); mesh.materialIds.push_back(0);
+    mesh.positions.push_back(p2); mesh.normals.push_back(n2); mesh.materialIds.push_back(0);
     uint32_t base = static_cast<uint32_t>(mesh.positions.size()) - 3;
     mesh.indices.push_back(base); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
 }
@@ -264,8 +286,8 @@ void emitTriangle(const EC_DensityField& field, EC_TerrainMeshData& mesh,
 // patterns is one of exactly 3 shapes - empty, a single vertex cut off (1 or 3 corners
 // inside), or a planar quad cut (2 and 2) - so the whole case table is this direct
 // classification rather than a hardcoded 16-row lookup.
-void polygoniseTetrahedron(const EC_DensityField& field, EC_TerrainMeshData& mesh, float isoLevel,
-    const glm::vec3 p[4], const float v[4])
+void polygoniseTetrahedron(const EC_DensityField& field, const EC_MarchingCubesMesher::DensityFunction& analyticDensity,
+    EC_TerrainMeshData& mesh, float isoLevel, const glm::vec3 p[4], const float v[4])
 {
     int inside = 0;
     for (int c = 0; c < 4; c++)
@@ -287,7 +309,7 @@ void polygoniseTetrahedron(const EC_DensityField& field, EC_TerrainMeshData& mes
             if (c == apex) continue;
             cut[slot++] = vertexInterp(isoLevel, p[apex], p[c], v[apex], v[c]);
         }
-        emitTriangle(field, mesh, cut[0], cut[1], cut[2]);
+        emitTriangle(field, analyticDensity, mesh, cut[0], cut[1], cut[2]);
         return;
     }
 
@@ -306,13 +328,13 @@ void polygoniseTetrahedron(const EC_DensityField& field, EC_TerrainMeshData& mes
     glm::vec3 q01 = vertexInterp(isoLevel, p[i0], p[o1], v[i0], v[o1]);
     glm::vec3 q11 = vertexInterp(isoLevel, p[i1], p[o1], v[i1], v[o1]);
     glm::vec3 q10 = vertexInterp(isoLevel, p[i1], p[o0], v[i1], v[o0]);
-    emitTriangle(field, mesh, q00, q01, q11);
-    emitTriangle(field, mesh, q00, q11, q10);
+    emitTriangle(field, analyticDensity, mesh, q00, q01, q11);
+    emitTriangle(field, analyticDensity, mesh, q00, q11, q10);
 }
 
 } // namespace
 
-EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel)
+EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel, const DensityFunction& analyticDensity)
 {
     EC_TerrainMeshData mesh;
 
@@ -332,7 +354,7 @@ EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel)
                 for (const auto& tet : kTetraCorners) {
                     glm::vec3 tetPos[4] = { cornerPos[tet[0]], cornerPos[tet[1]], cornerPos[tet[2]], cornerPos[tet[3]] };
                     float tetVal[4] = { cornerVal[tet[0]], cornerVal[tet[1]], cornerVal[tet[2]], cornerVal[tet[3]] };
-                    polygoniseTetrahedron(field, mesh, isoLevel, tetPos, tetVal);
+                    polygoniseTetrahedron(field, analyticDensity, mesh, isoLevel, tetPos, tetVal);
                 }
             }
         }
@@ -342,17 +364,18 @@ EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel)
     return mesh;
 }
 
-std::vector<EC_TerrainMeshData> generateLODs(const EC_DensityField& field, float isoLevel, int lodCount)
+std::vector<EC_TerrainMeshData> generateLODs(const EC_DensityField& field, float isoLevel, int lodCount,
+    const DensityFunction& analyticDensity)
 {
     std::vector<EC_TerrainMeshData> lods;
     lods.reserve(std::max(lodCount, 1));
 
-    lods.push_back(polygonise(field, isoLevel));
+    lods.push_back(polygonise(field, isoLevel, analyticDensity));
 
     EC_DensityField current = field;
     for (int lod = 1; lod < lodCount; lod++) {
         current = downsample(current);
-        EC_TerrainMeshData mesh = polygonise(current, isoLevel);
+        EC_TerrainMeshData mesh = polygonise(current, isoLevel, analyticDensity);
         // Threshold scales down with the coarser grid's naturally lower triangle budget.
         size_t minTriangles = std::max<size_t>(2, static_cast<size_t>(current.interiorSize));
         lods.push_back(stripSmallComponents(mesh, minTriangles));

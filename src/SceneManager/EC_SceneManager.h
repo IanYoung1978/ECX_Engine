@@ -17,6 +17,7 @@
 
 class EC_Game;
 class ECXMessenger;
+class EC_VolumeNode;
 
 class EC_SceneManager : public ICommandListener
 {
@@ -47,6 +48,11 @@ public:
     // called from the GL/main thread.
     bool captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes);
 
+    // Forwards to m_Engine's scripting system - see EC_LuaScriptSystem::runScriptOnce/
+    // getVolumeRoot and EC_Engine's own forwarding methods.
+    bool runLuaScriptOnce(const std::string& filename);
+    std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+
     void receive(ECXCommand& command) override;
 
 private:
@@ -74,4 +80,8 @@ private:
     EC_Game* m_Game = nullptr;
     std::mutex m_Lock;
     bool m_InitialPauseDone = false;
+    // <Startup pauseOnStart="false"/> in EngineConfig.xml opts out of the auto-pause below -
+    // see its own call site for why the pause exists at all. Defaults to true (existing
+    // behaviour).
+    bool m_PauseOnStart = true;
 };

@@ -11,6 +11,7 @@ class GameEntity;
 class EC_Game;
 class EC_Event;
 class EC_EventQueue;
+class EC_VolumeNode;
 
 class EC_Engine:
 	public ICommandListener
@@ -30,6 +31,11 @@ public:
 	void stepOnce(float deltaTimeS);
 	void start();
 	void stop();
+	// Forwards to the Scripting system's own runScriptOnce()/getVolumeRoot() - see
+	// EC_LuaScriptSystem.h for what these do and why they're distinct from the normal
+	// per-frame/per-event handler scripts.
+	bool runLuaScriptOnce(const std::string& filename);
+	std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
 	~EC_Engine();
 private:
 	std::vector<std::shared_ptr<EC_System>> m_Systems;

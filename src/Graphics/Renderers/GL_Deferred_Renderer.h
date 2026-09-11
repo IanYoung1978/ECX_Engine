@@ -140,9 +140,19 @@ private:
     Shader m_EmissiveShader;
     // Flat ambient term, applied once per frame in emissivePass() (see emissivePass.frag's
     // comment for why it can't live in the per-light shaders) - this renderer has no real
-    // indirect/IBL lighting, just enough for AO to have a visible effect. Deliberately
-    // subtle; tune once visible in a real scene.
-    glm::vec3 m_AmbientColour = glm::vec3(0.03f);
+    // indirect/IBL lighting, just enough for AO to have a visible effect.
+    // Raised from the original 0.03 placeholder ("tune once visible in a real scene" - this
+    // was that moment): the voxel terrain's rolling hills, lit by one near-overhead
+    // directional light with CastsShadow=false, exposed how severe that value was. Any
+    // NonShadowDirLightPass.frag fragment past the light's terminator (dot(N,L) <= 0, which
+    // a curved ridge crosses within a few screen pixels) gets exactly this flat ambient
+    // term with NO direct-light contribution at all - at 0.03 that rendered as a hard,
+    // near-black band tracing every ridge crest, easily mistaken for a mesh/normal bug (it
+    // isn't one - both the normal and depth G-buffers were confirmed clean at that exact
+    // location). 0.03 wasn't wrong for a flat-lit test object where every visible face
+    // stays fully on one side of the terminator, but any surface with real curvature will
+    // cross it. Still deliberately subtle/moody, just not jarringly close to zero.
+    glm::vec3 m_AmbientColour = glm::vec3(0.15f);
     Shader m_BloomDownsampleShader;
     Shader m_BloomUpsampleShader;
     Shader m_PointShadowDepthShader;
