@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <memory>
+#include <string>
 #include <vector>
 #include "Engine/Subsystems/EC_System.h"
 #include "TaskManager/EC_ThreadManager.h"
@@ -27,6 +28,13 @@ public:
 
     virtual void init(ECXMessenger& messenger, EC_Game& game) override;
     virtual void update(const float& deltaTimeS, EC_Game& game) override;
+
+    // Issue #99 - must be called before init() if the caller wants a different generation
+    // script than the default below. Can't be an init() parameter without changing every
+    // EC_System's shared virtual signature, so this is a setter instead - EC_Game::init()
+    // calls it (from EngineConfig.xml's <VoxelTerrain script="...">) only when voxel terrain
+    // is actually enabled for this game.
+    void setGenerationScriptPath(const std::string& path) { m_GenerationScriptPath = path; }
 
     // Must be called before EC_ThreadManager::stop() joins the shared pool - the worker's
     // execute() loop only exits once this notifies it, otherwise the join deadlocks on a
@@ -55,6 +63,7 @@ private:
     void regenerate(EC_Game& game);
 
     std::atomic<bool> m_RegenerateRequested{ false };
+    std::string m_GenerationScriptPath = "data/scripts/LUA/TerrainGeneration.lua";
     EC_ThreadManager m_ThreadManager;
     std::shared_ptr<EC_VoxelChunkWorker> m_Worker;
     std::shared_ptr<Shader> m_ChunkShader;

@@ -89,6 +89,7 @@ public:
     // game's terrain-generation script once and retrieve the shape it authored.
     bool runLuaScriptOnce(const std::string& filename);
     std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+    ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
     // Re-runs the terrain generation script and re-schedules every existing chunk against
     // the new shape, live - see EC_VoxelChunkSystem::regenerate(). Must be called from the
     // main thread (same requirement as everything else that touches m_VoxelChunkSystem).

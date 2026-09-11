@@ -6,6 +6,7 @@
 #include <memory>
 #include <vector>
 #include "Messaging/ECXMessenger.h"
+#include "Engine/Subsystems/Scripting/EC_VolumeAPI.h"
 
 class GameEntity;
 class EC_Game;
@@ -36,6 +37,7 @@ public:
 	// per-frame/per-event handler scripts.
 	bool runLuaScriptOnce(const std::string& filename);
 	std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+	ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
 	~EC_Engine();
 private:
 	std::vector<std::shared_ptr<EC_System>> m_Systems;

@@ -56,4 +56,11 @@
 	     explicitly enabled per-machine. -->
 	<DebugHTTP enabled="false" port="8089"/>
 
+	<!-- Issue #99 - voxel terrain is opt-in (a game with no use for it gets zero side
+	     effects: no worker thread, no chunk entities, no generation work). Enabled here
+	     since this repo's own demo scene (voxelchunkdemo) uses it - `script` only says
+	     which generation script to run; chunk material/tint/grid size are configured by
+	     that script itself (see TerrainGeneration.lua and VoxelTerrainConfig). -->
+	<VoxelTerrain enabled="true" script="data/scripts/LUA/TerrainGeneration.lua"/>
+
 </EngineSettings>
