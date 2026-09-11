@@ -5,6 +5,12 @@
 	<BloomMipLevels>6</BloomMipLevels>
 	<ShadowAtlas size="4096" tileSize="2048"/>
 	<PointShadowPool size="6" faceSize="1024"/>
+	<!-- distance: how far the directional-shadow frustum reaches along the camera's view.
+	     biasScale (issue #97): scales the read-side shadow bias that avoids self-shadowing
+	     acne - see RenderConfig::dirShadowBiasScale's comment for how to retune it if this
+	     scene's scale (dirShadowDistance vs ShadowAtlas's tileSize) changes a lot from the
+	     defaults these were tuned against. 1.0 = unchanged from the tuned base values. -->
+	<DirShadow distance="50" biasScale="1.0"/>
 	<!-- Scales the intensity-weighted average colour of every active scene light into a
 	     flat ambient fill (issue #96) - not an authored colour itself, since that would go
 	     stale the moment a scene's lights change. -->

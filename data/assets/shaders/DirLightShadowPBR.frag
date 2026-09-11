@@ -42,6 +42,11 @@ uniform vec3 WSCamPos;
 // from - needed to convert a world-space bias into the right NDC offset, since the box's
 // depth range varies with the camera-fit frustum instead of being a fixed constant.
 uniform float ShadowDepthRange;
+// Author-configurable multiplier on the base bias below (issue #97, RenderConfig::
+// dirShadowBiasScale) - the base constants were tuned for one project's default scale
+// (dirShadowDistance=50, shadowAtlasTileSize=1024); a scene at a very different scale needs
+// this scaled to match, see that field's own comment for the texel-density reasoning.
+uniform float BiasScale;
 
 in xferBlock
 {
@@ -164,7 +169,7 @@ float computeOcclusion(vec4 shadowCoords, vec3 normal, vec3 lightDir)
 	// originally tuned against. A real fix (cascaded shadow maps, giving high resolution
 	// near the camera without sacrificing shadow distance) is out of scope for a bias tweak;
 	// this raises the floor enough to clean up self-shadowing at the terrain's actual scale.
-	float worldBias 	= mix(0.4, 0.05, max(dot(normal, lightDir), 0.0));
+	float worldBias 	= mix(0.4, 0.05, max(dot(normal, lightDir), 0.0)) * BiasScale;
 	float ndcBias 		= worldBias * (1.0 / max(ShadowDepthRange, 1.0));
 
 	// Software PCF: average a 3x3 neighbourhood of shadow-map texels instead of relying on
