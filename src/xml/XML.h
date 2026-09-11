@@ -392,6 +392,10 @@ namespace XML
 				const char* distance = child->Attribute("distance");
 				if (distance) settings.dirShadowDistance = std::stof(distance);
 			}
+			else if (strcmp(child->Value(), "AmbientScale") == 0 && child->GetText())
+			{
+				settings.ambientScale = std::stof(child->GetText());
+			}
 			child = child->NextSiblingElement();
 		}
 		return true;

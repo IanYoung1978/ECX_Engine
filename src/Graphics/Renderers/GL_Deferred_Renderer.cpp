@@ -130,6 +130,8 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
 {
     if (command.type == ECXCommandType::GraphicsChangeHDRExposure)
         m_Exposure = std::any_cast<float>(command.args[0]);
+    else if (command.type == ECXCommandType::GraphicsChangeAmbientScale)
+        m_AmbientScale = std::any_cast<float>(command.args[0]);
     else if (command.type == ECXCommandType::GraphicsToggleDebug)
         m_DebugRenderer.toggle();
     else if (command.type == ECXCommandType::GraphicsShowDebugRay)
@@ -161,6 +163,7 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
 void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger, const RenderConfig& config)
 {
     messenger.Subscribe(*this, ECXCommandType::GraphicsChangeHDRExposure);
+    messenger.Subscribe(*this, ECXCommandType::GraphicsChangeAmbientScale);
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
     messenger.Subscribe(*this, ECXCommandType::GraphicsShowDebugRay);
     messenger.Subscribe(*this, ECXCommandType::GraphicsShowDebugCone);
@@ -173,6 +176,7 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     m_Window = window;
     m_RenderConfig = config;
     m_Exposure = config.exposure;
+    m_AmbientScale = config.ambientScale;
     m_DebugRenderer.init(window);
     m_UIRenderer.init(window);
     m_SkyboxRenderer.init(window);
@@ -289,7 +293,7 @@ void GL_Deferred_Renderer::emissivePass()
     m_EmissiveShader.activate();
     m_FrameBuffer.LightingPass(m_EmissiveShader);
     m_EmissiveShader.setUniform("intensity", m_RenderConfig.emissiveIntensity);
-    m_EmissiveShader.setUniform("ambientColour", m_AmbientColour);
+    m_EmissiveShader.setUniform("ambientColour", m_DerivedAmbientColour * m_AmbientScale);
     glEnable(GL_BLEND);
     glBlendFunc(GL_ONE, GL_ONE);
     renderQuad();
@@ -558,6 +562,13 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
+    // Intensity-weighted running sum for the derived ambient colour (see
+    // m_DerivedAmbientColour's own comment) - accumulated across every active light below
+    // regardless of type or shadow-casting, since a point/spot-only scene should still get
+    // a sensible ambient derived from what it actually has.
+    glm::vec3 weightedColourSum(0.0f);
+    float totalWeight = 0.0f;
+
     for (EntityID entityID : scene.getLights()) {
         if (!manager.isAlive(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_Light>(entityID)) continue;
@@ -571,6 +582,8 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
         }
 
         const auto& light = manager.getComponent<EC_DOD_Light>(entityID);
+        weightedColourSum += light.colour * light.intensity;
+        totalWeight += light.intensity;
 
         if (light.type == EC_DOD_Light::Type::Directional) {
             DirLightData data;
@@ -611,6 +624,11 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
             }
         }
     }
+
+    // See m_DerivedAmbientColour's comment: white (a neutral multiplier, leaving
+    // m_AmbientScale as the only effect) when a frame has zero active lights, rather than
+    // dividing by zero.
+    m_DerivedAmbientColour = (totalWeight > 0.0f) ? (weightedColourSum / totalWeight) : glm::vec3(1.0f);
 }
 
 void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)

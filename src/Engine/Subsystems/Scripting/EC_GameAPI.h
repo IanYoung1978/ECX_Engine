@@ -29,6 +29,9 @@ namespace ScriptAPI
         void clearParent(unsigned int childID);
 
         void setExposure(float exposure);
+        // Issue #96 - scales the derived (from active scene lights, not authored) ambient
+        // colour. See GL_Deferred_Renderer.h's m_DerivedAmbientColour/m_AmbientScale.
+        void setAmbientScale(float scale);
         void toggleDebug();
         // Issue #108. Requests a window/render resolution change - see Game.h's
         // setResolution() for why this goes through a command rather than a direct call.

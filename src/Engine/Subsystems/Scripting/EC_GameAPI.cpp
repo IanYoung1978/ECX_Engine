@@ -109,6 +109,14 @@ namespace ScriptAPI
         messenger->publish(cmd);
     }
 
+    void GameAPI::setAmbientScale(float scale) {
+        if (!messenger) return;
+        ECXCommand cmd;
+        cmd.type = ECXCommandType::GraphicsChangeAmbientScale;
+        cmd.args[0] = scale;
+        messenger->publish(cmd);
+    }
+
     void GameAPI::toggleDebug() {
         if (!messenger) return;
         ECXCommand cmd;
