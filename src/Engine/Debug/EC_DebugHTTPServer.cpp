@@ -117,6 +117,54 @@ namespace {
         }
       }
     },
+    "/resize": {
+      "get": {
+        "summary": "Request a window/render resolution change (issue #108)",
+        "description": "Requests an OS-level window resize, which the engine's own resize event handler then propagates through to the G-buffer, post-processing chain, and viewport - the same single code path EC_GameAPI's Lua setResolution() uses, and the same one a user dragging the window edge triggers. The OS may clamp the requested size (e.g. larger than the display); the actual resulting size isn't returned by this endpoint - poll GET /screenshot or check the window itself to confirm.",
+        "parameters": [
+          { "name": "width", "in": "query", "required": true, "schema": { "type": "integer" } },
+          { "name": "height", "in": "query", "required": true, "schema": { "type": "integer" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Resize requested.",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+          },
+          "400": {
+            "description": "No live EC_Game, or missing width/height.",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+          }
+        }
+      }
+    },
+    "/toggleFullscreen": {
+      "get": {
+        "summary": "Toggle fullscreen (issue #108)",
+        "description": "Toggles SDL_WINDOW_FULLSCREEN_DESKTOP. Like /resize, the resulting size change flows through the engine's own resize handling automatically.",
+        "responses": {
+          "200": { "description": "Toggled.", "content": { "text/plain": { "schema": { "type": "string" } } } },
+          "400": { "description": "No live EC_Game.", "content": { "text/plain": { "schema": { "type": "string" } } } }
+        }
+      }
+    },
+    "/maximizeWindow": {
+      "get": {
+        "summary": "Maximize the window (issue #108)",
+        "responses": {
+          "200": { "description": "Requested.", "content": { "text/plain": { "schema": { "type": "string" } } } },
+          "400": { "description": "No live EC_Game.", "content": { "text/plain": { "schema": { "type": "string" } } } }
+        }
+      }
+    },
+    "/minimizeWindow": {
+      "get": {
+        "summary": "Minimize the window (issue #108)",
+        "responses": {
+          "200": { "description": "Requested.", "content": { "text/plain": { "schema": { "type": "string" } } } },
+          "400": { "description": "No live EC_Game.", "content": { "text/plain": { "schema": { "type": "string" } } } }
+        }
+      }
+    },
     "/rayQuery": {
       "get": {
         "summary": "Fire a ray query against the live world and draw it as a debug ray",
@@ -284,6 +332,53 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port, EC_Game* game
     // constructor's own parameter comment) that's already designed for cross-thread
     // access, so this handler can call straight into EC_Game from its own httplib worker
     // thread.
+    m_Server->Get("/resize", [this](const httplib::Request& req, httplib::Response& res) {
+        if (!m_Game) {
+            res.status = 400;
+            res.set_content("no live EC_Game to resize", "text/plain");
+            return;
+        }
+        if (!req.has_param("width") || !req.has_param("height")) {
+            res.status = 400;
+            res.set_content("missing required parameter(s): width, height", "text/plain");
+            return;
+        }
+        int width = static_cast<int>(paramFloat(req, "width", 0.0f));
+        int height = static_cast<int>(paramFloat(req, "height", 0.0f));
+        m_Game->setResolution(width, height);
+        res.set_content("resize requested", "text/plain");
+    });
+
+    m_Server->Get("/toggleFullscreen", [this](const httplib::Request&, httplib::Response& res) {
+        if (!m_Game) {
+            res.status = 400;
+            res.set_content("no live EC_Game to toggle fullscreen on", "text/plain");
+            return;
+        }
+        m_Game->toggleFullscreen();
+        res.set_content("fullscreen toggled", "text/plain");
+    });
+
+    m_Server->Get("/maximizeWindow", [this](const httplib::Request&, httplib::Response& res) {
+        if (!m_Game) {
+            res.status = 400;
+            res.set_content("no live EC_Game to maximize", "text/plain");
+            return;
+        }
+        m_Game->maximizeWindow();
+        res.set_content("maximize requested", "text/plain");
+    });
+
+    m_Server->Get("/minimizeWindow", [this](const httplib::Request&, httplib::Response& res) {
+        if (!m_Game) {
+            res.status = 400;
+            res.set_content("no live EC_Game to minimize", "text/plain");
+            return;
+        }
+        m_Game->minimizeWindow();
+        res.set_content("minimize requested", "text/plain");
+    });
+
     m_Server->Get("/rayQuery", [this](const httplib::Request& req, httplib::Response& res) {
         if (!m_Game) {
             res.status = 400;

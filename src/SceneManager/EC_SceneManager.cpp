@@ -228,6 +228,12 @@ bool EC_SceneManager::captureFrame(const std::string& target, std::vector<unsign
     return m_Renderer->captureFrame(target, outPNGBytes);
 }
 
+void EC_SceneManager::changeResolution(int width, int height)
+{
+    if (!m_Renderer) return;
+    m_Renderer->changeResolution(width, height);
+}
+
 bool EC_SceneManager::runLuaScriptOnce(const std::string& filename)
 {
     return m_Engine.runLuaScriptOnce(filename);

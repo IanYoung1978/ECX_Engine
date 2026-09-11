@@ -337,6 +337,10 @@ namespace XML
 				{
 					settings.windowName = std::string(child->GetText());
 				}
+				else if (strcmp(child->Value(), "Resizable") == 0)
+				{
+					settings.resizable = (strcmp(child->GetText(), "true") == 0) ? true : false;
+				}
 				else
 				{
 					return false; //malformed tag

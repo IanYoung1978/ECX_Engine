@@ -75,6 +75,15 @@ Game_Error EC_Game::run()
         {
             if (e.type == SDL_QUIT)
                 m_Running = false;
+            // SDL_WINDOWEVENT_SIZE_CHANGED fires for both a user dragging the window edge
+            // and SDL_SetWindowSize() being called programmatically (SystemChangeResolution
+            // -> GL_Deferred_Renderer::receive() -> Window::resize()) - handling it here,
+            // once, keeps a single source of truth for "the window's size actually changed"
+            // regardless of which of those triggered it (see issue #108).
+            if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                m_Window->onResized(e.window.data1, e.window.data2);
+                m_SceneManager.changeResolution(e.window.data1, e.window.data2);
+            }
             m_Controls->handleEvent(e);
         }
         m_Timer->update(*this);
@@ -281,6 +290,36 @@ void EC_Game::showDebugCone(const glm::vec3& apex, const glm::vec3& direction, f
     ECXCommand cmd;
     cmd.type = ECXCommandType::GraphicsShowDebugCone;
     cmd.args[0] = DebugConeVisualization{ apex, glm::normalize(direction), glm::radians(halfAngleDegrees), maxDistance };
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::setResolution(int width, int height)
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemChangeResolution;
+    cmd.args[0] = width;
+    cmd.args[1] = height;
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::toggleFullscreen()
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemToggleFullScreen;
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::maximizeWindow()
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemMaximiseWindow;
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::minimizeWindow()
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemMinimiseWindow;
     m_Messenger.publish(cmd);
 }
 

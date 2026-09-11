@@ -136,6 +136,26 @@ void GL_Deferred_Renderer::receive(ECXCommand& command)
         m_DebugRenderer.showRay(std::any_cast<DebugRayVisualization>(command.args[0]));
     else if (command.type == ECXCommandType::GraphicsShowDebugCone)
         m_DebugRenderer.showCone(std::any_cast<DebugConeVisualization>(command.args[0]));
+    else if (command.type == ECXCommandType::SystemChangeResolution) {
+        // Only requests the OS-level resize here - the actual G-buffer/post-process
+        // reallocation (changeResolution()) happens once Window::onResized() confirms the
+        // real resulting size via the SDL resize event, not the requested one (the OS may
+        // clamp it) - see Game.h's setResolution() comment for the full chain.
+        if (m_Window) m_Window->resize(std::any_cast<int>(command.args[0]), std::any_cast<int>(command.args[1]));
+    }
+    else if (command.type == ECXCommandType::SystemToggleFullScreen) {
+        if (m_Window) m_Window->toggleFullscreen();
+    }
+    else if (command.type == ECXCommandType::SystemMaximiseWindow) {
+        // Maximizing changes the window's pixel size just like resize()/fullscreen do, so
+        // it also fires SDL_WINDOWEVENT_SIZE_CHANGED and gets picked up by the same
+        // Window::onResized -> EC_SceneManager::changeResolution path - no separate
+        // G-buffer/viewport handling needed here.
+        if (m_Window) m_Window->maximize();
+    }
+    else if (command.type == ECXCommandType::SystemMinimiseWindow) {
+        if (m_Window) m_Window->minimize();
+    }
 }
 
 void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& messenger, const RenderConfig& config)
@@ -144,6 +164,10 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
     messenger.Subscribe(*this, ECXCommandType::GraphicsToggleDebug);
     messenger.Subscribe(*this, ECXCommandType::GraphicsShowDebugRay);
     messenger.Subscribe(*this, ECXCommandType::GraphicsShowDebugCone);
+    messenger.Subscribe(*this, ECXCommandType::SystemChangeResolution);
+    messenger.Subscribe(*this, ECXCommandType::SystemToggleFullScreen);
+    messenger.Subscribe(*this, ECXCommandType::SystemMaximiseWindow);
+    messenger.Subscribe(*this, ECXCommandType::SystemMinimiseWindow);
 
     m_Messenger = &messenger;
     m_Window = window;

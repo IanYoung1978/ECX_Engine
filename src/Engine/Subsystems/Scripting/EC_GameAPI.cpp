@@ -116,6 +116,26 @@ namespace ScriptAPI
         messenger->publish(cmd);
     }
 
+    void GameAPI::setResolution(int width, int height) {
+        if (!game) return;
+        game->setResolution(width, height);
+    }
+
+    void GameAPI::toggleFullscreen() {
+        if (!game) return;
+        game->toggleFullscreen();
+    }
+
+    void GameAPI::maximizeWindow() {
+        if (!game) return;
+        game->maximizeWindow();
+    }
+
+    void GameAPI::minimizeWindow() {
+        if (!game) return;
+        game->minimizeWindow();
+    }
+
     void GameAPI::loadScene(const std::string& alias) {
         if (game) game->loadScene(alias);
     }

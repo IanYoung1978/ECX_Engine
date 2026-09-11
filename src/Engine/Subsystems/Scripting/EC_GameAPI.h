@@ -30,6 +30,12 @@ namespace ScriptAPI
 
         void setExposure(float exposure);
         void toggleDebug();
+        // Issue #108. Requests a window/render resolution change - see Game.h's
+        // setResolution() for why this goes through a command rather than a direct call.
+        void setResolution(int width, int height);
+        void toggleFullscreen();
+        void maximizeWindow();
+        void minimizeWindow();
 
         void loadScene(const std::string& alias);
         void unloadScene(const std::string& alias);

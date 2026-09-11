@@ -66,6 +66,13 @@ bool GBuffer::init(int width, int height)
 
 void GBuffer::resize(int width, int height)
 {
+    if (width == m_Width && height == m_Height) return;
+
+    glDeleteTextures(TOTAL_BUFFERS, &m_Buffers[0]);
+    glDeleteTextures(1, &m_DepthBuffer);
+    glDeleteFramebuffers(1, &m_BufferHandle);
+
+    init(width, height);
 }
 
 void GBuffer::initFrame()
@@ -98,5 +105,9 @@ GBuffer::~GBuffer()
 {
 	glDeleteTextures(TOTAL_BUFFERS, &m_Buffers[0]);
 	glDeleteFramebuffers(1, &m_BufferHandle);
-	glDeleteRenderbuffers(1, &m_DepthBuffer);
+	// m_DepthBuffer is a texture (glGenTextures in init(), GL_DEPTH_COMPONENT32 via
+	// glTexImage2D), not a renderbuffer - glDeleteRenderbuffers on a texture handle is
+	// undefined behaviour, same class of bug as FrameBuffer::resize()'s glDeleteBuffers.
+	glDeleteTextures(1, &m_DepthBuffer);
+	delete[] m_DrawBuffers;
 }
