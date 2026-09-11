@@ -412,6 +412,7 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
         .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
         .addFunction("setExposure", &ScriptAPI::GameAPI::setExposure)
+        .addFunction("setAmbientScale", &ScriptAPI::GameAPI::setAmbientScale)
         .addFunction("setResolution", &ScriptAPI::GameAPI::setResolution)
         .addFunction("toggleFullscreen", &ScriptAPI::GameAPI::toggleFullscreen)
         .addFunction("maximizeWindow", &ScriptAPI::GameAPI::maximizeWindow)

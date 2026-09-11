@@ -5,4 +5,8 @@
 	<BloomMipLevels>6</BloomMipLevels>
 	<ShadowAtlas size="4096" tileSize="2048"/>
 	<PointShadowPool size="6" faceSize="1024"/>
+	<!-- Scales the intensity-weighted average colour of every active scene light into a
+	     flat ambient fill (issue #96) - not an authored colour itself, since that would go
+	     stale the moment a scene's lights change. -->
+	<AmbientScale>0.15</AmbientScale>
 </GraphicsSettings>
