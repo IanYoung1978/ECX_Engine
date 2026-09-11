@@ -187,6 +187,20 @@ namespace ScriptAPI
         mgr.getComponent<EC_DOD_GraphicsData>(entityID).colour = glm::vec4(r, g, b, a);
     }
 
+    float EntityAPI::getColliderRadius() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return 0.0f;
+        if (!mgr.hasComponent<EC_DOD_Collider>(entityID)) return 0.0f;
+        return mgr.getComponent<EC_DOD_Collider>(entityID).radius;
+    }
+
+    float EntityAPI::getColliderHeight() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return 0.0f;
+        if (!mgr.hasComponent<EC_DOD_Collider>(entityID)) return 0.0f;
+        return mgr.getComponent<EC_DOD_Collider>(entityID).height;
+    }
+
     // Hierarchy queries
     bool EntityAPI::hasParent() {
         auto& mgr = EC_DOD_EntityManager::getInstance();
