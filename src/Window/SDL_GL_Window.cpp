@@ -88,13 +88,17 @@ bool SDL_GL_Window::init(WindowSettings & settings)
 	}
 
 
+	Uint32 windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN;
+	if (settings.resizable)
+		windowFlags |= SDL_WINDOW_RESIZABLE;
+
 	m_Window = SDL_CreateWindow(
 		settings.windowName.c_str(),
 		SDL_WINDOWPOS_UNDEFINED,
 		SDL_WINDOWPOS_UNDEFINED,
 		settings.width,
 		settings.height,
-		SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN );
+		windowFlags );
 
 	if (m_Window == NULL)
 		return false;
@@ -124,6 +128,12 @@ void SDL_GL_Window::resize(int width, int height)
 	SDL_SetWindowSize(m_Window, width, height);
 }
 
+void SDL_GL_Window::onResized(int width, int height)
+{
+	m_Width = width;
+	m_Height = height;
+}
+
 void SDL_GL_Window::toggleFullscreen()
 {
 	if (!m_FullScreen)
@@ -138,6 +148,19 @@ void SDL_GL_Window::toggleFullscreen()
 		SDL_SetWindowFullscreen(m_Window,
 			0);
 	}
+}
+
+void SDL_GL_Window::maximize()
+{
+	// Triggers SDL_WINDOWEVENT_SIZE_CHANGED like any other resize, so the existing resize
+	// handling (Window::onResized -> EC_SceneManager::changeResolution, see issue #108)
+	// picks up the new size with no separate code path needed here.
+	SDL_MaximizeWindow(m_Window);
+}
+
+void SDL_GL_Window::minimize()
+{
+	SDL_MinimizeWindow(m_Window);
 }
 
 void SDL_GL_Window::present()

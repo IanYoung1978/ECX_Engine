@@ -38,7 +38,11 @@ bool FrameBuffer::init(int width, int height)
 
 void FrameBuffer::resize(int width, int height)
 {
-	glDeleteBuffers(1, &m_RenderTexture);
+	if (width == m_Width && height == m_Height) return;
+
+	// m_RenderTexture is a texture (glGenTextures in init()), not a buffer object -
+	// glDeleteBuffers on a texture handle is undefined behaviour.
+	glDeleteTextures(1, &m_RenderTexture);
 	glDeleteFramebuffers(1, &m_BufferHandle);
 	init(width, height);
 }
@@ -79,6 +83,6 @@ unsigned int FrameBuffer::getBufferTexture()
 
 FrameBuffer::~FrameBuffer()
 {
-	glDeleteBuffers(1,&m_RenderTexture);
+	glDeleteTextures(1, &m_RenderTexture);
 	glDeleteFramebuffers(1, &m_BufferHandle);
 }

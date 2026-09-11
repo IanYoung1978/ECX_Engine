@@ -15,4 +15,7 @@
 	     producing an inconsistent dark/discoloured fringe along terrain ridgelines that
 	     looked like a mesh or lighting bug but wasn't - both the normal and depth G-buffers
 	     were independently confirmed clean at that exact location. -->
+	<!-- Enabled to exercise/verify the runtime resize fix (issue #108) via the debug HTTP
+	     server's /resize endpoint - remove or set false if a fixed window is wanted later. -->
+	<Resizable>true</Resizable>
 </Window>

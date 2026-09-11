@@ -47,6 +47,10 @@ public:
     // Forwards to the active Renderer - see Renderer::captureFrame's own comment. Must be
     // called from the GL/main thread.
     bool captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes);
+    // Forwards to the active Renderer's changeResolution (see GL_Deferred_Renderer.cpp) -
+    // called from EC_Game::run()'s event loop once the window's own size has actually
+    // changed (see Window::onResized). Must be called from the GL/main thread.
+    void changeResolution(int width, int height);
 
     // Forwards to m_Engine's scripting system - see EC_LuaScriptSystem::runScriptOnce/
     // getVolumeRoot and EC_Engine's own forwarding methods.

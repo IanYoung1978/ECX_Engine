@@ -66,6 +66,24 @@ public:
     // publishing their own copy of the same command.
     void showDebugRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance);
     void showDebugCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees, float maxDistance);
+    // Requests a window resize (issue #108) - single code path shared by EC_GameAPI's Lua
+    // setResolution() and the debug HTTP server's GET /resize, same pattern as
+    // showDebugRay/showDebugCone above. Publishes SystemChangeResolution (an
+    // already-declared but previously-unused ECXCommandType) rather than calling the window
+    // directly, since this can be invoked from the scripting thread and SDL window calls
+    // must happen on the main/GL thread - the renderer picks the command up via its own
+    // receive() and calls Window::resize() from there. That triggers an OS resize event,
+    // which Window::onResized()/EC_Game::run()'s event loop turns into the actual
+    // GL_Deferred_Renderer::changeResolution() call once the new size is confirmed.
+    void setResolution(int width, int height);
+    // Same reasoning/pattern as setResolution() above - published as commands
+    // (SystemToggleFullScreen/SystemMaximiseWindow/SystemMinimiseWindow, all previously
+    // declared but unused) rather than called directly, since these are SDL window calls
+    // that must happen on the main/GL thread and these methods may be invoked from Lua's
+    // scripting thread via GameAPI.
+    void toggleFullscreen();
+    void maximizeWindow();
+    void minimizeWindow();
     // Forwards to the scene manager's scripting system - see EC_LuaScriptSystem::
     // runScriptOnce/getVolumeRoot. Used by EC_VoxelChunkSystem::init() to run the active
     // game's terrain-generation script once and retrieve the shape it authored.

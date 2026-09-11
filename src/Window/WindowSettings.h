@@ -13,4 +13,8 @@ public:
 	// bug independent of (but easy to conflate with) that same MSAA/blit issue.
 	bool multisampling = false;
 	int MSAALevel = 1;
+	// false unless <Resizable> is present in window.xml (see XML.h's Window parser) - a
+	// game that doesn't ask for a resizable window shouldn't get one, some may deliberately
+	// want a fixed layout.
+	bool resizable = false;
 };
