@@ -391,6 +391,8 @@ namespace XML
 			{
 				const char* distance = child->Attribute("distance");
 				if (distance) settings.dirShadowDistance = std::stof(distance);
+				const char* biasScale = child->Attribute("biasScale");
+				if (biasScale) settings.dirShadowBiasScale = std::stof(biasScale);
 			}
 			else if (strcmp(child->Value(), "AmbientScale") == 0 && child->GetText())
 			{

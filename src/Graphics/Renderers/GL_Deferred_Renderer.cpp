@@ -1120,6 +1120,10 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             // into the right NDC offset - this varies with the camera-fit frustum, unlike the
             // old fixed ~30-unit box, so it can't be a shader constant.
             m_ShadowDirLightShader.setUniform("ShadowDepthRange", activeBounds.maxZ - activeBounds.minZ);
+            // Author-configurable (RenderConfig::dirShadowBiasScale, GraphicsSetting.xml's
+            // <DirShadow biasScale="...">) - issue #97. See that field's own comment for why
+            // a fixed shader constant doesn't generalize across scenes at different scales.
+            m_ShadowDirLightShader.setUniform("BiasScale", m_RenderConfig.dirShadowBiasScale);
             m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
             glDisable(GL_BLEND);
