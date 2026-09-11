@@ -1,9 +1,24 @@
 #pragma once
 #include "Procedural/EC_VolumeNode.h"
 #include <glm/glm.hpp>
+#include <string>
 
 namespace ScriptAPI
 {
+    // Everything EC_VoxelChunkSystem needs besides the shape itself (see VolumeAPI::getRoot)
+    // to spawn/mesh/render voxel terrain - previously hardcoded C++ constants
+    // (kGridRadius, the chunk shader paths, the tint colour) in EC_VoxelChunkSystem.cpp
+    // (issue #99). Defaults here match that old hardcoded behaviour exactly, so a
+    // generation script that doesn't call setChunkMaterial()/setChunkColour()/
+    // setGridRadius() gets today's look unchanged.
+    struct VoxelTerrainConfig
+    {
+        std::string chunkVertShader = "data/assets/shaders/basic.vert";
+        std::string chunkFragShader = "data/assets/shaders/PBR.frag";
+        glm::vec4 chunkColour{ 0.5f, 0.45f, 0.35f, 1.0f };
+        int gridRadius = 1;
+    };
+
     // Lua-visible copyable wrapper around a shared_ptr<EC_VolumeNode> - registered as a
     // LuaBridge value type exactly like glm::vec3/vec4 (see EC_LuaScriptingSystem's
     // registerAPI()), so every volume.* call below can take/return it and Lua composition
@@ -43,7 +58,17 @@ namespace ScriptAPI
         void setRoot(VolumeHandle root);
         EC_VolumeNodePtr getRoot() const { return m_Root; }
 
+        // Issue #99 - author-facing config a generation script can set alongside setRoot(),
+        // instead of the engine hardcoding a chunk material/tint/grid size for every game.
+        // All optional; see VoxelTerrainConfig's own comment for the defaults used if a
+        // script doesn't call these.
+        void setChunkMaterial(const std::string& vertShader, const std::string& fragShader);
+        void setChunkColour(float r, float g, float b, float a);
+        void setGridRadius(int radius);
+        const VoxelTerrainConfig& getConfig() const { return m_Config; }
+
     private:
         EC_VolumeNodePtr m_Root;
+        VoxelTerrainConfig m_Config;
     };
 }

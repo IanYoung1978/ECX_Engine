@@ -127,6 +127,12 @@ std::shared_ptr<EC_VolumeNode> EC_Engine::getVolumeRoot() const
 	return scripting ? scripting->getVolumeRoot() : nullptr;
 }
 
+ScriptAPI::VoxelTerrainConfig EC_Engine::getVoxelTerrainConfig() const
+{
+	auto* scripting = static_cast<EC_LuaScriptSystem*>(m_Systems[(size_t)EC_SystemType::Scripting].get());
+	return scripting ? scripting->getVoxelTerrainConfig() : ScriptAPI::VoxelTerrainConfig{};
+}
+
 EC_Engine::~EC_Engine()
 {
 }

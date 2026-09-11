@@ -482,6 +482,9 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("smoothSubtract", &ScriptAPI::VolumeAPI::smoothSubtract)
         .addFunction("translate", &ScriptAPI::VolumeAPI::translate)
         .addFunction("setRoot", &ScriptAPI::VolumeAPI::setRoot)
+        .addFunction("setChunkMaterial", &ScriptAPI::VolumeAPI::setChunkMaterial)
+        .addFunction("setChunkColour", &ScriptAPI::VolumeAPI::setChunkColour)
+        .addFunction("setGridRadius", &ScriptAPI::VolumeAPI::setGridRadius)
         .endClass();
 
     auto pushResult = luabridge::push(m_luaState, m_game);
@@ -528,4 +531,8 @@ bool EC_LuaScriptSystem::runScriptOnce(const std::string& filename) {
 
 std::shared_ptr<EC_VolumeNode> EC_LuaScriptSystem::getVolumeRoot() const {
     return m_volumeAPI ? m_volumeAPI->getRoot() : nullptr;
+}
+
+ScriptAPI::VoxelTerrainConfig EC_LuaScriptSystem::getVoxelTerrainConfig() const {
+    return m_volumeAPI ? m_volumeAPI->getConfig() : ScriptAPI::VoxelTerrainConfig{};
 }

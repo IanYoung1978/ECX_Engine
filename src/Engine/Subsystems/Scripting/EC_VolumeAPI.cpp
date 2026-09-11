@@ -27,4 +27,17 @@ namespace ScriptAPI
     VolumeHandle VolumeAPI::translate(VolumeHandle a, const glm::vec3& offset) { return { EC_Volume::translate(a.node, offset) }; }
 
     void VolumeAPI::setRoot(VolumeHandle root) { m_Root = root.node; }
+
+    void VolumeAPI::setChunkMaterial(const std::string& vertShader, const std::string& fragShader) {
+        m_Config.chunkVertShader = vertShader;
+        m_Config.chunkFragShader = fragShader;
+    }
+
+    void VolumeAPI::setChunkColour(float r, float g, float b, float a) {
+        m_Config.chunkColour = glm::vec4(r, g, b, a);
+    }
+
+    void VolumeAPI::setGridRadius(int radius) {
+        m_Config.gridRadius = radius;
+    }
 }

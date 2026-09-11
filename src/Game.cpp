@@ -45,7 +45,17 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
 
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
-    m_VoxelChunkSystem.init(m_Messenger, *this);
+
+    // Issue #99 - voxel terrain is opt-in: a game that doesn't enable it gets zero side
+    // effects (no worker thread, no chunk entities, no generation work), matching
+    // DebugHTTPSettings' own "off unless explicitly requested" pattern just above.
+    XML::VoxelTerrainSettings voxelTerrainSettings;
+    XML::loadVoxelTerrainSettings(m_SceneManager.getEngineConfigPath(), voxelTerrainSettings);
+    if (voxelTerrainSettings.enabled)
+    {
+        m_VoxelChunkSystem.setGenerationScriptPath(voxelTerrainSettings.script);
+        m_VoxelChunkSystem.init(m_Messenger, *this);
+    }
 
     XML::DebugHTTPSettings debugHttpSettings;
     XML::loadDebugHTTPSettings(m_SceneManager.getEngineConfigPath(), debugHttpSettings);
@@ -331,6 +341,11 @@ bool EC_Game::runLuaScriptOnce(const std::string& filename)
 std::shared_ptr<EC_VolumeNode> EC_Game::getVolumeRoot() const
 {
     return m_SceneManager.getVolumeRoot();
+}
+
+ScriptAPI::VoxelTerrainConfig EC_Game::getVoxelTerrainConfig() const
+{
+    return m_SceneManager.getVoxelTerrainConfig();
 }
 
 void EC_Game::regenerateTerrain()

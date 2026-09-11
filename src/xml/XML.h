@@ -239,6 +239,47 @@ namespace XML
 		return true;
 	}
 
+	// EngineConfig.xml's <VoxelTerrain enabled="" script=""/> - issue #99: this whole
+	// subsystem (a background worker thread, a grid of chunk entities, generation work)
+	// used to run unconditionally for every game regardless of whether it wanted voxel
+	// terrain at all. Defaults to disabled on any missing file/section/attribute, matching
+	// DebugHTTPSettings' own "never turn on unexpectedly" reasoning - though unlike
+	// DebugHTTP this gates a gameplay-visible feature, not just a dev tool, so an author
+	// must always opt in explicitly. `script` only needs to say WHICH generation script to
+	// run - everything else content-configurable (chunk material, tint, grid size) is set
+	// by that script itself via the volume.* Lua API (see VoxelTerrainConfig), not more XML
+	// attributes here.
+	struct VoxelTerrainSettings
+	{
+		bool enabled = false;
+		std::string script = "data/scripts/LUA/TerrainGeneration.lua";
+	};
+
+	inline bool loadVoxelTerrainSettings(const std::string& file, VoxelTerrainSettings& outSettings)
+	{
+		outSettings = VoxelTerrainSettings{};
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto voxelTerrain = root->FirstChildElement("VoxelTerrain");
+		if (!voxelTerrain)
+			return true;
+
+		const char* enabledAttr = voxelTerrain->Attribute("enabled");
+		if (enabledAttr)
+			outSettings.enabled = (strcmp(enabledAttr, "true") == 0);
+		const char* scriptAttr = voxelTerrain->Attribute("script");
+		if (scriptAttr)
+			outSettings.script = scriptAttr;
+
+		return true;
+	}
+
 	// EngineConfig.xml's <Startup pauseOnStart=""/> - whether EC_SceneManager::update()
 	// auto-pauses the engine right after the first scene finishes loading (see that call
 	// site's own comment for why that pause exists at all). Defaults to true (existing

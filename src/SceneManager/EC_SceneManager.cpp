@@ -244,6 +244,11 @@ std::shared_ptr<EC_VolumeNode> EC_SceneManager::getVolumeRoot() const
     return m_Engine.getVolumeRoot();
 }
 
+ScriptAPI::VoxelTerrainConfig EC_SceneManager::getVoxelTerrainConfig() const
+{
+    return m_Engine.getVoxelTerrainConfig();
+}
+
 void EC_SceneManager::activateSceneByIndex(size_t index)
 {
     size_t previous = m_ActiveScene;

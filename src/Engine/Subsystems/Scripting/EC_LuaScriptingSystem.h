@@ -6,6 +6,7 @@
 #include <memory>
 #include "Engine/Subsystems/EC_System.h"
 #include "Messaging/IEventListener.h"
+#include "Engine/Subsystems/Scripting/EC_VolumeAPI.h"
 
 // Forward declarations only - the Lua/luabridge headers and the ScriptAPI
 // wrapper classes are only needed by the .cpp's method bodies, not by this
@@ -37,6 +38,10 @@ public:
     // Valid only after runScriptOnce() on a script that called volume.setRoot(...) - null
     // otherwise. See EC_VolumeAPI::setRoot/getRoot.
     std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+    // Bundles everything else EC_VoxelChunkSystem needs besides the shape itself (issue
+    // #99) - see VoxelTerrainConfig's own comment. Returns the struct's defaults if no
+    // script has run yet.
+    ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
 
 private:
     std::atomic<bool> m_shuttingDown{ false };

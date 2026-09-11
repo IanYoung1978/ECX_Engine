@@ -8,19 +8,13 @@
 #include "Graphics/Models/ObjModel.h"
 #include "Graphics/Shaders/Shader.h"
 #include "Logging/ECX_Logging.h"
+#include "Engine/Subsystems/Scripting/EC_VolumeAPI.h"
 
 namespace {
-    // Small fixed grid, one Y layer - enough to prove multiple chunks stitch together
-    // seamlessly without a distance-based streaming trigger yet (deferred to a later
-    // slice, along with LOD).
-    constexpr int kGridRadius = 1; // chunks from -1..1 in X and Z => 3x3
-
     // Chunks finishing several at once (e.g. right after startup) would spike a frame if
     // all uploaded in one go - matches the throttling rationale behind
     // EC_DOD_EntityFactory::finalizePendingGraphics(maxPerCall).
     constexpr int kMaxUploadsPerFrame = 2;
-
-    constexpr const char* kTerrainScript = "data/scripts/LUA/TerrainGeneration.lua";
 }
 
 EC_VoxelChunkSystem::EC_VoxelChunkSystem() {
@@ -35,23 +29,31 @@ void EC_VoxelChunkSystem::shutdown() {
 }
 
 void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
+    m_Worker = std::make_shared<EC_VoxelChunkWorker>();
+    // Run the generation script first (issue #99): besides building the density shape
+    // (setRoot), it can also configure the chunk material/tint/grid size below via
+    // volume.setChunkMaterial()/setChunkColour()/setGridRadius() - see VoxelTerrainConfig's
+    // own comment for the defaults used if it doesn't.
+    loadVolumeScript(game);
+    ScriptAPI::VoxelTerrainConfig config = game.getVoxelTerrainConfig();
+
     m_ChunkShader = std::make_shared<Shader>();
-    if (!m_ChunkShader->loadShader("data/assets/shaders/basic.vert", "data/assets/shaders/PBR.frag")) {
+    if (!m_ChunkShader->loadShader(config.chunkVertShader, config.chunkFragShader)) {
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "EC_VoxelChunkSystem: failed to load chunk shader", LOGGING::LogLevel::CRITICAL);
         return;
     }
-
-    m_Worker = std::make_shared<EC_VoxelChunkWorker>();
-    loadVolumeScript(game);
 
     m_ThreadManager.addTask(m_Worker);
     m_ThreadManager.executeTasks();
 
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    for (int x = -kGridRadius; x <= kGridRadius; x++) {
-        for (int z = -kGridRadius; z <= kGridRadius; z++) {
+    // One Y layer, radius from config (was a fixed 3x3 - kGridRadius=1 - just enough to
+    // prove multiple chunks stitch together seamlessly; distance-based streaming and LOD
+    // are still a later slice regardless of grid size).
+    for (int x = -config.gridRadius; x <= config.gridRadius; x++) {
+        for (int z = -config.gridRadius; z <= config.gridRadius; z++) {
             glm::ivec3 coord(x, 0, z);
 
             EntityID entity = manager.createEntity();
@@ -65,7 +67,7 @@ void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
 
             EC_DOD_GraphicsData gfx;
             gfx.shader = m_ChunkShader;
-            gfx.colour = glm::vec4(0.5f, 0.45f, 0.35f, 1.0f);
+            gfx.colour = config.chunkColour;
             manager.addComponent(entity, gfx);
 
             EC_DOD_VoxelChunk chunk;
@@ -99,9 +101,9 @@ void EC_VoxelChunkSystem::loadVolumeScript(EC_Game& game) {
     // EC_LuaScriptSystem's shared lua_State always executes on - so this is safe even
     // though EC_VoxelChunkWorker::execute() runs on a background thread afterward; the tree
     // itself is pure/stateless once built (see EC_VolumeNode's own comment).
-    if (!game.runLuaScriptOnce(kTerrainScript)) {
+    if (!game.runLuaScriptOnce(m_GenerationScriptPath)) {
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
-            "EC_VoxelChunkSystem: failed to run " + std::string(kTerrainScript) + " - chunks will generate as empty space",
+            "EC_VoxelChunkSystem: failed to run " + m_GenerationScriptPath + " - chunks will generate as empty space",
             LOGGING::LogLevel::SEVERE);
     }
     m_Worker->setVolumeRoot(game.getVolumeRoot());
@@ -123,7 +125,7 @@ void EC_VoxelChunkSystem::regenerate(EC_Game& game) {
     }
 
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
-        "EC_VoxelChunkSystem: regenerating " + std::to_string(m_ChunkEntities.size()) + " chunks from " + kTerrainScript,
+        "EC_VoxelChunkSystem: regenerating " + std::to_string(m_ChunkEntities.size()) + " chunks from " + m_GenerationScriptPath,
         LOGGING::LogLevel::INFORMATION);
 }
 

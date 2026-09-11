@@ -56,6 +56,7 @@ public:
     // getVolumeRoot and EC_Engine's own forwarding methods.
     bool runLuaScriptOnce(const std::string& filename);
     std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
+    ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
 
     void receive(ECXCommand& command) override;
 
