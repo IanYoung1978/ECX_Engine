@@ -9,6 +9,7 @@ enum class EC_SystemType
 	AI,
 	Animation,
 	Particle,
+	Audio,
 	Network,
 	Scripting,
 	Num_Systems

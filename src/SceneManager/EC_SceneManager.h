@@ -58,6 +58,12 @@ public:
     std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
     ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
 
+    // Forwards to m_Engine's Audio system - see EC_AudioSystem.h.
+    void playSound(const std::string& path, float volume, const std::string& category);
+    void playMusic(const std::string& path, float volume, bool loop);
+    void stopMusic();
+    void setCategoryVolume(const std::string& category, float volume);
+
     void receive(ECXCommand& command) override;
 
 private:

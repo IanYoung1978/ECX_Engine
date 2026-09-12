@@ -94,6 +94,13 @@ public:
     // the new shape, live - see EC_VoxelChunkSystem::regenerate(). Must be called from the
     // main thread (same requirement as everything else that touches m_VoxelChunkSystem).
     void regenerateTerrain();
+    // Forwards to the scene manager's Audio system - see EC_AudioSystem.h. miniaudio's own
+    // API is thread-safe, so unlike toggleFullscreen()/etc above these are safe to call
+    // directly from GameAPI on the scripting thread without an ECXCommand-publish hop.
+    void playSound(const std::string& path, float volume, const std::string& category);
+    void playMusic(const std::string& path, float volume, bool loop);
+    void stopMusic();
+    void setCategoryVolume(const std::string& category, float volume);
     float getFPS() const { return m_Timer->getFPS(); }
     float getMSPF() const { return m_Timer->getMSPF(); }
     EntityID getEntityByUID(uint32_t uid) const;

@@ -348,6 +348,26 @@ ScriptAPI::VoxelTerrainConfig EC_Game::getVoxelTerrainConfig() const
     return m_SceneManager.getVoxelTerrainConfig();
 }
 
+void EC_Game::playSound(const std::string& path, float volume, const std::string& category)
+{
+    m_SceneManager.playSound(path, volume, category);
+}
+
+void EC_Game::playMusic(const std::string& path, float volume, bool loop)
+{
+    m_SceneManager.playMusic(path, volume, loop);
+}
+
+void EC_Game::stopMusic()
+{
+    m_SceneManager.stopMusic();
+}
+
+void EC_Game::setCategoryVolume(const std::string& category, float volume)
+{
+    m_SceneManager.setCategoryVolume(category, volume);
+}
+
 void EC_Game::regenerateTerrain()
 {
     m_VoxelChunkSystem.requestRegenerate();

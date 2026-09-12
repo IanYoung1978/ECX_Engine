@@ -6,6 +6,7 @@
 #include "Procedural/EC_VolumeNode.h"
 #include "Engine/Subsystems/CollisionSystems/EC_CollisionSystem.h"
 #include "Engine/Subsystems/CollisionSystems/EC_PhysicsSystem.h"
+#include "Engine/Subsystems/Audio/EC_AudioSystem.h"
 #include "TaskManager/EC_PhysicsThreadTask.h"
 #include "TaskManager/EC_ScriptingTask.h"
 #include "xml/XML.h"
@@ -26,6 +27,7 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	m_Systems[(size_t)EC_SystemType::Collision] = std::make_shared<EC_CollisionSystem>();
 	m_Systems[(size_t)EC_SystemType::Physics] = std::make_shared<EC_PhysicsSystem>();
 	m_Systems[(size_t)EC_SystemType::Scripting] = std::make_shared<EC_LuaScriptSystem>();
+	m_Systems[(size_t)EC_SystemType::Audio] = std::make_shared<EC_AudioSystem>();
 
 	for (auto s : m_Systems)
 	{
@@ -55,6 +57,13 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Transform]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Camera]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Scripting]);
+	// Audio's update() is just cheap bookkeeping (reaping finished one-shot sounds) - the
+	// actual mixing/playback already runs on miniaudio's own dedicated engine thread
+	// regardless of which thread calls into EC_AudioSystem, so it just needs to be
+	// somewhere that gets ticked every frame; this task is the only such place (see
+	// EC_SceneManager::update()'s single stepOnce() call - untasked systems otherwise
+	// never update after the initial-pause priming frame).
+	task->addSystem(m_Systems[(size_t)EC_SystemType::Audio]);
 	// Collision + Physics are substepped instead - see
 	// EC_PhysicsThreadTask::setSubstepCount for why (stacking stability:
 	// the same fix Box2D v3/Rapier use for marginal-equilibrium creep).
@@ -131,6 +140,31 @@ ScriptAPI::VoxelTerrainConfig EC_Engine::getVoxelTerrainConfig() const
 {
 	auto* scripting = static_cast<EC_LuaScriptSystem*>(m_Systems[(size_t)EC_SystemType::Scripting].get());
 	return scripting ? scripting->getVoxelTerrainConfig() : ScriptAPI::VoxelTerrainConfig{};
+}
+
+EC_AudioSystem* EC_Engine::getAudioSystem() const
+{
+	return static_cast<EC_AudioSystem*>(m_Systems[(size_t)EC_SystemType::Audio].get());
+}
+
+void EC_Engine::playSound(const std::string& path, float volume, const std::string& category)
+{
+	if (auto* audio = getAudioSystem()) audio->playSound(path, volume, category);
+}
+
+void EC_Engine::playMusic(const std::string& path, float volume, bool loop)
+{
+	if (auto* audio = getAudioSystem()) audio->playMusic(path, volume, loop);
+}
+
+void EC_Engine::stopMusic()
+{
+	if (auto* audio = getAudioSystem()) audio->stopMusic();
+}
+
+void EC_Engine::setCategoryVolume(const std::string& category, float volume)
+{
+	if (auto* audio = getAudioSystem()) audio->setCategoryVolume(category, volume);
 }
 
 EC_Engine::~EC_Engine()
