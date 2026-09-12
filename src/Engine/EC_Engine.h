@@ -13,6 +13,7 @@ class EC_Game;
 class EC_Event;
 class EC_EventQueue;
 class EC_VolumeNode;
+class EC_AudioSystem;
 
 class EC_Engine:
 	public ICommandListener
@@ -38,8 +39,14 @@ public:
 	bool runLuaScriptOnce(const std::string& filename);
 	std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
 	ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
+	// Forwards to the Audio system - see EC_AudioSystem.h for what each call does.
+	void playSound(const std::string& path, float volume, const std::string& category);
+	void playMusic(const std::string& path, float volume, bool loop);
+	void stopMusic();
+	void setCategoryVolume(const std::string& category, float volume);
 	~EC_Engine();
 private:
+	EC_AudioSystem* getAudioSystem() const;
 	std::vector<std::shared_ptr<EC_System>> m_Systems;
 	std::vector<std::shared_ptr<EC_SystemTask>> m_tasks;
 	EC_Game* m_game;

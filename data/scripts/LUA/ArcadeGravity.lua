@@ -45,6 +45,15 @@ local MIN_STANDING_NORMAL_Y = 0.3 -- how "upward-facing" a contact normal must b
 
 local LOG_INTERVAL = 0.5 -- throttled so this doesn't spam the log at 60+ lines/sec
 
+-- Audio test hooks (Issue #112) - this demo scene doubles as the manual verification
+-- vehicle for the new audio subsystem, since it already has a controllable capsule and no
+-- other script is a better fit: OnKeyHeld.lua only sees raw WASD presses, not the resulting
+-- grounded/horizontal-distance state this script already tracks per-entity.
+local musicStarted = false -- fires once, first update() of the whole scene
+local STEP_DISTANCE = 2.2 -- world units of horizontal travel between footstep sounds -
+                           -- tuned by ear against the capsule's OnKeyHeld move speed (5.0/s)
+                           -- to sound like a walking cadence, not a machine-gun of steps
+
 -- Hysteresis on LEAVING grounded state only (entering is instant - see update() below).
 -- On genuinely rough/overhung terrain (this demo's was deliberately carved with
 -- smoothSubtract to have real 3D structure, not just a heightmap), the single nearest
@@ -81,6 +90,8 @@ local function getState(entityId, entity)
             fallSpeed = 0.0, grounded = false, ungroundedStreak = 0, logTimer = 0.0,
             capsuleRadius = entity:getColliderRadius(),
             capsuleHalfHeight = entity:getColliderHeight() * 0.5,
+            distanceSinceStep = 0.0,
+            lastX = nil, lastZ = nil,
         }
         states[entityId] = s
     end
@@ -92,6 +103,31 @@ function update(entity, deltaTime)
     local state = getState(entityId, entity)
     local pos = entity:getPosition()
     local wasGrounded = state.grounded
+
+    if not musicStarted then
+        musicStarted = true
+        game:playMusic("data/assets/Sounds/mystic_theme.mp3", 0.5, true)
+    end
+
+    -- Footsteps: horizontal distance actually travelled this frame (not raw input) so
+    -- bumping into a wall doesn't keep triggering steps, and only while grounded so falling/
+    -- jumping doesn't. lastX/lastZ start nil (position not yet known on the very first
+    -- frame) rather than 0 so that frame can't be mistaken for a real, possibly huge, step.
+    if state.lastX ~= nil then
+        local dx = pos.x - state.lastX
+        local dz = pos.z - state.lastZ
+        if state.grounded then
+            state.distanceSinceStep = state.distanceSinceStep + math.sqrt(dx * dx + dz * dz)
+            if state.distanceSinceStep >= STEP_DISTANCE then
+                state.distanceSinceStep = state.distanceSinceStep - STEP_DISTANCE
+                game:playSound("data/assets/Sounds/stepdirt_1.wav", 0.6, "sfx")
+            end
+        else
+            state.distanceSinceStep = 0.0
+        end
+    end
+    state.lastX = pos.x
+    state.lastZ = pos.z
 
     if state.grounded then
         state.fallSpeed = STICK_SPEED

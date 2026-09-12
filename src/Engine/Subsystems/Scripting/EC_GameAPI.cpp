@@ -334,6 +334,26 @@ namespace ScriptAPI
         return m_LastCapsuleHits[index].distance;
     }
 
+    void GameAPI::playSound(const std::string& path, float volume, const std::string& category) {
+        if (!game) return;
+        game->playSound(path, volume, category);
+    }
+
+    void GameAPI::playMusic(const std::string& path, float volume, bool loop) {
+        if (!game) return;
+        game->playMusic(path, volume, loop);
+    }
+
+    void GameAPI::stopMusic() {
+        if (!game) return;
+        game->stopMusic();
+    }
+
+    void GameAPI::setCategoryVolume(const std::string& category, float volume) {
+        if (!game) return;
+        game->setCategoryVolume(category, volume);
+    }
+
     void GameAPI::updateDepth(EntityID entity, uint32_t depth) {
         auto& mgr = EC_DOD_EntityManager::getInstance();
         if (!mgr.hasComponent<EC_DOD_Hierarchy>(entity)) return;
