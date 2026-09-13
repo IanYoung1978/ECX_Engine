@@ -64,7 +64,9 @@ end
 function onCollisionBegin(entity, event)
     local a = event:getCollisionEntityA()  -- Numeric entity ID of one participant
     local b = event:getCollisionEntityB()  -- Numeric entity ID of the other participant
-    -- Compare against entity:getID() to work out which one is "the other guy"
+    -- Compare against entity:getID() to work out which one is "the other guy", or just:
+    local otherID = event:getOtherEntityID()          -- Does that comparison for you
+    local otherUID = event:entityIdToUID(otherID)     -- Numeric ID -> persistent UID (survives saves/reloads)
 end
 
 function onCollisionEnd(entity, event)
@@ -156,6 +158,79 @@ entity:setColour(r, g, b, a)               -- a is optional, defaults to 1.0
 
 local blend = entity:getBlendFactor()      -- Skybox entities only; 0-1
 entity:setBlendFactor(factor)              -- Clamped to 0-1
+
+-- EC_DOD_GraphicsData - all 0/false on an entity with no GraphicsData component
+local visible = entity:isVisible()             -- Pure render toggle - distinct from activate()/
+entity:setVisible(false)                       -- deactivate() above, which also gates physics/collision/logic
+
+local emissive = entity:getEmissiveIntensity()  -- Glow strength (pickups, power-state feedback)
+entity:setEmissiveIntensity(2.0)
+
+local castsShadow = entity:getCastsShadow()       -- Per-instance shadow casting toggle
+entity:setCastsShadow(false)
+local receivesShadow = entity:getReceivesShadow() -- Per-instance shadow receiving toggle
+entity:setReceivesShadow(false)
+
+-- EC_DOD_Skybox - degrees, rotation about world Y. Aligns the HDR panorama's baked-in sun
+-- with the scene's actual directional light direction (e.g. a script-driven day/night
+-- cycle) without re-exporting the HDR asset itself.
+local rot = entity:getSkyboxRotation()
+entity:setSkyboxRotation(45.0)
+```
+
+### Camera (EC_DOD_Camera)
+
+```lua
+-- All 0/false on an entity with no Camera component
+local fov = entity:getFOV()
+entity:setFOV(75.0)
+local nearPlane = entity:getNearPlane()
+entity:setNearPlane(0.1)
+local farPlane = entity:getFarPlane()
+entity:setFarPlane(500.0)
+
+-- isCameraActive is exactly the flag the renderer checks to decide which camera(s) to draw
+-- from - switching cameras (cutscene cuts, security-cam mechanics) is just flipping this on
+-- the new one and off the old one; no separate "set active camera" call needed.
+local active = entity:isCameraActive()
+entity:setCameraActive(true)
+```
+
+### Lights (EC_DOD_Light)
+
+```lua
+-- All 0/false/(1,1,1) fallback on an entity with no Light component
+local colour = entity:getLightColour()      -- vec3
+entity:setLightColour(1.0, 0.5, 0.2)
+local intensity = entity:getLightIntensity()
+entity:setLightIntensity(2.0)
+
+-- direction is a SEPARATE field from orientation/getForward above - see the component's
+-- own comment - so spotlight sweeps need this rather than the regular orientation setter.
+local dir = entity:getLightDirection()      -- vec3
+entity:setLightDirection(0.0, -1.0, 0.0)
+
+local castsShadow = entity:getLightCastsShadow()
+entity:setLightCastsShadow(true)
+```
+
+### Collider (EC_DOD_Collider)
+
+```lua
+local radius = entity:getColliderRadius()   -- 0 on an entity with no Collider component
+local height = entity:getColliderHeight()   -- (Sphere/Capsule/Cylinder types)
+
+local center = entity:getColliderCenter()   -- vec3, local-space offset
+entity:setColliderCenter(0.0, 1.0, 0.0)
+local extents = entity:getColliderExtents() -- vec3, half-size for AABB/OBB types
+entity:setColliderExtents(1.0, 2.0, 1.0)
+
+-- Bitmask layer/mask - authored once in XML normally, but runtime-mutable here for
+-- phasing/ghost-mode/"bullet ignores the shooter" patterns.
+local layer = entity:getCollisionLayer()
+entity:setCollisionLayer(2)
+local mask = entity:getCollisionMask()
+entity:setCollisionMask(0xFFFFFFFF)
 ```
 
 ### Hierarchy
@@ -165,9 +240,23 @@ local hasParent = entity:hasParent()       -- true if attached to a parent
 local parentID = entity:getParentID()      -- Numeric ID, 0 if none
 local depth = entity:getDepth()            -- Nesting depth (0 = root)
 
+-- Walking down instead of up:
+local childCount = entity:getChildCount()
+local firstChildID = entity:getChildID(0)  -- 0-based index
+
 -- Set via the game API, not on the entity itself:
 game:setParent(childID, parentID)
 game:clearParent(childID)
+```
+
+### Script Enable/Disable
+
+```lua
+-- EC_DOD_ScriptData::enabled - suppresses THIS entity's own event handlers (OnUpdate/
+-- OnKeyDown/etc) without touching activate()/deactivate() above, e.g. a stunned/frozen
+-- state that should keep rendering/colliding but stop reacting to input.
+local scriptsOn = entity:isScriptEnabled()
+entity:setScriptEnabled(false)
 ```
 
 ### Script Variables (Persistent State)
@@ -183,6 +272,14 @@ local state = entity:getString("state", "idle")  -- Default: "idle"
 ```
 
 ---
+
+## vec2 API
+
+```lua
+local v = vec2(1.0, 2.0)
+local x, y = v.x, v.y
+v.x = 5.0
+```
 
 ## vec3 API
 
@@ -227,7 +324,9 @@ local entity = game:getEntityIDByUID(uid)           -- Returns numeric entity ID
 ### System
 
 ```lua
-game:shutdown()  -- Cleanly stop the engine (publishes SystemShutdown)
+game:shutdown()      -- Cleanly stop the engine (publishes SystemShutdown)
+game:pauseGame()     -- Freeze the per-tick update loop (see Startup pauseOnStart in EngineConfig.xml)
+game:resumeGame()    -- Resume it
 ```
 
 ### Input
@@ -235,6 +334,21 @@ game:shutdown()  -- Cleanly stop the engine (publishes SystemShutdown)
 ```lua
 local state = game:getKeyState("W")  -- Returns KeyState int: 0=None, 1=Pressed, 2=Held, 3=Released, -1=Invalid
 game:setMouseCaptured(true)          -- true = relative/FPS mouse mode (hidden, locked); false = free cursor for UI
+
+-- Polling-style, distinct from the event-driven Event API above (which only reports
+-- something inside a handler firing this frame) - use these from update(entity, dt) to just
+-- ask "where's the mouse / is this button down right now" without waiting for an event.
+local pos = game:getMousePosition()             -- vec2, screen-space pixels
+local lmbDown = game:isMouseButtonPressed(0)    -- Same int convention as Event:getMouseButton() (0=LMB, 1=RMB, 2=Middle, 3=MB4, 4=MB5)
+```
+
+### Window
+
+```lua
+game:setResolution(1920, 1080)  -- Requests a window/render resolution change
+game:toggleFullscreen()
+game:maximizeWindow()
+game:minimizeWindow()
 ```
 
 ### Hierarchy
@@ -250,13 +364,24 @@ game:clearParent(childID)          -- Detach childID from its parent, resetting 
 game:loadScene("alias")      -- Begin loading a scene by its Scenes.xml alias
 game:unloadScene("alias")    -- Unload a loaded scene
 game:activateScene("alias")  -- Make a loaded scene the active one
+local active = game:isSceneActive("alias")  -- Query current state instead of tracking it yourself
 ```
 
 ### Graphics
 
 ```lua
-game:setExposure(0.75)  -- Set HDR tonemap exposure
-game:toggleDebug()       -- Toggle collider wireframe debug rendering
+game:setExposure(0.75)      -- Set HDR tonemap exposure
+game:setAmbientScale(1.0)   -- Scales the derived (from active scene lights) ambient colour
+game:toggleDebug()          -- Toggle collider wireframe debug rendering
+```
+
+### Terrain
+
+```lua
+-- Re-runs the terrain generation script and re-schedules every existing voxel chunk
+-- against the new shape, live. Safe to call from any script context; takes effect on the
+-- next chunk-system update tick. See the `volume` API below for authoring the shape itself.
+game:regenerateTerrain()
 ```
 
 ### UI (Issue #6)
@@ -343,6 +468,32 @@ for i = 0, n - 1 do
 end
 ```
 
+### Capsule Queries
+
+Real capsule-vs-scene-geometry overlap query - includes real Mesh/terrain collision, not a
+raycast stand-in. Static overlap test, not a sweep: `getCapsuleHitDistance` returns
+penetration depth, and `getCapsuleHitNormal` points away from the capsule toward whatever
+it's touching. Same paginated-getter pattern as ray/cone queries above.
+
+```lua
+local n = game:capsuleQuery(ax, ay, az, bx, by, bz, radius, firstHitOnly, excludeEntityId)
+-- ax,ay,az / bx,by,bz = capsule segment endpoints (world space)
+-- radius              = capsule radius
+-- firstHitOnly        = optional, default false
+-- excludeEntityId     = optional, default 0 (INVALID_ENTITY) - skips one entity (e.g. the
+--                        capsule's own owner) so it doesn't find itself
+
+for i = 0, n - 1 do
+    local ent  = game:getCapsuleHitEntity(i)
+    local pos  = game:getCapsuleHitPosition(i)
+    local nrm  = game:getCapsuleHitNormal(i)
+    local dist = game:getCapsuleHitDistance(i)  -- penetration depth, NOT travel distance
+end
+```
+
+This is the technique `ArcadeGravity.lua` uses for ground snapping - see that script for a
+complete worked example (ground detection, hysteresis on leaving grounded state, etc).
+
 ### Debug Visualization
 
 Draws a wireframe for the last ray/cone query fired from script - useful to sanity-check
@@ -352,6 +503,69 @@ until replaced by another call.
 ```lua
 game:showDebugRay(ox, oy, oz, dx, dy, dz, maxDistance)                     -- yellow line
 game:showDebugCone(ax, ay, az, dx, dy, dz, halfAngleDegrees, maxDistance)  -- magenta wireframe cone
+```
+
+### Audio (Issue #112)
+
+Two complementary playback mechanisms sharing the same named volume categories: one-shots
+for transient effects that can freely overlap (footsteps, impacts - no handle to manage),
+and a single persistent slot for background music.
+
+```lua
+game:playSound("data/assets/Sounds/stepdirt_1.wav", 0.6, "sfx")  -- Fire-and-forget one-shot
+game:playMusic("data/assets/Sounds/mystic_theme.mp3", 0.5, true) -- Persistent BGM slot (loop=true); replaces any currently-playing track
+game:stopMusic()
+
+-- category is any author-chosen name ("sfx", "music", ...) plus the reserved "master" name
+-- for the engine's overall volume. Created on first use at full volume if it doesn't exist.
+game:setCategoryVolume("sfx", 0.8)
+game:setCategoryVolume("master", 1.0)
+```
+
+See `ArcadeGravity.lua` for a worked example: BGM autoplay on first scene tick, footsteps
+triggered by real horizontal travel distance while grounded (not raw key input).
+
+### Volume / Terrain Authoring (Issue #99)
+
+A one-shot authoring toolbox for building the voxel terrain's density shape - run once by
+the terrain generation script (see `EngineConfig.xml`'s `<VoxelTerrain script="...">`), not
+a per-frame API. `volume` is a single global instance, called with `:` (not `.`); every
+function returns/takes an opaque `VolumeHandle`. See `TerrainGeneration.lua` for a complete
+real example (rolling hills carved out of a box via noise + smoothSubtract).
+
+```lua
+-- Primitive shapes - vec3 arguments, not separate x/y/z floats
+local s = volume:sphere(vec3(0, 0, 0), radius)
+local b = volume:box(center, halfExtents)                    -- vec3 center, vec3 half-extents
+local h = volume:halfspace(pointOnPlane, normal)              -- infinite plane - see
+                                                                -- TerrainGeneration.lua for
+                                                                -- why this must never be the
+                                                                -- base shape (unbounded in
+                                                                -- the two axes along the plane)
+local c = volume:cylinder(pointA, pointB, radius)              -- capsule-style: axis endpoints, not center+height
+local n = volume:noise(frequency, octaves, lacunarity, persistence)  -- octaves is an int
+local k = volume:constant(value)
+
+-- Combinators - ordinary (hard-edged) and smooth (blended) boolean ops. "add" and "union"
+-- are both bound (same underlying union operation, "add" is the older/shorter alias).
+local u  = volume:add(a, b)
+local u2 = volume:union(a, b)
+local i  = volume:intersect(a, b)
+local d  = volume:subtract(a, b)
+local su = volume:smoothUnion(a, b, blendRadius)   -- rounds cusps instead of leaving knife-edges -
+local si = volume:smoothIntersect(a, b, blendRadius) -- prefer these over the hard ops against any
+local sd = volume:smoothSubtract(a, b, blendRadius)  -- noisy/wavy boundary (see TerrainGeneration.lua)
+
+local scaled = volume:scale(a, factor)
+local moved  = volume:translate(a, offsetVec3)
+
+-- Required: register the final shape as the terrain's density field
+volume:setRoot(finalShape)
+
+-- Optional chunk configuration - see VoxelTerrainConfig for the defaults used if omitted
+volume:setChunkMaterial("data/assets/shaders/basic.vert", "data/assets/shaders/PBR.frag")
+volume:setChunkColour(0.4, 0.35, 0.3, 1.0)  -- r, g, b, a
+volume:setGridRadius(2)  -- Chunks per axis around the origin
 ```
 
 ---

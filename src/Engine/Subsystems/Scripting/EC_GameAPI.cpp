@@ -6,6 +6,7 @@
 #include "Logging/ECX_Logging.h"
 #include "Game.h"
 #include "Messaging/ECXMessenger.h"
+#include "Engine/Controllers/MouseButton.h"
 #include <algorithm>
 
 namespace ScriptAPI
@@ -156,6 +157,11 @@ namespace ScriptAPI
         if (game) game->activateScene(alias);
     }
 
+    bool GameAPI::isSceneActive(const std::string& alias) {
+        if (!game) return false;
+        return game->isSceneActive(alias);
+    }
+
     void GameAPI::setUIText(unsigned int entityID, const std::string& text) {
         auto& mgr = EC_DOD_EntityManager::getInstance();
         EntityID entity = static_cast<EntityID>(entityID);
@@ -242,6 +248,16 @@ namespace ScriptAPI
 
     void GameAPI::log(const std::string& message) {
         LOGGING::ECX_Logger::GetInstance()->LogMessage(message, LOGGING::LogLevel::INFORMATION);
+    }
+
+    glm::vec2 GameAPI::getMousePosition() {
+        if (!game) return glm::vec2(0.0f);
+        return glm::vec2(game->getMousePosition());
+    }
+
+    bool GameAPI::isMouseButtonPressed(int button) {
+        if (!game) return false;
+        return game->isMouseButtonPressed(static_cast<MouseButton>(button));
     }
 
     int GameAPI::rayQuery(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, bool firstHitOnly) {

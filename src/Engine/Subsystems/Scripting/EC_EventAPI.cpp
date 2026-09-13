@@ -196,11 +196,15 @@ namespace ScriptAPI
     }
 
     unsigned int EventAPI::getOtherEntityID() {
+        // args layout differs by event type - CollisionBeginEvent carries [manifold, A, B],
+        // CollisionEndEvent carries [A, B] with no manifold slot (see EC_NarrowPhase.cpp's
+        // own publish calls) - same split getCollisionEntityA/B above already handle.
         if (event.type == ECXEventType::CollisionBeginEvent ||
             event.type == ECXEventType::CollisionEndEvent) {
             try {
-                const unsigned int entityA = std::any_cast<unsigned int>(event.args[1]);
-                const unsigned int entityB = std::any_cast<unsigned int>(event.args[2]);
+                const size_t offset = (event.type == ECXEventType::CollisionBeginEvent) ? 1 : 0;
+                const unsigned int entityA = std::any_cast<unsigned int>(event.args[offset]);
+                const unsigned int entityB = std::any_cast<unsigned int>(event.args[offset + 1]);
                 if (currentEntityID == entityA) return entityB;
                 if (currentEntityID == entityB) return entityA;
                 return 0;
