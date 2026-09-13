@@ -43,6 +43,11 @@ namespace ScriptAPI
         void loadScene(const std::string& alias);
         void unloadScene(const std::string& alias);
         void activateScene(const std::string& alias);
+        // Issue #129. Already used internally (e.g. EC_VoxelChunkSystem gating chunk
+        // visibility) but never bound - without this, scripts calling loadScene/unloadScene/
+        // activateScene had no way to query current state and had to track their own
+        // bookkeeping in setString/setFloat script vars instead.
+        bool isSceneActive(const std::string& alias);
 
         void setUIText(unsigned int entityID, const std::string& text);
         void setUITextColour(unsigned int entityID, float r, float g, float b, float a);
@@ -59,6 +64,15 @@ namespace ScriptAPI
         std::string getRecentLog(int index);
         void setMouseCaptured(bool captured);
         void log(const std::string& message);
+
+        // Issue #129. Polling-style input, distinct from EventAPI's event-driven
+        // getMouseMotionX/Y and mouseButtonPressed/Held/Released (which only report
+        // something inside a handler firing this frame) - lets an update(entity, dt) loop
+        // just ask "where's the mouse / is this button down right now" without waiting for
+        // an event. button matches EventAPI::getMouseButton()'s own int-cast-of-MouseButton
+        // convention (0=LMB, 1=RMB, 2=Middle, 3=MB4, 4=MB5).
+        glm::vec2 getMousePosition();
+        bool isMouseButtonPressed(int button);
 
         // Issue #30. Returns all entities the ray intersects (not just the nearest) unless
         // firstHitOnly is set. Caches the result for the paginated getters below - avoids
