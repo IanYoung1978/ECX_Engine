@@ -31,9 +31,25 @@ namespace EC_RayIntersection
     glm::vec3 colliderSupport(const EC_DOD_Collider& collider, const EC_DOD_Spatial& spatial,
         const glm::vec3& dir);
 
+    // Brute-force closest-hit ray-triangle intersection (Möller–Trumbore) against the
+    // real geometry in meshData - used for EC_DOD_Collider::Type::Mesh, which (unlike
+    // every convex primitive above) has no meaningful single support function: a
+    // marching-cubes chunk's surface can be arbitrarily non-convex (curved, overhangs,
+    // caves), so this is genuine per-triangle testing, not a GJK approximation. Hit
+    // normal is barycentric-interpolated from the mesh's own precomputed per-vertex
+    // normals, matching how the surface is actually shaded. A chunk mesh is on the order
+    // of a few thousand triangles - fine for occasional ray/cone queries; revisit with a
+    // BVH (or, per a flagged future direction, a GPU-based approach) only if profiling
+    // ever shows this mattering at higher chunk/triangle counts.
+    RayIntersectionResult rayMesh(const glm::vec3& origin, const glm::vec3& dir,
+        const EC_DOD_MeshCollisionData& meshData);
+
     // Dispatches by collider.type: Sphere/AABB/OBB/Capsule/Cylinder go through GJK ray
-    // casting against colliderSupport(); Plane uses the closed-form test above.
-    // Frustum/None are not valid ray targets and return hit = false.
+    // casting against colliderSupport(); Plane uses the closed-form test above; Mesh uses
+    // rayMesh() above. Frustum/None are not valid ray targets and return hit = false.
+    // meshData is only consulted when collider.type == Mesh - pass a default-constructed
+    // one otherwise.
     RayIntersectionResult rayVsCollider(const glm::vec3& origin, const glm::vec3& dir,
-        const EC_DOD_Collider& collider, const EC_DOD_Spatial& spatial);
+        const EC_DOD_Collider& collider, const EC_DOD_Spatial& spatial,
+        const EC_DOD_MeshCollisionData& meshData = {});
 }

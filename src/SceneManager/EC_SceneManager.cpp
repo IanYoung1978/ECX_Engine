@@ -1,7 +1,7 @@
 #include "EC_SceneManager.h"
 #include "Game.h"
 #include "xml/XML.h"
-#include "Graphics/GL_Deferred_Renderer.h"
+#include "Graphics/Renderers/GL_Deferred_Renderer.h"
 #include "Logging/ECX_Logging.h"
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Components/EC_DOD_Components.h"
@@ -10,6 +10,7 @@
 #include "Messaging/ECXCommand.h"
 #include "Messaging/ECXCommandType.h"
 #include "UI/EC_UI_Factory.h"
+#include "Procedural/EC_VolumeNode.h"
 
 namespace
 {
@@ -37,6 +38,7 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     }
 
     m_Engine.init(m_Settings.engine_settings, game, messenger);
+    m_PauseOnStart = XML::loadPauseOnStartSetting(m_Settings.engine_settings);
 
     EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
     EC_DOD_EntityFactory::loadManifestFile(m_Settings.physics_materials_file);
@@ -138,14 +140,9 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
             // or several seconds of unwatched physics) is what's shown until
             // the player resumes.
             m_Engine.stepOnce(1.0f / 60.0f);
-            m_Engine.pause();
+            if (m_PauseOnStart) m_Engine.pause();
             m_InitialPauseDone = true;
         }
-    }
-
-    if (m_Loader->isLoading())
-    {
-        float progress = m_Loader->getProgress();
     }
 
     m_Renderer->renderScene(m_Scenes[m_ActiveScene]);
@@ -215,6 +212,61 @@ void EC_SceneManager::activateScene(const std::string& alias)
         loadScene(alias);
 
     activateSceneByIndex(idx);
+}
+
+bool EC_SceneManager::isSceneActive(const std::string& alias) const
+{
+    auto it = m_AliasMap.find(alias);
+    if (it == m_AliasMap.end())
+        return false;
+    return it->second == m_ActiveScene;
+}
+
+bool EC_SceneManager::captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes)
+{
+    if (!m_Renderer) return false;
+    return m_Renderer->captureFrame(target, outPNGBytes);
+}
+
+void EC_SceneManager::changeResolution(int width, int height)
+{
+    if (!m_Renderer) return;
+    m_Renderer->changeResolution(width, height);
+}
+
+bool EC_SceneManager::runLuaScriptOnce(const std::string& filename)
+{
+    return m_Engine.runLuaScriptOnce(filename);
+}
+
+std::shared_ptr<EC_VolumeNode> EC_SceneManager::getVolumeRoot() const
+{
+    return m_Engine.getVolumeRoot();
+}
+
+ScriptAPI::VoxelTerrainConfig EC_SceneManager::getVoxelTerrainConfig() const
+{
+    return m_Engine.getVoxelTerrainConfig();
+}
+
+void EC_SceneManager::playSound(const std::string& path, float volume, const std::string& category)
+{
+    m_Engine.playSound(path, volume, category);
+}
+
+void EC_SceneManager::playMusic(const std::string& path, float volume, bool loop)
+{
+    m_Engine.playMusic(path, volume, loop);
+}
+
+void EC_SceneManager::stopMusic()
+{
+    m_Engine.stopMusic();
+}
+
+void EC_SceneManager::setCategoryVolume(const std::string& category, float volume)
+{
+    m_Engine.setCategoryVolume(category, volume);
 }
 
 void EC_SceneManager::activateSceneByIndex(size_t index)

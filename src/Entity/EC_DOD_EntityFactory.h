@@ -1,10 +1,10 @@
 #pragma once
 #include "xml/tinyxml.h"
 #include "EC_DOD_EntityManager.h"
-#include "Graphics/TextureManager.h"
-#include "Graphics/ShaderManager.h"
-#include "Graphics/MeshManager.h"
-#include "Graphics/CubemapManager.h"
+#include "Graphics/Textures/TextureManager.h"
+#include "Graphics/Shaders/ShaderManager.h"
+#include "Graphics/Models/MeshManager.h"
+#include "Graphics/Textures/CubemapManager.h"
 #include <vector>
 #include <string>
 #include <cstdint>

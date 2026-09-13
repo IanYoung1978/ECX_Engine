@@ -29,7 +29,7 @@ std::deque<std::shared_ptr<EC_Task>> EC_ThreadManager::s_Tasks;
 std::mutex EC_ThreadManager::s_Lock;
 std::condition_variable EC_ThreadManager::s_Flag;
 bool EC_ThreadManager::s_running;
-int EC_ThreadManager::s_activeThreads;
+size_t EC_ThreadManager::s_activeThreads;
 
 EC_ThreadManager::EC_ThreadManager()
 {

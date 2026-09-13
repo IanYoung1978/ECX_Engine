@@ -1,13 +1,14 @@
 #include "Game.h"
 #include "Window/SDL_GL_Window.h"
 #include "xml/XML.h"
-#include "Engine/Keyboard.h"
+#include "Engine/Controllers/Keyboard.h"
 #include "Engine/Config.h"
 #include "Logging/ECX_Logging.h"
 #include "Components/EC_DOD_Components.h"
 #include "Messaging/ECXRequest.h"
 #include "Messaging/ECXResponse.h"
 #include "Messaging/ECXRequestType.h"
+#include "Graphics/Renderers/DebugVisualization.h"
 #include <cmath>
 
 EC_Game::EC_Game() : m_Running(true) {}
@@ -44,6 +45,27 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
 
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
+
+    // Issue #99 - voxel terrain is opt-in: a game that doesn't enable it gets zero side
+    // effects (no worker thread, no chunk entities, no generation work), matching
+    // DebugHTTPSettings' own "off unless explicitly requested" pattern just above.
+    XML::VoxelTerrainSettings voxelTerrainSettings;
+    XML::loadVoxelTerrainSettings(m_SceneManager.getEngineConfigPath(), voxelTerrainSettings);
+    if (voxelTerrainSettings.enabled)
+    {
+        m_VoxelChunkSystem.setGenerationScriptPath(voxelTerrainSettings.script);
+        m_VoxelChunkSystem.init(m_Messenger, *this);
+    }
+
+    XML::DebugHTTPSettings debugHttpSettings;
+    XML::loadDebugHTTPSettings(m_SceneManager.getEngineConfigPath(), debugHttpSettings);
+    if (debugHttpSettings.enabled)
+    {
+        m_DebugHTTPServer = std::make_shared<EC_DebugHTTPServer>("127.0.0.1", debugHttpSettings.port, this);
+        m_threadmanager.addTask(m_DebugHTTPServer);
+        m_threadmanager.executeTasks();
+    }
+
     m_Running = true;
     m_Messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
     LOGGING::ECX_Logger::GetInstance()->LogMessage("Init complete", LOGGING::LogLevel::INFORMATION);
@@ -63,6 +85,15 @@ Game_Error EC_Game::run()
         {
             if (e.type == SDL_QUIT)
                 m_Running = false;
+            // SDL_WINDOWEVENT_SIZE_CHANGED fires for both a user dragging the window edge
+            // and SDL_SetWindowSize() being called programmatically (SystemChangeResolution
+            // -> GL_Deferred_Renderer::receive() -> Window::resize()) - handling it here,
+            // once, keeps a single source of truth for "the window's size actually changed"
+            // regardless of which of those triggered it (see issue #108).
+            if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
+                m_Window->onResized(e.window.data1, e.window.data2);
+                m_SceneManager.changeResolution(e.window.data1, e.window.data2);
+            }
             m_Controls->handleEvent(e);
         }
         m_Timer->update(*this);
@@ -104,6 +135,11 @@ void EC_Game::activateScene(const std::string& alias)
     m_SceneManager.activateScene(alias);
 }
 
+bool EC_Game::isSceneActive(const std::string& alias) const
+{
+    return m_SceneManager.isSceneActive(alias);
+}
+
 void EC_Game::shutDown()
 {
     ECXCommand command;
@@ -130,9 +166,25 @@ void EC_Game::update(const float& deltaTimeS)
     if (m_Running)
     {
         m_Messenger.flush();
+        // Before scene update/render so a chunk finishing this frame is visible this
+        // frame rather than one frame late.
+        m_VoxelChunkSystem.update(deltaTimeS, *this);
         m_SceneManager.update(deltaTimeS, *this);
         m_Controls->update(deltaTimeS, *this);
         m_UIInput.update(*this, m_Messenger);
+
+        // Must run after all of this frame's rendering-relevant work (above) but before
+        // present()'s swap - GL_BACK still holds this frame's fully composited image
+        // (scene, skybox, debug overlay, UI) at this exact point. See
+        // EC_DebugHTTPServer::requestCapture()'s comment for why this hand-off exists at
+        // all (glReadPixels is only valid on this, the GL/main, thread).
+        std::string pendingCaptureTarget;
+        if (m_DebugHTTPServer && m_DebugHTTPServer->hasPendingCapture(pendingCaptureTarget)) {
+            std::vector<unsigned char> pngBytes;
+            bool ok = m_SceneManager.captureFrame(pendingCaptureTarget, pngBytes);
+            m_DebugHTTPServer->completeCapture(std::move(pngBytes), ok);
+        }
+
         m_Window->present();
     }
 }
@@ -209,6 +261,118 @@ std::vector<RayQueryHit> EC_Game::queryCone(const glm::vec3& apex, const glm::ve
     }
 }
 
+std::vector<RayQueryHit> EC_Game::queryCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
+    bool firstHitOnly, uint32_t layerMask, EntityID excludeEntity)
+{
+    ECXRequest request;
+    request.type = ECXRequestType::CapsuleCheck;
+    request.args[0] = pointA;
+    request.args[1] = pointB;
+    request.args[2] = radius;
+    request.args[3] = layerMask;
+    request.args[4] = firstHitOnly;
+    request.args[5] = excludeEntity;
+
+    ECXResponse response;
+    m_Messenger.publish(request, response);
+
+    if (response.response != ECXResponseType::Success || response.responseData.empty())
+        return {};
+
+    try {
+        return std::any_cast<std::vector<RayQueryHit>>(response.responseData[0]);
+    }
+    catch (const std::bad_any_cast&) {
+        return {};
+    }
+}
+
+void EC_Game::showDebugRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance)
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::GraphicsShowDebugRay;
+    cmd.args[0] = DebugRayVisualization{ origin, glm::normalize(direction), maxDistance };
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::showDebugCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees, float maxDistance)
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::GraphicsShowDebugCone;
+    cmd.args[0] = DebugConeVisualization{ apex, glm::normalize(direction), glm::radians(halfAngleDegrees), maxDistance };
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::setResolution(int width, int height)
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemChangeResolution;
+    cmd.args[0] = width;
+    cmd.args[1] = height;
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::toggleFullscreen()
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemToggleFullScreen;
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::maximizeWindow()
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemMaximiseWindow;
+    m_Messenger.publish(cmd);
+}
+
+void EC_Game::minimizeWindow()
+{
+    ECXCommand cmd;
+    cmd.type = ECXCommandType::SystemMinimiseWindow;
+    m_Messenger.publish(cmd);
+}
+
+bool EC_Game::runLuaScriptOnce(const std::string& filename)
+{
+    return m_SceneManager.runLuaScriptOnce(filename);
+}
+
+std::shared_ptr<EC_VolumeNode> EC_Game::getVolumeRoot() const
+{
+    return m_SceneManager.getVolumeRoot();
+}
+
+ScriptAPI::VoxelTerrainConfig EC_Game::getVoxelTerrainConfig() const
+{
+    return m_SceneManager.getVoxelTerrainConfig();
+}
+
+void EC_Game::playSound(const std::string& path, float volume, const std::string& category)
+{
+    m_SceneManager.playSound(path, volume, category);
+}
+
+void EC_Game::playMusic(const std::string& path, float volume, bool loop)
+{
+    m_SceneManager.playMusic(path, volume, loop);
+}
+
+void EC_Game::stopMusic()
+{
+    m_SceneManager.stopMusic();
+}
+
+void EC_Game::setCategoryVolume(const std::string& category, float volume)
+{
+    m_SceneManager.setCategoryVolume(category, volume);
+}
+
+void EC_Game::regenerateTerrain()
+{
+    m_VoxelChunkSystem.requestRegenerate();
+}
+
 std::shared_ptr<Window> EC_Game::getWindow()
 {
     return m_Window;
@@ -225,6 +389,8 @@ void EC_Game::receive(ECXCommand& command)
     {
         m_Running = false;
         m_Controls->shutdown();
+        m_VoxelChunkSystem.shutdown();
+        if (m_DebugHTTPServer) m_DebugHTTPServer->shutdown();
         m_threadmanager.stop();
     }
 }

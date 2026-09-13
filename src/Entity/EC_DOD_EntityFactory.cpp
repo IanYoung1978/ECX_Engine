@@ -6,11 +6,10 @@
 #include <cmath>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "Graphics/ObjModel.h"
-#include "Graphics/Shader.h"
-#include "Graphics/ADS_TextureSet.h"
-#include "Graphics/PBR_TextureSet.h"
-#include "Components/EC_ScriptComponent.h"
+#include "Graphics/Models/ObjModel.h"
+#include "Graphics/Shaders/Shader.h"
+#include "Graphics/Textures/ADS_TextureSet.h"
+#include "Graphics/Textures/PBR_TextureSet.h"
 #include "Components/EC_CollisionLayers.h"
 
 TextureManager EC_DOD_EntityFactory::s_TexManager;
@@ -489,7 +488,10 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
             auto child1 = child->FirstChildElement();
             while (child1 != nullptr) {
                 std::string texName = child1->GetText();
-                s_TexManager.loadTexture(texName);
+                // Diffuse/Emissive are colour data (sRGB-authored); Normal/Specular/Height
+                // are not - see TextureManager::loadTexture's isSRGB parameter.
+                bool isSRGB = strcmp(child1->Value(), "Diffuse") == 0 || strcmp(child1->Value(), "Emissive") == 0;
+                s_TexManager.loadTexture(texName, isSRGB);
 
                 if (strcmp(child1->Value(), "Diffuse") == 0)
                     gfx.textureSet->setTexture(TextureID::Diffuse, texName);
@@ -520,7 +522,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                 while (child1 != nullptr) {
                     if (strcmp(child1->Value(), "Albedo") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
-                        s_TexManager.loadTexture(texName);
+                        s_TexManager.loadTexture(texName, /*isSRGB*/ true);
                         gfx.textureSet->setTexture(TextureID::Albedo, texName);
                     }
                     else if (strcmp(child1->Value(), "Normal") == 0 && child1->GetText()) {
@@ -528,10 +530,10 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                         s_TexManager.loadTexture(texName);
                         gfx.textureSet->setTexture(TextureID::Normal, texName);
                     }
-                    else if (strcmp(child1->Value(), "Smoothness") == 0 && child1->GetText()) {
+                    else if (strcmp(child1->Value(), "Roughness") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
                         s_TexManager.loadTexture(texName);
-                        gfx.textureSet->setTexture(TextureID::Smoothness, texName);
+                        gfx.textureSet->setTexture(TextureID::Roughness, texName);
                     }
                     else if (strcmp(child1->Value(), "Height") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
@@ -540,7 +542,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
                     }
                     else if (strcmp(child1->Value(), "Emissive") == 0 && child1->GetText()) {
                         std::string texName = child1->GetText();
-                        s_TexManager.loadTexture(texName);
+                        s_TexManager.loadTexture(texName, /*isSRGB*/ true);
                         gfx.textureSet->setTexture(TextureID::Glow, texName);
                     }
                     else if (strcmp(child1->Value(), "Metallic") == 0 && child1->GetText()) {
@@ -563,7 +565,7 @@ void EC_DOD_EntityFactory::parseGraphics(TiXmlElement* elem, EntityID entity) {
         }
         else if (strcmp(child->Value(), "Colour") == 0 || strcmp(child->Value(), "Color") == 0) {
             std::string color = child->GetText();
-            sscanf(color.c_str(), "%f,%f,%f,%f",
+            TIXML_SSCANF(color.c_str(), "%f,%f,%f,%f",
                 &gfx.colour.r, &gfx.colour.g, &gfx.colour.b, &gfx.colour.a);
         }
         else if (strcmp(child->Value(), "CastsShadow") == 0 && child->GetText()) {
@@ -806,7 +808,7 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
 
     auto extentsElem = elem->FirstChildElement("Extents");
     if (extentsElem && extentsElem->GetText())
-        sscanf(extentsElem->GetText(), "%f,%f,%f",
+        TIXML_SSCANF(extentsElem->GetText(), "%f,%f,%f",
             &collider.extents.x, &collider.extents.y, &collider.extents.z);
 
     auto heightElem = elem->FirstChildElement("Height");
@@ -815,7 +817,7 @@ void EC_DOD_EntityFactory::parseCollider(TiXmlElement* elem, EntityID entity) {
 
     auto centerElem = elem->FirstChildElement("Center");
     if (centerElem && centerElem->GetText())
-        sscanf(centerElem->GetText(), "%f,%f,%f",
+        TIXML_SSCANF(centerElem->GetText(), "%f,%f,%f",
             &collider.center.x, &collider.center.y, &collider.center.z);
 
     auto layerElem = elem->FirstChildElement("Layer");
@@ -923,6 +925,9 @@ void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {
                 skybox.hdrPath = child->GetText();
                 s_CubemapManager.loadHDR(skybox.hdrPath);
             }
+        }
+        else if (strcmp(child->Value(), "Rotation") == 0 && child->GetText()) {
+            skybox.rotationYDegrees = std::stof(child->GetText());
         }
         child = child->NextSiblingElement();
     }

@@ -13,7 +13,10 @@ public:
 	// Inherited via Window
 	virtual bool init(WindowSettings & settings) override;
 	virtual void resize(int width, int height) override;
+	virtual void onResized(int width, int height) override;
 	virtual void toggleFullscreen() override;
+	virtual void maximize() override;
+	virtual void minimize() override;
 	virtual void present() override;
 	virtual void close() override;
 	virtual int getWidth() override;

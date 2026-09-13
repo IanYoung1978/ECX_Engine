@@ -38,6 +38,15 @@ uniform mat4 ShadowTransform;
 uniform DirLightData dirLight;
 out vec4 colour;
 uniform vec3 WSCamPos;
+// World-space depth span (far-near) of the ortho box this frame's ShadowTransform was built
+// from - needed to convert a world-space bias into the right NDC offset, since the box's
+// depth range varies with the camera-fit frustum instead of being a fixed constant.
+uniform float ShadowDepthRange;
+// Author-configurable multiplier on the base bias below (issue #97, RenderConfig::
+// dirShadowBiasScale) - the base constants were tuned for one project's default scale
+// (dirShadowDistance=50, shadowAtlasTileSize=1024); a scene at a very different scale needs
+// this scaled to match, see that field's own comment for the texel-density reasoning.
+uniform float BiasScale;
 
 in xferBlock
 {
@@ -85,17 +94,17 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
 }
 
 vec3 computeLight(
-	vec3 Ldirection, 
-	vec3 Vdirection, 
+	vec3 Ldirection,
+	vec3 Vdirection,
 	vec3 Lcolour,
 	vec3 albedo,
-	vec3 normal, 
-	float Lintensity, 
-	float smoothness,
+	vec3 normal,
+	float Lintensity,
+	float roughness,
 	float metal,
 	float ao)
 {
-	vec3 F0 = vec3(0.04); 
+	vec3 F0 = vec3(0.04);
 	F0 = mix(F0, albedo,metal);
 	// calculate radiance
 	vec3 H = normalize(Vdirection + Ldirection);
@@ -104,8 +113,8 @@ vec3 computeLight(
 	vec3 radiance = Lcolour * (attenuation * Lintensity);
 
 	// Cook-Torrance BRDF
-	float NDF = DistributionGGX(normal, H, smoothness);   
-	float G   = GeometrySmith(normal, Vdirection, Ldirection, smoothness);      
+	float NDF = DistributionGGX(normal, H, roughness);
+	float G   = GeometrySmith(normal, Vdirection, Ldirection, roughness);
 	vec3 F    = fresnelSchlick(max(dot(H, Vdirection), 0.0), F0);
            
 	vec3 nominator    = NDF * G * F; 
@@ -128,17 +137,54 @@ vec3 computeLight(
 	// reflectance equation
 	// add to outgoing radiance Lo
 	vec3 Lo = (kD * albedo / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
-	vec3 color	= (albedo * 0.2)  + Lo;  
 	return Lo;
 }
 
-float computeOcclusion(vec4 shadowCoords)
+float computeOcclusion(vec4 shadowCoords, vec3 normal, vec3 lightDir)
 {
+	// shadowMap is a sampler2DShadow (GL_TEXTURE_COMPARE_MODE = GL_COMPARE_R_TO_TEXTURE) -
+	// this texture() call already performs the hardware depth comparison and hardware PCF.
+	// Bias belongs here, on the READ side, biasing the RECEIVING fragment's own depth before
+	// the comparison - not on the write side (glPolygonOffset / vertex-normal-offset during
+	// the depth-map render), which shifts what gets recorded as the occluder's depth instead.
+	// The two are not interchangeable: a write-side offset and a read-side one produce
+	// genuinely different results, not a shared "more/less bias" knob - see
+	// learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping. Slope-scaled against the
+	// receiving surface (steeper angle to the light needs more bias) matching that reference,
+	// converted from a fixed world-space amount into NDC via the box's actual depth range,
+	// since that range varies with the camera-fit frustum instead of being a fixed constant.
 	vec3 coord 			= vec3(shadowCoords.xyz/shadowCoords.w);
-	float depth 		= texture( shadowMap, vec3(coord.xy,coord.z));
-	if ( depth < coord.z - 0.001) // bias = 0.001
-		return 0.2;
-	return 1.0;
+	// ShadowTransform already includes the atlas's bias matrix, which maps NDC [-1,1] to
+	// texture space [0,1] (a further 0.5x on top of ortho's own [-1,1]-over-depthRange
+	// mapping) - so the correct world->this-space conversion is 1.0/depthRange, not
+	// 2.0/depthRange (an earlier version of this file used 2.0 here, effectively doubling
+	// the intended bias - the mix() values below are already calibrated against the
+	// corrected 1.0 factor).
+	// Raised from mix(0.1, 0.001, ...): those values produced severe shadow acne (a dense
+	// self-shadowing herringbone pattern) across the voxel terrain's rolling hills, worst on
+	// nearby geometry. Root cause is texel density, not a bias-formula bug: the shadow box
+	// is fit to the camera's frustum out to dirShadowDistance (50 units by default) via a
+	// bounding-sphere fit, so a wide, undulating terrain divides a single 1024-texel tile
+	// across a large world-space area - coarser than whatever scene these constants were
+	// originally tuned against. A real fix (cascaded shadow maps, giving high resolution
+	// near the camera without sacrificing shadow distance) is out of scope for a bias tweak;
+	// this raises the floor enough to clean up self-shadowing at the terrain's actual scale.
+	float worldBias 	= mix(0.4, 0.05, max(dot(normal, lightDir), 0.0)) * BiasScale;
+	float ndcBias 		= worldBias * (1.0 / max(ShadowDepthRange, 1.0));
+
+	// Software PCF: average a 3x3 neighbourhood of shadow-map texels instead of relying on
+	// just the single hardware-filtered (2x2 bilinear) sample - smooths out the kind of
+	// hairline crack/split that shows up right at a caster's silhouette edge when that edge
+	// happens to fall near a texel boundary. See learnopengl.com/Advanced-Lighting/Shadows/
+	// Shadow-Mapping's PCF section.
+	vec2 texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+	float lit = 0.0;
+	for (int x = -1; x <= 1; x++)
+		for (int y = -1; y <= 1; y++)
+			lit += texture(shadowMap, vec3(coord.xy + vec2(x, y) * texelSize, coord.z - ndcBias));
+	lit /= 9.0;
+
+	return mix(0.2, 1.0, lit);
 }
 
 void main()
@@ -146,10 +192,10 @@ void main()
 	vec4 pcolour 		= texture(positionMap, indata.VSTexCoord).rgba;
 	if (pcolour.a == 0.0) discard;
 	vec4 ncolour 		= texture(normalMap, indata.VSTexCoord).rgba;
-	vec3 dcolour 		= pow(texture(AlbedoMap, indata.VSTexCoord).rgb,vec3(2.2));
+	vec3 dcolour 		= texture(AlbedoMap, indata.VSTexCoord).rgb;
 	vec3 pbr 			= texture(PBRMap, indata.VSTexCoord).rgb;
 	vec4 shadowCoord 	= ShadowTransform * pcolour;
-	float visibility 	= computeOcclusion( shadowCoord );
+	float visibility 	= computeOcclusion( shadowCoord, ncolour.rgb, -dirLight.direction.xyz );
 	vec3 vToEye 		= WSCamPos - pcolour.xyz;
 	vToEye 				= normalize(vToEye);
 	vec3 outColour 		= vec3(0.0,0.0,0.0);
@@ -164,5 +210,5 @@ void main()
 							pbr.g,
 							pbr.b
 						);
-	colour = vec4(pow(visibility*outColour, vec3(1.0/2.2)), 1.0);
+	colour = vec4(visibility*outColour, 1.0);
 }

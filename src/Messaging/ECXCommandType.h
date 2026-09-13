@@ -24,6 +24,7 @@ enum class ECXCommandType
 	GameSaveWorld,
 	GameLoadWorld,
 	GraphicsChangeHDRExposure,
+	GraphicsChangeAmbientScale,
 	GraphicsToggleDebug,
 	GraphicsShowDebugRay,
 	GraphicsShowDebugCone,

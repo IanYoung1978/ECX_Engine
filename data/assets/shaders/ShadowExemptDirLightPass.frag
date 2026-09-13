@@ -71,7 +71,7 @@ vec3 computeLight(
 	vec3 albedo,
 	vec3 normal,
 	float Lintensity,
-	float smoothness,
+	float roughness,
 	float metal,
 	float ao)
 {
@@ -82,8 +82,8 @@ vec3 computeLight(
 	float attenuation = 1.0 / (distance * distance);
 	vec3 radiance = Lcolour * (attenuation * Lintensity);
 
-	float NDF = DistributionGGX(normal, H, smoothness);
-	float G   = GeometrySmith(normal, Vdirection, Ldirection, smoothness);
+	float NDF = DistributionGGX(normal, H, roughness);
+	float G   = GeometrySmith(normal, Vdirection, Ldirection, roughness);
 	vec3 F    = fresnelSchlick(max(dot(H, Vdirection), 0.0), F0);
 
 	vec3 nominator    = NDF * G * F;
@@ -105,7 +105,7 @@ void main()
 	vec4 pcolour 		= texelFetch(positionMap, px, 0);
 	if (pcolour.a == 0.0) discard;
 	vec4 ncolour 		= texelFetch(normalMap, px, 0);
-	vec3 dcolour 		= pow(texelFetch(AlbedoMap, px, 0).rgb, vec3(2.2));
+	vec3 dcolour 		= texelFetch(AlbedoMap, px, 0).rgb;
 	vec3 pbr 			= texelFetch(PBRMap, px, 0).rgb;
 	vec3 vToEye 		= normalize(WSCamPos - pcolour.xyz);
 
@@ -117,5 +117,5 @@ void main()
 							ncolour.rgb, dirLight.intensity,
 							pbr.r, pbr.g, pbr.b
 						);
-	colour = vec4(pow(outColour, vec3(1.0/2.2)), 1.0);
+	colour = vec4(outColour, 1.0);
 }

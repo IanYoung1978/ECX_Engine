@@ -4,7 +4,7 @@
 #include "Window/WindowSettings.h"
 #include "Engine/Config.h"
 #include "Engine/GameModeSettings.h"
-#include "Graphics/RenderConfig.h"
+#include "Graphics/Renderers/RenderConfig.h"
 #include <string>
 #include <map>
 #include <algorithm>
@@ -132,13 +132,24 @@ namespace XML
 		return true;
 	}
 
-	// Parses EngineConfig.xml's <Physics><Debug> flags - currently just
-	// LogEnergy (see EC_PhysicsSystem::setLogEnergy). Missing file/section/
-	// tag all quietly default to false rather than failing, since these are
-	// optional debug toggles, not required settings.
-	inline bool loadPhysicsDebugSettings(const std::string& file, bool& outLogEnergy)
+	// EngineConfig.xml's <Physics><Debug> flags - one independent toggle per
+	// physics attribute (see EC_PhysicsSystem::setDebugLogging), rather than
+	// a single all-or-nothing switch, so e.g. friction can be traced without
+	// drowning it in a velocity line for every body every tick.
+	struct PhysicsDebugSettings
 	{
-		outLogEnergy = false;
+		bool logEnergy = false;
+		bool logVelocity = false;
+		bool logAngularVelocity = false;
+		bool logFriction = false;
+	};
+
+	// Parses EngineConfig.xml's <Physics><Debug> flags. Missing file/
+	// section/tag all quietly default to false rather than failing, since
+	// these are optional debug toggles, not required settings.
+	inline bool loadPhysicsDebugSettings(const std::string& file, PhysicsDebugSettings& outSettings)
+	{
+		outSettings = PhysicsDebugSettings{};
 
 		TiXmlDocument doc(file.c_str());
 		if (!doc.LoadFile())
@@ -153,9 +164,17 @@ namespace XML
 		auto debug = physics->FirstChildElement("Debug");
 		if (!debug)
 			return true;
-		auto logEnergy = debug->FirstChildElement("LogEnergy");
-		if (logEnergy && logEnergy->GetText())
-			outLogEnergy = (strcmp(logEnergy->GetText(), "true") == 0);
+
+		auto readFlag = [&](const char* tagName, bool& out)
+		{
+			auto elem = debug->FirstChildElement(tagName);
+			if (elem && elem->GetText())
+				out = (strcmp(elem->GetText(), "true") == 0);
+		};
+		readFlag("LogEnergy", outSettings.logEnergy);
+		readFlag("LogVelocity", outSettings.logVelocity);
+		readFlag("LogAngularVelocity", outSettings.logAngularVelocity);
+		readFlag("LogFriction", outSettings.logFriction);
 
 		return true;
 	}
@@ -182,6 +201,106 @@ namespace XML
 		auto substeps = physics->FirstChildElement("Substeps");
 		if (substeps && substeps->GetText())
 			outSubsteps = std::max(1, atoi(substeps->GetText()));
+
+		return true;
+	}
+
+	// EngineConfig.xml's <DebugHTTP enabled="" port=""/> - the dev-build-only debug HTTP
+	// server (Issue #87's first slice, GET /log only). Defaults to disabled on any
+	// missing file/section/attribute, since this must never turn on unexpectedly.
+	struct DebugHTTPSettings
+	{
+		bool enabled = false;
+		int port = 8089;
+	};
+
+	inline bool loadDebugHTTPSettings(const std::string& file, DebugHTTPSettings& outSettings)
+	{
+		outSettings = DebugHTTPSettings{};
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto debugHttp = root->FirstChildElement("DebugHTTP");
+		if (!debugHttp)
+			return true;
+
+		const char* enabledAttr = debugHttp->Attribute("enabled");
+		if (enabledAttr)
+			outSettings.enabled = (strcmp(enabledAttr, "true") == 0);
+		const char* portAttr = debugHttp->Attribute("port");
+		if (portAttr)
+			outSettings.port = atoi(portAttr);
+
+		return true;
+	}
+
+	// EngineConfig.xml's <VoxelTerrain enabled="" script=""/> - issue #99: this whole
+	// subsystem (a background worker thread, a grid of chunk entities, generation work)
+	// used to run unconditionally for every game regardless of whether it wanted voxel
+	// terrain at all. Defaults to disabled on any missing file/section/attribute, matching
+	// DebugHTTPSettings' own "never turn on unexpectedly" reasoning - though unlike
+	// DebugHTTP this gates a gameplay-visible feature, not just a dev tool, so an author
+	// must always opt in explicitly. `script` only needs to say WHICH generation script to
+	// run - everything else content-configurable (chunk material, tint, grid size) is set
+	// by that script itself via the volume.* Lua API (see VoxelTerrainConfig), not more XML
+	// attributes here.
+	struct VoxelTerrainSettings
+	{
+		bool enabled = false;
+		std::string script = "data/scripts/LUA/TerrainGeneration.lua";
+	};
+
+	inline bool loadVoxelTerrainSettings(const std::string& file, VoxelTerrainSettings& outSettings)
+	{
+		outSettings = VoxelTerrainSettings{};
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto voxelTerrain = root->FirstChildElement("VoxelTerrain");
+		if (!voxelTerrain)
+			return true;
+
+		const char* enabledAttr = voxelTerrain->Attribute("enabled");
+		if (enabledAttr)
+			outSettings.enabled = (strcmp(enabledAttr, "true") == 0);
+		const char* scriptAttr = voxelTerrain->Attribute("script");
+		if (scriptAttr)
+			outSettings.script = scriptAttr;
+
+		return true;
+	}
+
+	// EngineConfig.xml's <Startup pauseOnStart=""/> - whether EC_SceneManager::update()
+	// auto-pauses the engine right after the first scene finishes loading (see that call
+	// site's own comment for why that pause exists at all). Defaults to true (existing
+	// behaviour) on any missing file/section/attribute, so only an explicit opt-out
+	// changes anything.
+	inline bool loadPauseOnStartSetting(const std::string& file)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return true;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return true;
+
+		auto startup = root->FirstChildElement("Startup");
+		if (!startup)
+			return true;
+
+		const char* pauseAttr = startup->Attribute("pauseOnStart");
+		if (pauseAttr)
+			return strcmp(pauseAttr, "false") != 0;
 
 		return true;
 	}
@@ -259,6 +378,10 @@ namespace XML
 				{
 					settings.windowName = std::string(child->GetText());
 				}
+				else if (strcmp(child->Value(), "Resizable") == 0)
+				{
+					settings.resizable = (strcmp(child->GetText(), "true") == 0) ? true : false;
+				}
 				else
 				{
 					return false; //malformed tag
@@ -304,6 +427,17 @@ namespace XML
 				if (size) settings.pointShadowPoolSize = std::stoi(size);
 				const char* faceSize = child->Attribute("faceSize");
 				if (faceSize) settings.pointShadowFaceSize = std::stoi(faceSize);
+			}
+			else if (strcmp(child->Value(), "DirShadow") == 0)
+			{
+				const char* distance = child->Attribute("distance");
+				if (distance) settings.dirShadowDistance = std::stof(distance);
+				const char* biasScale = child->Attribute("biasScale");
+				if (biasScale) settings.dirShadowBiasScale = std::stof(biasScale);
+			}
+			else if (strcmp(child->Value(), "AmbientScale") == 0 && child->GetText())
+			{
+				settings.ambientScale = std::stof(child->GetText());
 			}
 			child = child->NextSiblingElement();
 		}

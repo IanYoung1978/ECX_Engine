@@ -205,6 +205,92 @@ void EC_NarrowPhase::initCollisionDispatchTable()
                            b.radius, b.height, 60.0f, 1.77f}, sb.position,
                     AABB{a.center - a.extents, a.center + a.extents}, sa.position);
             }},
+
+        // Capsule vs Capsule - self-orienting (like SphereVsSphere), no flip needed.
+        {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::Capsule),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
+                glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
+                return EC_CollisionChecks::CapsuleVsCapsule(
+                    Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
+                    Capsule{b.center - upB, b.center + upB, b.radius}, sb.position, m);
+            }},
+
+        // Capsule vs Sphere - CapsuleVsSphere's normal points toward its second
+        // parameter (the sphere), which is dispatch-B here, so this is already the
+        // correct A -> B direction; no flip.
+        {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::Sphere),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
+                return EC_CollisionChecks::CapsuleVsSphere(
+                    Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
+                    Sphere{b.center, b.radius}, sb.position, m);
+            }},
+
+        // Sphere vs Capsule (swap parameters) - the sphere is now CapsuleVsSphere's
+        // second parameter (so the normal points toward it) but it's dispatch-A, so
+        // this is backwards (B -> A) and must be flipped.
+        {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::Capsule),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
+                bool hit = EC_CollisionChecks::CapsuleVsSphere(
+                    Capsule{b.center - upB, b.center + upB, b.radius}, sb.position,
+                    Sphere{a.center, a.radius}, sa.position, m);
+                if (hit) m.contactNormal = -m.contactNormal;
+                return hit;
+            }},
+
+        // Capsule vs AABB - normal points toward the AABB (CapsuleVsAABB's second
+        // parameter), which is dispatch-B here - correct A -> B direction as-is.
+        {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::AABB),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
+                return EC_CollisionChecks::CapsuleVsAABB(
+                    Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
+                    AABB{b.center - b.extents, b.center + b.extents}, sb.position, m);
+            }},
+
+        // AABB vs Capsule (swap parameters) - the AABB is now CapsuleVsAABB's second
+        // parameter (so the normal points toward it) but it's dispatch-A, so this is
+        // backwards (B -> A) and must be flipped.
+        {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::Capsule),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
+                bool hit = EC_CollisionChecks::CapsuleVsAABB(
+                    Capsule{b.center - upB, b.center + upB, b.radius}, sb.position,
+                    AABB{a.center - a.extents, a.center + a.extents}, sa.position, m);
+                if (hit) m.contactNormal = -m.contactNormal;
+                return hit;
+            }},
+
+        // Capsule vs OBB - normal points toward the OBB (CapsuleVsOBB's second
+        // parameter), which is dispatch-B here - correct A -> B direction as-is.
+        {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::OBB),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
+                glm::mat3 orientB = glm::mat3(glm::normalize(sb.right),
+                                             glm::normalize(sb.up),
+                                             glm::normalize(sb.direction));
+                return EC_CollisionChecks::CapsuleVsOBB(
+                    Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
+                    OBB{b.center, b.extents, orientB}, sb.position, m);
+            }},
+
+        // OBB vs Capsule (swap parameters) - the OBB is now CapsuleVsOBB's second
+        // parameter (so the normal points toward it) but it's dispatch-A, so this is
+        // backwards (B -> A) and must be flipped.
+        {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::Capsule),
+            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+                glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
+                glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
+                                             glm::normalize(sa.up),
+                                             glm::normalize(sa.direction));
+                bool hit = EC_CollisionChecks::CapsuleVsOBB(
+                    Capsule{b.center - upB, b.center + upB, b.radius}, sb.position,
+                    OBB{a.center, a.extents, orientA}, sa.position, m);
+                if (hit) m.contactNormal = -m.contactNormal;
+                return hit;
+            }},
     };
 }
 

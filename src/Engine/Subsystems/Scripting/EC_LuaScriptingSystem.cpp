@@ -1,0 +1,591 @@
+#include "Engine/Subsystems/Scripting/EC_LuaScriptingSystem.h"
+#include <lua.hpp>
+#include <luabridge3/LuaBridge/LuaBridge.h>
+#include <thread>
+#include <chrono>
+#include <any>
+#include "Messaging/ECXEvent.h"
+#include "Components/EC_DOD_Components.h"
+#include "Game.h"
+#include "Entity/EC_DOD_EntityManager.h"
+#include "Logging/ECX_Logging.h"
+#include "Engine/Subsystems/Scripting/EC_ScriptAPI.h"
+
+EC_LuaScriptSystem::EC_LuaScriptSystem() : m_luaState(nullptr), m_game(nullptr), m_volumeAPI(nullptr) {}
+
+EC_LuaScriptSystem::~EC_LuaScriptSystem() {
+    m_shuttingDown = true;
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+    std::lock_guard<std::mutex> lock(m_LuaMutex);
+    if (m_luaState) {
+        lua_close(m_luaState);
+        m_luaState = nullptr;
+    }
+    if (m_game) {
+        delete m_game;
+        m_game = nullptr;
+    }
+    if (m_volumeAPI) {
+        delete m_volumeAPI;
+        m_volumeAPI = nullptr;
+    }
+}
+
+void EC_LuaScriptSystem::init(ECXMessenger& messenger, EC_Game& game) {
+    std::lock_guard<std::mutex> lock(m_LuaMutex);
+
+    std::vector<ECXEventType> allTypes{
+        ECXEventType::EntityCreate,
+        ECXEventType::EntityKill,
+        ECXEventType::EntityDestroy,
+        ECXEventType::EntityStopRotation,
+        ECXEventType::EntityStopMotion,
+        ECXEventType::EntityChangePosition,
+        ECXEventType::EntityChangeOrientation,
+        ECXEventType::EntityChangeAngularVelocity,
+        ECXEventType::EntityChangeVelocity,
+        ECXEventType::CollisionBeginEvent,
+        ECXEventType::CollisionEndEvent,
+        ECXEventType::key_up,
+        ECXEventType::key_down,
+        ECXEventType::key_held,
+        ECXEventType::mouse_up,
+        ECXEventType::mouse_down,
+        ECXEventType::mouse_held,
+        ECXEventType::mouse_move,
+        ECXEventType::mouse_enter,
+        ECXEventType::mouse_leave,
+        ECXEventType::select,
+        ECXEventType::unselect,
+        ECXEventType::click,
+        ECXEventType::world_loaded,
+        ECXEventType::entity_loaded,
+        ECXEventType::config_loaded,
+        ECXEventType::system_update
+    };
+    messenger.Subscribe(*this, allTypes);
+
+    m_game = new ScriptAPI::GameAPI(&game, messenger);
+    m_volumeAPI = new ScriptAPI::VolumeAPI();
+
+    m_luaState = luaL_newstate();
+    luaL_openlibs(m_luaState);
+    registerAPI();
+
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Scripting system initialised",
+        LOGGING::LogLevel::INFORMATION
+    );
+}
+
+void EC_LuaScriptSystem::update(const float& deltaTimeS, EC_Game& game) {
+    if (m_shuttingDown) return;
+    auto& manager = EC_DOD_EntityManager::getInstance();
+
+    // Excludes a deactivated scene's entities (EC_GameScene::deactivate() -> sceneActive)
+    // and any entity a script has individually deactivated (EntityAPI::deactivate() ->
+    // active) - see EC_DOD_EntityInfo's comment for why the two are separate. Without the
+    // sceneActive check, an inactive scene's OnKeyHeld/update handlers kept firing right
+    // alongside the active scene's - notably breaking any script logic (e.g. a debug
+    // scene-switch toggle) that multiple simultaneously-alive entities across scenes both
+    // subscribe to.
+    auto entities = manager.getActiveEntitiesWithComponents(
+        { std::type_index(typeid(EC_DOD_ScriptData)) }
+    );
+
+    for (EntityID entity : entities) {
+        const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+        if (!script.enabled) continue;
+
+        auto it = script.handlers.find(ECXEventType::system_update);
+        if (it == script.handlers.end()) continue;
+
+        std::lock_guard<std::mutex> lock(m_LuaMutex);
+        callLuaFunction(it->second, "update", entity, deltaTimeS);
+    }
+}
+
+void EC_LuaScriptSystem::receive(ECXEvent& event) {
+    if (m_shuttingDown) return;
+
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    // See the matching call in update() above for why this is active+sceneActive filtered.
+    auto entities = manager.getActiveEntitiesWithComponents(
+        { std::type_index(typeid(EC_DOD_ScriptData)) }
+    );
+
+    EntityID participantA = INVALID_ENTITY;
+    EntityID participantB = INVALID_ENTITY;
+    bool isCollision = false;
+
+    if (event.type == ECXEventType::CollisionBeginEvent) {
+        try {
+            participantA = std::any_cast<uint32_t>(event.args[1]);
+            participantB = std::any_cast<uint32_t>(event.args[2]);
+            isCollision = true;
+        }
+        catch (const std::bad_any_cast&) {}
+    }
+    else if (event.type == ECXEventType::CollisionEndEvent) {
+        try {
+            participantA = std::any_cast<uint32_t>(event.args[0]);
+            participantB = std::any_cast<uint32_t>(event.args[1]);
+            isCollision = true;
+        }
+        catch (const std::bad_any_cast&) {}
+    }
+
+    for (EntityID entity : entities) {
+        const auto& script = manager.getComponent<EC_DOD_ScriptData>(entity);
+        if (!script.enabled) continue;
+
+        auto it = script.handlers.find(event.type);
+        if (it == script.handlers.end()) continue;
+
+        if (isCollision && entity != participantA && entity != participantB)
+            continue;
+
+        // Targeted dispatch (UI interaction events): only the named entity's handler
+        // fires. Unset (INVALID_ENTITY, every other event type) preserves the existing
+        // broadcast-to-all-subscribers behavior below.
+        if (event.targetEntity != INVALID_ENTITY && entity != event.targetEntity)
+            continue;
+
+        const char* funcName = getEventFunctionName(event.type);
+        if (funcName) {
+            std::lock_guard<std::mutex> lock(m_LuaMutex);
+            callLuaEvent(it->second, funcName, entity, event);
+        }
+    }
+}
+
+const char* EC_LuaScriptSystem::getEventFunctionName(ECXEventType type) {
+    switch (type) {
+    case ECXEventType::EntityCreate:                 return "onEntityCreate";
+    case ECXEventType::EntityKill:                   return "onEntityKill";
+    case ECXEventType::EntityDestroy:                return "onEntityDestroy";
+    case ECXEventType::entity_loaded:                return "onEntityLoaded";
+    case ECXEventType::EntityStopRotation:           return "onStopRotation";
+    case ECXEventType::EntityStopMotion:             return "onStopMotion";
+    case ECXEventType::EntityChangePosition:         return "onPositionChanged";
+    case ECXEventType::EntityChangeOrientation:      return "onOrientationChanged";
+    case ECXEventType::EntityChangeAngularVelocity:  return "onAngularVelocityChanged";
+    case ECXEventType::EntityChangeVelocity:         return "onVelocityChanged";
+    case ECXEventType::CollisionBeginEvent:          return "onCollisionBegin";
+    case ECXEventType::CollisionEndEvent:            return "onCollisionEnd";
+    case ECXEventType::key_down:                     return "onKeyDown";
+    case ECXEventType::key_up:                       return "onKeyUp";
+    case ECXEventType::key_held:                     return "onKeyHeld";
+    case ECXEventType::mouse_down:                   return "onMouseDown";
+    case ECXEventType::mouse_up:                     return "onMouseUp";
+    case ECXEventType::mouse_held:                   return "onMouseHeld";
+    case ECXEventType::mouse_move:                   return "onMouseMove";
+    case ECXEventType::mouse_enter:                  return "onMouseEnter";
+    case ECXEventType::mouse_leave:                  return "onMouseLeave";
+    case ECXEventType::select:                       return "onSelect";
+    case ECXEventType::unselect:                     return "onUnSelect";
+    case ECXEventType::click:                        return "onClick";
+    case ECXEventType::world_loaded:                 return "onWorldLoaded";
+    case ECXEventType::config_loaded:                return "onConfigLoaded";
+    case ECXEventType::system_update:                return "onSystemUpdate";
+    default: return nullptr;
+    }
+}
+
+namespace {
+    // Every global function name a script might define to handle an event - must stay in
+    // sync with EC_LuaScriptSystem::getEventFunctionName() below, plus "update" (the name
+    // update() actually looks up at its call site above - note getEventFunctionName maps
+    // system_update to "onSystemUpdate", a name nothing ever calls; "update" is the real
+    // one every script uses). Not derived programmatically from the enum - this list
+    // rarely changes and a flat, reviewable array is clearer than threading ECXEventType
+    // through here just to avoid duplicating a dozen string literals.
+    constexpr const char* kHandlerFunctionNames[] = {
+        "onEntityCreate", "onEntityKill", "onEntityDestroy", "onEntityLoaded",
+        "onStopRotation", "onStopMotion", "onPositionChanged", "onOrientationChanged",
+        "onAngularVelocityChanged", "onVelocityChanged", "onCollisionBegin", "onCollisionEnd",
+        "onKeyDown", "onKeyUp", "onKeyHeld", "onMouseDown", "onMouseUp", "onMouseHeld",
+        "onMouseMove", "onMouseEnter", "onMouseLeave", "onSelect", "onUnSelect", "onClick",
+        "onWorldLoaded", "onConfigLoaded", "onSystemUpdate", "update",
+    };
+
+    // Looks up scriptFile's captured handler named funcName (see loadScript()'s capture
+    // step below) and returns it as a callable LuaRef, or a non-function LuaRef if that
+    // script never defined this particular handler.
+    luabridge::LuaRef getScriptHandler(lua_State* L,
+        const std::unordered_map<std::string, std::unordered_map<std::string, int>>& handlers,
+        const std::string& scriptFile, const char* funcName)
+    {
+        auto scriptIt = handlers.find(scriptFile);
+        if (scriptIt != handlers.end()) {
+            auto handlerIt = scriptIt->second.find(funcName);
+            if (handlerIt != scriptIt->second.end()) {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, handlerIt->second);
+                luabridge::LuaRef func = luabridge::LuaRef::fromStack(L, -1);
+                lua_pop(L, 1);
+                return func;
+            }
+        }
+        return luabridge::LuaRef(L);
+    }
+}
+
+bool EC_LuaScriptSystem::loadScript(const std::string& filename) {
+    if (m_loadedScripts[filename]) return true;
+
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Attempting to load script: " + filename,
+        LOGGING::LogLevel::INFORMATION
+    );
+
+    int result = luaL_dofile(m_luaState, filename.c_str());
+    if (result != LUA_OK) {
+        const char* error = lua_tostring(m_luaState, -1);
+        std::string errorMsg = error ? error : "Unknown error";
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Lua error loading " + filename + ": " + errorMsg +
+            " (error code: " + std::to_string(result) + ")",
+            LOGGING::LogLevel::SEVERE
+        );
+        lua_pop(m_luaState, 1);
+        return false;
+    }
+
+    // Capture whichever handler functions this file actually defined into a per-file slot,
+    // then clear the global so the NEXT script's same-named definition (if any) doesn't
+    // collide with what we already captured - see m_ScriptHandlers's declaration for why.
+    for (const char* name : kHandlerFunctionNames) {
+        lua_getglobal(m_luaState, name);
+        if (lua_isfunction(m_luaState, -1)) {
+            int ref = luaL_ref(m_luaState, LUA_REGISTRYINDEX); // pops the function, stores it
+            m_ScriptHandlers[filename][name] = ref;
+            lua_pushnil(m_luaState);
+            lua_setglobal(m_luaState, name);
+        }
+        else {
+            lua_pop(m_luaState, 1);
+        }
+    }
+
+    m_loadedScripts[filename] = true;
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Script loaded successfully: " + filename,
+        LOGGING::LogLevel::INFORMATION
+    );
+    return true;
+}
+
+void EC_LuaScriptSystem::callLuaFunction(const std::string& scriptFile, const char* funcName,
+    EntityID entity, float deltaTime) {
+    if (!loadScript(scriptFile)) return;
+
+    try {
+        luabridge::LuaRef func = getScriptHandler(m_luaState, m_ScriptHandlers, scriptFile, funcName);
+        if (func.isFunction()) {
+            ScriptAPI::EntityAPI entityAPI(entity);
+            auto result = func(entityAPI, deltaTime);
+            if (!result) {
+                LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                    "Error in " + std::string(funcName) + ": " + result.errorMessage(),
+                    LOGGING::LogLevel::WARNING
+                );
+            }
+        }
+    }
+    catch (std::exception& e) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Exception calling " + std::string(funcName) + ": " + e.what(),
+            LOGGING::LogLevel::SEVERE
+        );
+    }
+}
+
+void EC_LuaScriptSystem::callLuaEvent(const std::string& scriptFile, const char* funcName,
+    EntityID entity, ECXEvent& event) {
+    if (!loadScript(scriptFile)) return;
+
+    try {
+        luabridge::LuaRef func = getScriptHandler(m_luaState, m_ScriptHandlers, scriptFile, funcName);
+        if (func.isFunction()) {
+            ScriptAPI::EntityAPI entityAPI(entity);
+            ScriptAPI::EventAPI eventAPI(event, m_game->game, entity);
+            auto result = func(entityAPI, eventAPI);
+            if (!result) {
+                LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                    "Error in " + std::string(funcName) + ": " + result.errorMessage(),
+                    LOGGING::LogLevel::WARNING
+                );
+            }
+        }
+    }
+    catch (std::exception& e) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Exception calling " + std::string(funcName) + ": " + e.what(),
+            LOGGING::LogLevel::SEVERE
+        );
+    }
+}
+
+void EC_LuaScriptSystem::registerAPI() {
+    luabridge::getGlobalNamespace(m_luaState)
+        .beginClass<ScriptAPI::EntityAPI>("Entity")
+        .addFunction("getName", &ScriptAPI::EntityAPI::getName)
+        .addFunction("getUID", &ScriptAPI::EntityAPI::getUID)
+        .addFunction("getID", &ScriptAPI::EntityAPI::getID)
+        .addFunction("isActive", &ScriptAPI::EntityAPI::isActive)
+        .addFunction("activate", &ScriptAPI::EntityAPI::activate)
+        .addFunction("deactivate", &ScriptAPI::EntityAPI::deactivate)
+        .addFunction("getPosition", &ScriptAPI::EntityAPI::getPosition)
+        .addFunction("setPosition", &ScriptAPI::EntityAPI::setPosition)
+        .addFunction("getVelocity", &ScriptAPI::EntityAPI::getVelocity)
+        .addFunction("setVelocity", &ScriptAPI::EntityAPI::setVelocity)
+        .addFunction("getOrientation", &ScriptAPI::EntityAPI::getOrientation)
+        .addFunction("setOrientation", &ScriptAPI::EntityAPI::setOrientation)
+        .addFunction("getAngularVelocity", &ScriptAPI::EntityAPI::getAngularVelocity)
+        .addFunction("setAngularVelocity", &ScriptAPI::EntityAPI::setAngularVelocity)
+        .addFunction("getForward", &ScriptAPI::EntityAPI::getForward)
+        .addFunction("getUp", &ScriptAPI::EntityAPI::getUp)
+        .addFunction("getRight", &ScriptAPI::EntityAPI::getRight)
+        .addFunction("moveForward", &ScriptAPI::EntityAPI::moveForward)
+        .addFunction("moveBack", &ScriptAPI::EntityAPI::moveBack)
+        .addFunction("moveLeft", &ScriptAPI::EntityAPI::moveLeft)
+        .addFunction("moveRight", &ScriptAPI::EntityAPI::moveRight)
+        .addFunction("moveUp", &ScriptAPI::EntityAPI::moveUp)
+        .addFunction("moveDown", &ScriptAPI::EntityAPI::moveDown)
+        .addFunction("rotateAroundAxis", &ScriptAPI::EntityAPI::rotateAroundAxis)
+        .addFunction("setFloat", &ScriptAPI::EntityAPI::setFloat)
+        .addFunction("getFloat", &ScriptAPI::EntityAPI::getFloat)
+        .addFunction("setString", &ScriptAPI::EntityAPI::setString)
+        .addFunction("getString", &ScriptAPI::EntityAPI::getString)
+        .addFunction("getColour", &ScriptAPI::EntityAPI::getColour)
+        .addFunction("setColour", &ScriptAPI::EntityAPI::setColour)
+        .addFunction("getColliderRadius", &ScriptAPI::EntityAPI::getColliderRadius)
+        .addFunction("getColliderHeight", &ScriptAPI::EntityAPI::getColliderHeight)
+        .addFunction("hasParent", &ScriptAPI::EntityAPI::hasParent)
+        .addFunction("getParentID", &ScriptAPI::EntityAPI::getParentID)
+        .addFunction("getDepth", &ScriptAPI::EntityAPI::getDepth)
+        .addFunction("getBlendFactor", &ScriptAPI::EntityAPI::getBlendFactor)
+        .addFunction("setBlendFactor", &ScriptAPI::EntityAPI::setBlendFactor)
+        .addFunction("getFOV", &ScriptAPI::EntityAPI::getFOV)
+        .addFunction("setFOV", &ScriptAPI::EntityAPI::setFOV)
+        .addFunction("getNearPlane", &ScriptAPI::EntityAPI::getNearPlane)
+        .addFunction("setNearPlane", &ScriptAPI::EntityAPI::setNearPlane)
+        .addFunction("getFarPlane", &ScriptAPI::EntityAPI::getFarPlane)
+        .addFunction("setFarPlane", &ScriptAPI::EntityAPI::setFarPlane)
+        .addFunction("isCameraActive", &ScriptAPI::EntityAPI::isCameraActive)
+        .addFunction("setCameraActive", &ScriptAPI::EntityAPI::setCameraActive)
+        .addFunction("getLightColour", &ScriptAPI::EntityAPI::getLightColour)
+        .addFunction("setLightColour", &ScriptAPI::EntityAPI::setLightColour)
+        .addFunction("getLightIntensity", &ScriptAPI::EntityAPI::getLightIntensity)
+        .addFunction("setLightIntensity", &ScriptAPI::EntityAPI::setLightIntensity)
+        .addFunction("getLightDirection", &ScriptAPI::EntityAPI::getLightDirection)
+        .addFunction("setLightDirection", &ScriptAPI::EntityAPI::setLightDirection)
+        .addFunction("getLightCastsShadow", &ScriptAPI::EntityAPI::getLightCastsShadow)
+        .addFunction("setLightCastsShadow", &ScriptAPI::EntityAPI::setLightCastsShadow)
+        .addFunction("getColliderCenter", &ScriptAPI::EntityAPI::getColliderCenter)
+        .addFunction("setColliderCenter", &ScriptAPI::EntityAPI::setColliderCenter)
+        .addFunction("getColliderExtents", &ScriptAPI::EntityAPI::getColliderExtents)
+        .addFunction("setColliderExtents", &ScriptAPI::EntityAPI::setColliderExtents)
+        .addFunction("getCollisionLayer", &ScriptAPI::EntityAPI::getCollisionLayer)
+        .addFunction("setCollisionLayer", &ScriptAPI::EntityAPI::setCollisionLayer)
+        .addFunction("getCollisionMask", &ScriptAPI::EntityAPI::getCollisionMask)
+        .addFunction("setCollisionMask", &ScriptAPI::EntityAPI::setCollisionMask)
+        .addFunction("isVisible", &ScriptAPI::EntityAPI::isVisible)
+        .addFunction("setVisible", &ScriptAPI::EntityAPI::setVisible)
+        .addFunction("getEmissiveIntensity", &ScriptAPI::EntityAPI::getEmissiveIntensity)
+        .addFunction("setEmissiveIntensity", &ScriptAPI::EntityAPI::setEmissiveIntensity)
+        .addFunction("getCastsShadow", &ScriptAPI::EntityAPI::getCastsShadow)
+        .addFunction("setCastsShadow", &ScriptAPI::EntityAPI::setCastsShadow)
+        .addFunction("getReceivesShadow", &ScriptAPI::EntityAPI::getReceivesShadow)
+        .addFunction("setReceivesShadow", &ScriptAPI::EntityAPI::setReceivesShadow)
+        .addFunction("getChildCount", &ScriptAPI::EntityAPI::getChildCount)
+        .addFunction("getChildID", &ScriptAPI::EntityAPI::getChildID)
+        .addFunction("getSkyboxRotation", &ScriptAPI::EntityAPI::getSkyboxRotation)
+        .addFunction("setSkyboxRotation", &ScriptAPI::EntityAPI::setSkyboxRotation)
+        .addFunction("isScriptEnabled", &ScriptAPI::EntityAPI::isScriptEnabled)
+        .addFunction("setScriptEnabled", &ScriptAPI::EntityAPI::setScriptEnabled)
+        .endClass()
+
+        .beginClass<ScriptAPI::EventAPI>("Event")
+        .addFunction("getKey", &ScriptAPI::EventAPI::getKey)
+        .addFunction("isPressed", &ScriptAPI::EventAPI::isPressed)
+        .addFunction("isHeld", &ScriptAPI::EventAPI::isHeld)
+        .addFunction("isReleased", &ScriptAPI::EventAPI::isReleased)
+        .addFunction("getMouseMotionX", &ScriptAPI::EventAPI::getMouseMotionX)
+        .addFunction("getMouseMotionY", &ScriptAPI::EventAPI::getMouseMotionY)
+        .addFunction("getMouseButton", &ScriptAPI::EventAPI::getMouseButton)
+        .addFunction("mouseButtonPressed", &ScriptAPI::EventAPI::mouseButtonPressed)
+        .addFunction("mouseButtonHeld", &ScriptAPI::EventAPI::mouseButtonHeld)
+        .addFunction("mouseButtonReleased", &ScriptAPI::EventAPI::mouseButtonReleased)
+        .addFunction("getNewPosition", &ScriptAPI::EventAPI::getNewPosition)
+        .addFunction("getNewOrientation", &ScriptAPI::EventAPI::getNewOrientation)
+        .addFunction("getNewVelocity", &ScriptAPI::EventAPI::getNewVelocity)
+        .addFunction("getNewAngularVelocity", &ScriptAPI::EventAPI::getNewAngularVelocity)
+        .addFunction("getCollisionEntityA", &ScriptAPI::EventAPI::getCollisionEntityA)
+        .addFunction("getCollisionEntityB", &ScriptAPI::EventAPI::getCollisionEntityB)
+        .addFunction("getOtherEntityID", &ScriptAPI::EventAPI::getOtherEntityID)
+        .addFunction("entityIdToUID", &ScriptAPI::EventAPI::entityIdToUID)
+        .endClass()
+
+        .beginClass<glm::vec2>("vec2")
+        .addConstructor<void(*)(float, float)>()
+        .addProperty("x", &glm::vec2::x)
+        .addProperty("y", &glm::vec2::y)
+        .endClass()
+
+        .beginClass<glm::vec3>("vec3")
+        .addConstructor<void(*)(float, float, float)>()
+        .addProperty("x", &glm::vec3::x)
+        .addProperty("y", &glm::vec3::y)
+        .addProperty("z", &glm::vec3::z)
+        .endClass()
+
+        .beginClass<glm::vec4>("vec4")
+        .addConstructor<void(*)(float, float, float, float)>()
+        .addProperty("x", &glm::vec4::x)
+        .addProperty("y", &glm::vec4::y)
+        .addProperty("z", &glm::vec4::z)
+        .addProperty("w", &glm::vec4::w)
+        .endClass()
+
+        .beginClass<ScriptAPI::GameAPI>("game")
+        .addFunction("getEntityByName", &ScriptAPI::GameAPI::getEntityByName)
+        .addFunction("getEntityIDByUID", &ScriptAPI::GameAPI::getEntityIDByUID)
+        .addFunction("getKeyState", &ScriptAPI::GameAPI::getKeyState)
+        .addFunction("shutdown", &ScriptAPI::GameAPI::shutdown)
+        .addFunction("pauseGame", &ScriptAPI::GameAPI::pauseGame)
+        .addFunction("resumeGame", &ScriptAPI::GameAPI::resumeGame)
+        .addFunction("setParent", &ScriptAPI::GameAPI::setParent)
+        .addFunction("clearParent", &ScriptAPI::GameAPI::clearParent)
+        .addFunction("toggleDebug", &ScriptAPI::GameAPI::toggleDebug)
+        .addFunction("setExposure", &ScriptAPI::GameAPI::setExposure)
+        .addFunction("setAmbientScale", &ScriptAPI::GameAPI::setAmbientScale)
+        .addFunction("setResolution", &ScriptAPI::GameAPI::setResolution)
+        .addFunction("toggleFullscreen", &ScriptAPI::GameAPI::toggleFullscreen)
+        .addFunction("maximizeWindow", &ScriptAPI::GameAPI::maximizeWindow)
+        .addFunction("minimizeWindow", &ScriptAPI::GameAPI::minimizeWindow)
+        .addFunction("loadScene", &ScriptAPI::GameAPI::loadScene)
+        .addFunction("unloadScene", &ScriptAPI::GameAPI::unloadScene)
+        .addFunction("activateScene", &ScriptAPI::GameAPI::activateScene)
+        .addFunction("isSceneActive", &ScriptAPI::GameAPI::isSceneActive)
+        .addFunction("setUIText", &ScriptAPI::GameAPI::setUIText)
+        .addFunction("setUITextColour", &ScriptAPI::GameAPI::setUITextColour)
+        .addFunction("setUIPanelColour", &ScriptAPI::GameAPI::setUIPanelColour)
+        .addFunction("setUIVisible", &ScriptAPI::GameAPI::setUIVisible)
+        .addFunction("setUIPosition", &ScriptAPI::GameAPI::setUIPosition)
+        .addFunction("setUISize", &ScriptAPI::GameAPI::setUISize)
+        .addFunction("setUILayer", &ScriptAPI::GameAPI::setUILayer)
+        .addFunction("createUIElement", &ScriptAPI::GameAPI::createUIElement)
+        .addFunction("getFPS", &ScriptAPI::GameAPI::getFPS)
+        .addFunction("getMSPF", &ScriptAPI::GameAPI::getMSPF)
+        .addFunction("getRecentLogCount", &ScriptAPI::GameAPI::getRecentLogCount)
+        .addFunction("getRecentLog", &ScriptAPI::GameAPI::getRecentLog)
+        .addFunction("setMouseCaptured", &ScriptAPI::GameAPI::setMouseCaptured)
+        .addFunction("log", &ScriptAPI::GameAPI::log)
+        .addFunction("getMousePosition", &ScriptAPI::GameAPI::getMousePosition)
+        .addFunction("isMouseButtonPressed", &ScriptAPI::GameAPI::isMouseButtonPressed)
+        .addFunction("rayQuery", &ScriptAPI::GameAPI::rayQuery)
+        .addFunction("getRayHitEntity", &ScriptAPI::GameAPI::getRayHitEntity)
+        .addFunction("getRayHitPosition", &ScriptAPI::GameAPI::getRayHitPosition)
+        .addFunction("getRayHitNormal", &ScriptAPI::GameAPI::getRayHitNormal)
+        .addFunction("getRayHitDistance", &ScriptAPI::GameAPI::getRayHitDistance)
+        .addFunction("coneQuery", &ScriptAPI::GameAPI::coneQuery)
+        .addFunction("getConeHitEntity", &ScriptAPI::GameAPI::getConeHitEntity)
+        .addFunction("getConeHitPosition", &ScriptAPI::GameAPI::getConeHitPosition)
+        .addFunction("getConeHitDistance", &ScriptAPI::GameAPI::getConeHitDistance)
+        .addFunction("showDebugRay", &ScriptAPI::GameAPI::showDebugRay)
+        .addFunction("showDebugCone", &ScriptAPI::GameAPI::showDebugCone)
+        .addFunction("regenerateTerrain", &ScriptAPI::GameAPI::regenerateTerrain)
+        .addFunction("capsuleQuery", &ScriptAPI::GameAPI::capsuleQuery)
+        .addFunction("getCapsuleHitEntity", &ScriptAPI::GameAPI::getCapsuleHitEntity)
+        .addFunction("getCapsuleHitPosition", &ScriptAPI::GameAPI::getCapsuleHitPosition)
+        .addFunction("getCapsuleHitNormal", &ScriptAPI::GameAPI::getCapsuleHitNormal)
+        .addFunction("getCapsuleHitDistance", &ScriptAPI::GameAPI::getCapsuleHitDistance)
+        .addFunction("playSound", &ScriptAPI::GameAPI::playSound)
+        .addFunction("playMusic", &ScriptAPI::GameAPI::playMusic)
+        .addFunction("stopMusic", &ScriptAPI::GameAPI::stopMusic)
+        .addFunction("setCategoryVolume", &ScriptAPI::GameAPI::setCategoryVolume)
+        .endClass()
+
+        // Lua-visible value type wrapping an EC_VolumeNodePtr - see EC_VolumeAPI.h. No
+        // properties/constructor exposed: Lua only ever receives one from a volume.* call
+        // below, never constructs one directly.
+        .beginClass<ScriptAPI::VolumeHandle>("VolumeHandle")
+        .endClass()
+
+        // Author-facing procedural generation toolbox (Stage 1/2 of the terrain generation
+        // plan: "create a volume" / "subtract from it") - a growing library of tools meant
+        // to be invoked from a one-shot generation script (see runScriptOnce()), not a
+        // per-frame handler.
+        .beginClass<ScriptAPI::VolumeAPI>("volume")
+        .addFunction("constant", &ScriptAPI::VolumeAPI::constant)
+        .addFunction("noise", &ScriptAPI::VolumeAPI::noise)
+        .addFunction("sphere", &ScriptAPI::VolumeAPI::sphere)
+        .addFunction("box", &ScriptAPI::VolumeAPI::box)
+        .addFunction("halfspace", &ScriptAPI::VolumeAPI::halfspace)
+        .addFunction("cylinder", &ScriptAPI::VolumeAPI::cylinder)
+        .addFunction("add", &ScriptAPI::VolumeAPI::add)
+        .addFunction("scale", &ScriptAPI::VolumeAPI::scale)
+        .addFunction("union", &ScriptAPI::VolumeAPI::unionOf)
+        .addFunction("intersect", &ScriptAPI::VolumeAPI::intersect)
+        .addFunction("subtract", &ScriptAPI::VolumeAPI::subtract)
+        .addFunction("smoothUnion", &ScriptAPI::VolumeAPI::smoothUnion)
+        .addFunction("smoothIntersect", &ScriptAPI::VolumeAPI::smoothIntersect)
+        .addFunction("smoothSubtract", &ScriptAPI::VolumeAPI::smoothSubtract)
+        .addFunction("translate", &ScriptAPI::VolumeAPI::translate)
+        .addFunction("setRoot", &ScriptAPI::VolumeAPI::setRoot)
+        .addFunction("setChunkMaterial", &ScriptAPI::VolumeAPI::setChunkMaterial)
+        .addFunction("setChunkColour", &ScriptAPI::VolumeAPI::setChunkColour)
+        .addFunction("setGridRadius", &ScriptAPI::VolumeAPI::setGridRadius)
+        .endClass();
+
+    auto pushResult = luabridge::push(m_luaState, m_game);
+    if (!pushResult) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Failed to push 'game' global into Lua state: " + pushResult.message(),
+            LOGGING::LogLevel::SEVERE
+        );
+    }
+    lua_setglobal(m_luaState, "game");
+
+    auto volumePushResult = luabridge::push(m_luaState, m_volumeAPI);
+    if (!volumePushResult) {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Failed to push 'volume' global into Lua state: " + volumePushResult.message(),
+            LOGGING::LogLevel::SEVERE
+        );
+    }
+    lua_setglobal(m_luaState, "volume");
+}
+
+bool EC_LuaScriptSystem::runScriptOnce(const std::string& filename) {
+    std::lock_guard<std::mutex> lock(m_LuaMutex);
+
+    LOGGING::ECX_Logger::GetInstance()->LogMessage(
+        "Running one-shot script: " + filename,
+        LOGGING::LogLevel::INFORMATION
+    );
+
+    int result = luaL_dofile(m_luaState, filename.c_str());
+    if (result != LUA_OK) {
+        const char* error = lua_tostring(m_luaState, -1);
+        std::string errorMsg = error ? error : "Unknown error";
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "Lua error running " + filename + ": " + errorMsg +
+            " (error code: " + std::to_string(result) + ")",
+            LOGGING::LogLevel::SEVERE
+        );
+        lua_pop(m_luaState, 1);
+        return false;
+    }
+    return true;
+}
+
+std::shared_ptr<EC_VolumeNode> EC_LuaScriptSystem::getVolumeRoot() const {
+    return m_volumeAPI ? m_volumeAPI->getRoot() : nullptr;
+}
+
+ScriptAPI::VoxelTerrainConfig EC_LuaScriptSystem::getVoxelTerrainConfig() const {
+    return m_volumeAPI ? m_volumeAPI->getConfig() : ScriptAPI::VoxelTerrainConfig{};
+}

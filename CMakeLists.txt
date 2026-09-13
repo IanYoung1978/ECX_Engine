@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.13)
 
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 # attach to vcpkg's cmake configuration for project dependencies
@@ -11,15 +11,47 @@ project(ECX LANGUAGES CXX)
 
 set(SOURCE_DIR ${PROJECT_SOURCE_DIR}/src)
 
+# Off in CI: lets ECX_UnitTests configure with only glm + Catch2.
+option(ECX_BUILD_ENGINE "Build the main ECX game target (requires SDL2/GLEW/assimp/Lua/OpenGL/Stb)" ON)
 
-set(CMAKE_GENERATOR_PLATFORM x64)
+# Only Visual Studio generators accept a platform specification - Ninja (used by the
+# out/build/x64-Debug CMakePresets tree) errors out ("Generator Ninja does not support
+# platform specification") the moment anything triggers a try_compile() sub-build, e.g.
+# find_package(httplib)'s own find_dependency(Threads) - previously latent/harmless here
+# only because nothing had exercised that path yet.
+if(CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(CMAKE_GENERATOR_PLATFORM x64)
+endif()
 set(CMAKE_BUILD_TYPE Debug)
 
-message("searching ${SOURCE_DIR} for source files")
+find_package(GLM CONFIG REQUIRED)
+find_package(Catch2 CONFIG REQUIRED)
 
-file(GLOB_RECURSE ECX_SOURCE ${SOURCE_DIR}/*.*)
+if(ECX_BUILD_ENGINE)
 
-add_executable(ECX ${ECX_SOURCE} "src/Engine/Subsystems/CollisionSystems/EC_CollisionShapes.h")
+# Explicit sources, not a glob - each src/ subdirectory owns a CMakeLists.txt.
+add_executable(ECX
+    src/Eclipsis.cpp
+    src/Game.cpp
+    src/Game.h
+    src/resource.h
+)
+
+add_subdirectory(src/Components)
+add_subdirectory(src/Engine)
+add_subdirectory(src/Entity)
+add_subdirectory(src/Graphics)
+add_subdirectory(src/Logging)
+add_subdirectory(src/Messaging)
+add_subdirectory(src/Procedural)
+add_subdirectory(src/SceneManager)
+add_subdirectory(src/Spatial)
+add_subdirectory(src/TaskManager)
+add_subdirectory(src/Terrain)
+add_subdirectory(src/UI)
+add_subdirectory(src/vendor)
+add_subdirectory(src/Window)
+add_subdirectory(src/xml)
 
 set_property(TARGET ECX PROPERTY CXX_STANDARD 17)
 
@@ -31,7 +63,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOG_ENABLED")
 find_package(SDL2 CONFIG REQUIRED)
 find_package(SDL2_image CONFIG REQUIRED)
 find_package(GLEW CONFIG REQUIRED)
-find_package(GLM CONFIG REQUIRED)
 find_package(assimp CONFIG REQUIRED)
 find_package(Lua REQUIRED)
 find_package(OpenGL REQUIRED)
@@ -117,8 +148,19 @@ find_path(LUABRIDGE3_INCLUDE_DIRS "luabridge3/LuaBridge/Array.h")
 message(${LUABRIDGE3_INCLUDE_DIRS})
 set(INCLUDE_DIRS ${INCLUDE_DIRS} ${LUABRIDGE3_INCLUDE_DIRS})
 
+# Audio subsystem (Issue #112) - single-header, public-domain, no separate library to link;
+# MA_IMPLEMENTATION is defined in exactly one .cpp (see EC_AudioSystem.cpp) to generate the
+# actual implementation from the header, same convention as stb's single-header libraries.
+find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
+message(${MINIAUDIO_INCLUDE_DIRS})
+set(INCLUDE_DIRS ${INCLUDE_DIRS} ${MINIAUDIO_INCLUDE_DIRS})
+
+# Dev-build-only debug HTTP server (Issue #87's first slice) - header-only, no threading
+# model of its own beyond a plain blocking listen()/stop() pair.
+find_package(httplib CONFIG REQUIRED)
+
 target_include_directories(ECX PRIVATE ${INCLUDE_DIRS} ${SOURCE_DIR})
-target_link_libraries(ECX ${LIBS})
+target_link_libraries(ECX ${LIBS} httplib::httplib)
 
 add_custom_command(
         TARGET ECX POST_BUILD
@@ -132,14 +174,33 @@ add_custom_command(
                 ${CMAKE_CURRENT_BINARY_DIR}/data
         COMMENT "Copying data files...")
 
-# Standalone unit tests for the GJK collision math (Issues #30/#29) - deliberately
-# isolated from the main ECX target: only depends on glm, not SDL/GLEW/assimp/Lua/the
-# ECS, so it builds fast and can run headless without a graphics context.
-add_executable(ECX_GJK_Tests
+endif() # ECX_BUILD_ENGINE
+
+# Pure-logic collision/spatial unit tests - only depends on glm + Catch2, not the engine.
+add_executable(ECX_UnitTests
     tests/EC_GJK_Tests.cpp
+    tests/EC_CollisionChecks_Tests.cpp
+    tests/EC_VClip_Tests.cpp
+    tests/EC_PairManager_Tests.cpp
+    tests/EC_SpatialGrid_Tests.cpp
+    tests/EC_Frustum_Tests.cpp
+    tests/EC_MarchingCubes_Tests.cpp
+    tests/EC_RayIntersection_Tests.cpp
+    tests/EC_Noise3D_Tests.cpp
+    tests/EC_VolumeNode_Tests.cpp
     src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
     src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_CollisionChecks.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_VClip.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_PairManager.cpp
+    src/Engine/Subsystems/CollisionSystems/EC_RayIntersection.cpp
+    src/Spatial/EC_SpatialGrid.cpp
+    src/Spatial/EC_Frustum.cpp
+    src/Terrain/EC_MarchingCubesTables.cpp
+    src/Terrain/EC_MarchingCubesMesher.cpp
+    src/Procedural/EC_Noise3D.cpp
+    src/Procedural/EC_VolumeNode.cpp
 )
-set_property(TARGET ECX_GJK_Tests PROPERTY CXX_STANDARD 17)
-target_include_directories(ECX_GJK_Tests PRIVATE ${SOURCE_DIR} glm::glm)
-target_link_libraries(ECX_GJK_Tests glm::glm)
+set_property(TARGET ECX_UnitTests PROPERTY CXX_STANDARD 17)
+target_include_directories(ECX_UnitTests PRIVATE ${SOURCE_DIR})
+target_link_libraries(ECX_UnitTests PRIVATE glm::glm Catch2::Catch2WithMain)

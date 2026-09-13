@@ -96,14 +96,19 @@ vec3 computeLight(
     return (kD * albedo / PI + specular) * radiance * NdotL;
 }
 
-float computeOcclusion(vec3 fragPos, vec3 lightPos)
+float computeOcclusion(vec3 fragPos, vec3 lightPos, vec3 normal)
 {
+    // Read-side bias only - see shadowPointPass()'s comment for why a write-side
+    // glPolygonOffset/front-face-culling bias doesn't work here. Slope-scaled against the
+    // receiving surface (steeper angle to the light needs more bias), same approach as
+    // DirLightShadowPBR.frag/SpotlightShadowPBR.frag, just directly in world-space distance
+    // units since this cubemap already stores linear light-distance rather than NDC depth.
     vec3 fragToLight   = fragPos - lightPos;
     float closestDepth = texture(shadowMap, fragToLight).r * FarPlane;
     float currentDepth = length(fragToLight);
-    float bias         = 0.05;
+    vec3 lightDir      = normalize(-fragToLight);
+    float bias         = mix(0.15, 0.02, max(dot(normal, lightDir), 0.0));
     return (currentDepth - bias > closestDepth) ? 0.2 : 1.0;
-    //return closestDepth;
 }
 
 void main()
@@ -116,7 +121,7 @@ void main()
 
     vec3 vToEye    = normalize(WSCamPos - pcolour.xyz);
     vec3 ltf       = pointLight.position.xyz - pcolour.xyz;
-    float visibility = computeOcclusion(pcolour.xyz, pointLight.position.xyz);
+    float visibility = computeOcclusion(pcolour.xyz, pointLight.position.xyz, ncolour.rgb);
 
     vec3 fragCol = computeLight(
         normalize(ltf),

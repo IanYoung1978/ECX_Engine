@@ -4,14 +4,14 @@
 #include <vector>
 #include <algorithm>
 #include "Window/Window.h"
-#include "Graphics/BufferType.h"
+#include "Graphics/FrameBuffers/BufferType.h"
 #include "Logging/ECX_Logging.h"
 
 void GL_UIRenderer::init(std::shared_ptr<Window> window)
 {
     m_Window = window;
 
-    if (!m_Font.load("data/assets/fonts/JetBrainsMono.ttf", 16.0f))
+    if (!m_Font.load("data/assets/fonts/JetBrainsMono.ttf", kDefaultFontSizePx))
         LOGGING::ECX_Logger::GetInstance()->LogMessage("GL_UIRenderer: failed to load font atlas", LOGGING::LogLevel::CRITICAL);
 
     if (!m_TextShader.loadShader("data/assets/shaders/ui_text.vert", "data/assets/shaders/ui_text.frag"))

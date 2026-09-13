@@ -83,6 +83,16 @@ public:
     std::vector<EntityID> getEntitiesWithComponent(std::type_index type) const;
     std::vector<EntityID> getEntitiesWithComponents(const std::vector<std::type_index>& types) const;
 
+    // Same as getEntitiesWithComponents, further filtered to entities whose
+    // EC_DOD_EntityInfo has both `active` (gameplay-level) and `sceneActive`
+    // (scene-membership) set - the "should this entity actually participate right now"
+    // check every subsystem needs, consolidated here instead of each one re-implementing
+    // its own isAlive+hasComponent<EntityInfo>+.active loop (see EC_DOD_EntityInfo's
+    // comment for why the two flags are separate). An entity with no EC_DOD_EntityInfo at
+    // all is treated as active (permissive default - every entity constructed via the
+    // normal factory path has one, so this only matters for hand-built test entities).
+    std::vector<EntityID> getActiveEntitiesWithComponents(const std::vector<std::type_index>& types) const;
+
     void clear();
 
     size_t getEntityCount() const;
