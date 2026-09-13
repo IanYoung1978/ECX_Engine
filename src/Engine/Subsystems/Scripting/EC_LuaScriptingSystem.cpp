@@ -453,6 +453,10 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("getCapsuleHitPosition", &ScriptAPI::GameAPI::getCapsuleHitPosition)
         .addFunction("getCapsuleHitNormal", &ScriptAPI::GameAPI::getCapsuleHitNormal)
         .addFunction("getCapsuleHitDistance", &ScriptAPI::GameAPI::getCapsuleHitDistance)
+        .addFunction("playSound", &ScriptAPI::GameAPI::playSound)
+        .addFunction("playMusic", &ScriptAPI::GameAPI::playMusic)
+        .addFunction("stopMusic", &ScriptAPI::GameAPI::stopMusic)
+        .addFunction("setCategoryVolume", &ScriptAPI::GameAPI::setCategoryVolume)
         .endClass()
 
         // Lua-visible value type wrapping an EC_VolumeNodePtr - see EC_VolumeAPI.h. No

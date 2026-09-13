@@ -249,6 +249,26 @@ ScriptAPI::VoxelTerrainConfig EC_SceneManager::getVoxelTerrainConfig() const
     return m_Engine.getVoxelTerrainConfig();
 }
 
+void EC_SceneManager::playSound(const std::string& path, float volume, const std::string& category)
+{
+    m_Engine.playSound(path, volume, category);
+}
+
+void EC_SceneManager::playMusic(const std::string& path, float volume, bool loop)
+{
+    m_Engine.playMusic(path, volume, loop);
+}
+
+void EC_SceneManager::stopMusic()
+{
+    m_Engine.stopMusic();
+}
+
+void EC_SceneManager::setCategoryVolume(const std::string& category, float volume)
+{
+    m_Engine.setCategoryVolume(category, volume);
+}
+
 void EC_SceneManager::activateSceneByIndex(size_t index)
 {
     size_t previous = m_ActiveScene;

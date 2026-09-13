@@ -148,6 +148,13 @@ find_path(LUABRIDGE3_INCLUDE_DIRS "luabridge3/LuaBridge/Array.h")
 message(${LUABRIDGE3_INCLUDE_DIRS})
 set(INCLUDE_DIRS ${INCLUDE_DIRS} ${LUABRIDGE3_INCLUDE_DIRS})
 
+# Audio subsystem (Issue #112) - single-header, public-domain, no separate library to link;
+# MA_IMPLEMENTATION is defined in exactly one .cpp (see EC_AudioSystem.cpp) to generate the
+# actual implementation from the header, same convention as stb's single-header libraries.
+find_path(MINIAUDIO_INCLUDE_DIRS "miniaudio.h")
+message(${MINIAUDIO_INCLUDE_DIRS})
+set(INCLUDE_DIRS ${INCLUDE_DIRS} ${MINIAUDIO_INCLUDE_DIRS})
+
 # Dev-build-only debug HTTP server (Issue #87's first slice) - header-only, no threading
 # model of its own beyond a plain blocking listen()/stop() pair.
 find_package(httplib CONFIG REQUIRED)

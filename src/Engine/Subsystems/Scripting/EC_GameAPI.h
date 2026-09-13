@@ -105,6 +105,14 @@ namespace ScriptAPI
         glm::vec3 getCapsuleHitNormal(int index);
         float getCapsuleHitDistance(int index);
 
+        // Issue #112. See EC_AudioSystem.h for what each call does - category is any
+        // author-chosen name ("sfx", "music", ...) plus the reserved "master" for the
+        // overall engine volume.
+        void playSound(const std::string& path, float volume, const std::string& category);
+        void playMusic(const std::string& path, float volume, bool loop);
+        void stopMusic();
+        void setCategoryVolume(const std::string& category, float volume);
+
     private:
         std::vector<RayQueryHit> m_LastRayHits;
         std::vector<RayQueryHit> m_LastConeHits;

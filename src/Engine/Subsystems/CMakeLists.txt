@@ -4,6 +4,7 @@ target_sources(ECX PRIVATE
     EC_SystemType.h
 )
 
+add_subdirectory(Audio)
 add_subdirectory(Camera)
 add_subdirectory(CollisionSystems)
 add_subdirectory(Control)
