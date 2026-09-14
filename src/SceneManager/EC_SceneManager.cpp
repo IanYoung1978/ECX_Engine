@@ -43,6 +43,19 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
     EC_DOD_EntityFactory::loadManifestFile(m_Settings.physics_materials_file);
 
+    // Issue #130 - optional: a GameMode file with no <Prefabs> entry at all leaves this
+    // registry empty, and spawnEntity() just fails per-alias (same graceful-absence
+    // convention as VoxelTerrain's `enabled` flag) rather than logging a startup error.
+    if (!m_Settings.prefabs_file.empty())
+    {
+        if (!XML::loadPrefabsFile(m_Settings.prefabs_file, m_PrefabRegistry))
+        {
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "Failed to load prefabs file: " + m_Settings.prefabs_file,
+                LOGGING::LogLevel::WARNING);
+        }
+    }
+
     messenger.Subscribe(*this, ECXCommandType::SystemStart);
     messenger.Subscribe(*this, ECXCommandType::SystemShutdown);
     messenger.Subscribe(*this, ECXCommandType::GamePause);
@@ -267,6 +280,61 @@ void EC_SceneManager::stopMusic()
 void EC_SceneManager::setCategoryVolume(const std::string& category, float volume)
 {
     m_Engine.setCategoryVolume(category, volume);
+}
+
+EntityID EC_SceneManager::spawnEntity(const std::string& alias, float x, float y, float z)
+{
+    auto it = m_PrefabRegistry.find(alias);
+    if (it == m_PrefabRegistry.end())
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "spawnEntity: unknown prefab alias '" + alias + "'",
+            LOGGING::LogLevel::SEVERE);
+        return INVALID_ENTITY;
+    }
+
+    // Same load idiom as EC_DOD_LoadingWorker::loadEntityFile - a standalone file whose
+    // root element IS the <Entity> block itself, safe to call from any thread (see that
+    // function's own comment: constructEntity never touches GL directly, graphics
+    // resolution is deferred to finalizePendingGraphics, already swept every frame by
+    // update() above regardless of which entity/scene it belongs to).
+    TiXmlDocument doc(it->second.c_str());
+    if (!doc.LoadFile())
+    {
+        LOGGING::ECX_Logger::GetInstance()->LogMessage(
+            "spawnEntity: failed to load prefab file '" + it->second + "' for alias '" + alias + "'",
+            LOGGING::LogLevel::SEVERE);
+        return INVALID_ENTITY;
+    }
+    TiXmlElement* root = doc.FirstChildElement();
+    if (!root) return INVALID_ENTITY;
+
+    // EC_DOD_EntityFactory has no meaningful per-instance state (everything it actually
+    // needs is static) - a fresh local instance to call constructEntity() through is
+    // exactly what EC_DOD_LoadingWorker::m_Factory already does for scene loading.
+    EC_DOD_EntityFactory factory;
+    EntityID entity = factory.constructEntity(*root);
+    if (entity == INVALID_ENTITY) return INVALID_ENTITY;
+
+    auto& manager = EC_DOD_EntityManager::getInstance();
+    if (manager.hasComponent<EC_DOD_Spatial>(entity))
+        manager.getComponent<EC_DOD_Spatial>(entity).position = glm::vec3(x, y, z);
+
+    // Mirrors EC_DOD_LoadingWorker::parseEntity's own post-construct bookkeeping exactly,
+    // registered against the currently active scene rather than whichever scene is
+    // loading, since a runtime spawn has no scene file of its own.
+    m_Scenes[m_ActiveScene].addEntity(entity);
+    if (manager.hasComponent<EC_DOD_Camera>(entity))
+        m_Scenes[m_ActiveScene].addCamera(entity);
+    if (manager.hasComponent<EC_DOD_Light>(entity))
+        m_Scenes[m_ActiveScene].addLight(entity);
+
+    return entity;
+}
+
+void EC_SceneManager::destroyEntity(EntityID id)
+{
+    EC_DOD_EntityManager::getInstance().destroyEntity(id);
 }
 
 void EC_SceneManager::activateSceneByIndex(size_t index)

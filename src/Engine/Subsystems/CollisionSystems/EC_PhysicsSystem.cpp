@@ -61,6 +61,27 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         }
     }
 
+    // Issue #130 - script-set persistent external force (see EC_DOD_ExternalForce's own
+    // comment), integrated exactly like gravity above: force/mass * dt added straight to
+    // velocity, every substep, for as long as the force stays set. A separate, sparse
+    // component (most entities never have one) rather than folded into the gravity loop
+    // above, so entities that never call applyForce() pay zero extra cost here.
+    {
+        auto* forceArray = manager.getComponentArray<EC_DOD_ExternalForce>();
+        if (forceArray) {
+            std::shared_lock forceLock(forceArray->getMutex());
+            auto& forces = forceArray->getData();
+            for (size_t i = 0; i < forces.size(); i++) {
+                EntityID entity = forceArray->getEntity(i);
+                if (!manager.hasComponent<EC_DOD_RigidBody>(entity)) continue;
+                if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
+                const auto& rb = manager.getComponent<EC_DOD_RigidBody>(entity);
+                if (rb.isStatic || rb.isSleeping || rb.mass <= 1e-6f) continue;
+                manager.getComponent<EC_DOD_Spatial>(entity).velocity += (forces[i].force / rb.mass) * deltaTimeS;
+            }
+        }
+    }
+
     if (m_PairManager) {
         // --- RECORD: every body touched by at least one currently-
         // colliding pair gets its real velocity/mass/inertia read exactly

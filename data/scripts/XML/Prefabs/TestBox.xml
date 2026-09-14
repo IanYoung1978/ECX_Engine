@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!-- Issue #130 - a minimal physics-enabled prefab, used to verify game:spawnEntity()
+     end-to-end (spawn position, physics forces/impulses, destroyEntity). Position below is
+     a placeholder - spawnEntity() overwrites it with the caller-supplied x,y,z. -->
+<Entity name="spawned_test_box">
+	<Spatial><Position>0.0,0.0,0.0</Position></Spatial>
+	<Transform><Scale>1.0,1.0,1.0</Scale></Transform>
+	<Collider><Type>OBB</Type><Extents>0.5,0.5,0.5</Extents></Collider>
+	<RigidBody material="Wood"/>
+	<Gfx>
+		<Model>data/assets/models/cube.obj</Model>
+		<Shader vertex="data/assets/shaders/basic.vert" fragment="data/assets/shaders/PBR.frag"></Shader>
+		<Colour>0.9,0.3,0.3,1.0</Colour>
+	</Gfx>
+</Entity>

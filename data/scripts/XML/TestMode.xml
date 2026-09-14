@@ -6,4 +6,5 @@
 	<GraphicsSettings filename="data/scripts/XML/GraphicsSetting.xml"/>
 	<UI filename="data/scripts/XML/UI.xml"/>
 	<PhysicsMaterials filename="data/scripts/XML/PhysicsMaterials.xml"/>
+	<Prefabs filename="data/scripts/XML/Prefabs.xml"/>
 </GameMode>
