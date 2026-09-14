@@ -1,6 +1,7 @@
 #include "Engine/Subsystems/Scripting/EC_EntityAPI.h"
 #include "Components/EC_DOD_Components.h"
 #include "Entity/EC_DOD_EntityManager.h"
+#include "Engine/Subsystems/CollisionSystems/EC_PhysicsResolution.h"
 
 namespace ScriptAPI
 {
@@ -522,5 +523,116 @@ namespace ScriptAPI
         if (!mgr.isAlive(entityID)) return;
         if (!mgr.hasComponent<EC_DOD_ScriptData>(entityID)) return;
         mgr.getComponent<EC_DOD_ScriptData>(entityID).enabled = enabled;
+    }
+
+    void EntityAPI::applyForce(float x, float y, float z) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        // addComponent overwrites any existing one - exactly the "call again to change it"
+        // persistence model EC_DOD_ExternalForce's own comment describes.
+        mgr.addComponent(entityID, EC_DOD_ExternalForce{ glm::vec3(x, y, z) });
+    }
+
+    void EntityAPI::applyImpulse(float x, float y, float z) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
+        const auto& rb = mgr.getComponent<EC_DOD_RigidBody>(entityID);
+        if (rb.isStatic || rb.mass <= 1e-6f) return;
+        mgr.getComponent<EC_DOD_Spatial>(entityID).velocity += glm::vec3(x, y, z) / rb.mass;
+    }
+
+    void EntityAPI::applyTorque(float x, float y, float z) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
+        const auto& rb = mgr.getComponent<EC_DOD_RigidBody>(entityID);
+        if (rb.isStatic || rb.mass <= 1e-6f) return;
+        const glm::mat3 invInertiaWorld = EC_PhysicsResolution::computeInvInertiaWorld(entityID, rb.mass);
+        mgr.getComponent<EC_DOD_Spatial>(entityID).angVelocity += invInertiaWorld * glm::vec3(x, y, z);
+    }
+
+    float EntityAPI::getMass() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return 0.0f;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return 0.0f;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).mass;
+    }
+
+    void EntityAPI::setMass(float mass) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).mass = mass;
+    }
+
+    float EntityAPI::getRestitution() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return 0.0f;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return 0.0f;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).restitution;
+    }
+
+    void EntityAPI::setRestitution(float restitution) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).restitution = restitution;
+    }
+
+    float EntityAPI::getFriction() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return 0.0f;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return 0.0f;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).friction;
+    }
+
+    void EntityAPI::setFriction(float friction) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).friction = friction;
+    }
+
+    float EntityAPI::getStaticFriction() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return 0.0f;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return 0.0f;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).staticFriction;
+    }
+
+    void EntityAPI::setStaticFriction(float staticFriction) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).staticFriction = staticFriction;
+    }
+
+    bool EntityAPI::isStatic() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return false;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return false;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).isStatic;
+    }
+
+    void EntityAPI::setStatic(bool isStatic) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).isStatic = isStatic;
+    }
+
+    bool EntityAPI::isSleeping() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return false;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return false;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).isSleeping;
+    }
+
+    void EntityAPI::wake() {
+        EC_PhysicsResolution::wakeIfSleeping(entityID);
     }
 }

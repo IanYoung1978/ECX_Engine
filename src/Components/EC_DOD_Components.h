@@ -160,6 +160,18 @@ struct EC_DOD_ImpulseAccumulator {
     glm::vec3 deltaAngularMomentum{ 0.0f };
 };
 
+// Issue #130 - a persistent, script-set external force (thrusters, wind, conveyor belts),
+// integrated into velocity every physics substep exactly like gravity is - NOT a one-shot
+// impulse. Added lazily by EntityAPI::applyForce() the first time a script targets an
+// entity; never authored via XML. Stays in effect until a script calls applyForce() again
+// (e.g. with 0,0,0 to turn it off) - a script's own OnUpdate only runs once per outer
+// frame while physics substeps several times within it, so a value set once must persist
+// across all of that frame's substeps to integrate correctly, rather than being consumed
+// and cleared after just one.
+struct EC_DOD_ExternalForce {
+    glm::vec3 force{ 0.0f };
+};
+
 struct EC_DOD_Transform {
     glm::mat4 matrix{ 1.0f };
     glm::vec3 scale{ 1.0f };

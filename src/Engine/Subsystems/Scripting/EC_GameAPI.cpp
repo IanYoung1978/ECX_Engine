@@ -162,6 +162,16 @@ namespace ScriptAPI
         return game->isSceneActive(alias);
     }
 
+    EntityAPI GameAPI::spawnEntity(const std::string& alias, float x, float y, float z) {
+        if (!game) return EntityAPI(INVALID_ENTITY);
+        return EntityAPI(game->spawnEntity(alias, x, y, z));
+    }
+
+    void GameAPI::destroyEntity(unsigned int entityId) {
+        if (!game) return;
+        game->destroyEntity(entityId);
+    }
+
     void GameAPI::setUIText(unsigned int entityID, const std::string& text) {
         auto& mgr = EC_DOD_EntityManager::getInstance();
         EntityID entity = static_cast<EntityID>(entityID);

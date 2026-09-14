@@ -130,5 +130,33 @@ namespace ScriptAPI
         // rendering/colliding but stop reacting to input.
         bool isScriptEnabled();
         void setScriptEnabled(bool enabled);
+
+        // Issue #130. Persistent, script-set external force (EC_DOD_ExternalForce) -
+        // integrated into velocity every physics substep exactly like gravity, until
+        // changed again (call with 0,0,0 to turn it off) - the standard "thruster" idiom.
+        // No-op on an entity with no RigidBody. See that component's own comment for why
+        // this must persist rather than clear after one substep.
+        void applyForce(float x, float y, float z);
+
+        // Issue #130. One-shot instantaneous change, added directly to velocity/
+        // angular velocity this frame - the standard recoil/knockback/jump-pad/explosion
+        // idiom. No-op on an entity with no RigidBody (or a static one).
+        void applyImpulse(float x, float y, float z);
+        void applyTorque(float x, float y, float z);
+
+        // Issue #130. Runtime RigidBody (EC_DOD_RigidBody) property access - authoring-
+        // time-only (XML <RigidBody>) until now. 0/false on an entity with no RigidBody.
+        float getMass();
+        void setMass(float mass);
+        float getRestitution();
+        void setRestitution(float restitution);
+        float getFriction();
+        void setFriction(float friction);
+        float getStaticFriction();
+        void setStaticFriction(float staticFriction);
+        bool isStatic();
+        void setStatic(bool isStatic);
+        bool isSleeping();
+        void wake();
     };
 }

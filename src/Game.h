@@ -101,6 +101,10 @@ public:
     void playMusic(const std::string& path, float volume, bool loop);
     void stopMusic();
     void setCategoryVolume(const std::string& category, float volume);
+    // Issue #130. Forwards to the scene manager's prefab registry - see
+    // EC_SceneManager::spawnEntity/destroyEntity's own comments.
+    EntityID spawnEntity(const std::string& alias, float x, float y, float z);
+    void destroyEntity(EntityID id);
     float getFPS() const { return m_Timer->getFPS(); }
     float getMSPF() const { return m_Timer->getMSPF(); }
     EntityID getEntityByUID(uint32_t uid) const;

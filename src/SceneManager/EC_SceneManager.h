@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <map>
 #include <mutex>
 #include <atomic>
 #include "Engine/EC_Engine.h"
@@ -64,6 +65,16 @@ public:
     void stopMusic();
     void setCategoryVolume(const std::string& category, float volume);
 
+    // Issue #130. Looks up alias in the prefab registry (see m_PrefabRegistry), loads that
+    // standalone entity file, repositions it, and registers it into the currently active
+    // scene - see EC_SceneManager.cpp's own comment for the full sequence. Returns
+    // INVALID_ENTITY on any failure (unknown alias, file failed to load).
+    EntityID spawnEntity(const std::string& alias, float x, float y, float z);
+    // Thin wrapper over EC_DOD_EntityManager::destroyEntity - see that function's own
+    // comment for why this doesn't also need to scrub the id out of whichever scene still
+    // references it.
+    void destroyEntity(EntityID id);
+
     void receive(ECXCommand& command) override;
 
 private:
@@ -88,6 +99,9 @@ private:
     std::unordered_map<uint32_t, EntityID> m_UIDMap;
     std::unordered_map<std::string, EntityID> m_NameMap;
     std::unordered_set<size_t> m_LoadingScenes;
+    // Issue #130 - alias -> standalone entity file path, loaded once at init() from
+    // m_Settings.prefabs_file (see XML::loadPrefabsFile). Empty if that file is absent.
+    std::map<std::string, std::string> m_PrefabRegistry;
     EC_Game* m_Game = nullptr;
     std::mutex m_Lock;
     bool m_InitialPauseDone = false;

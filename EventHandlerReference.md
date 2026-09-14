@@ -233,6 +233,38 @@ local mask = entity:getCollisionMask()
 entity:setCollisionMask(0xFFFFFFFF)
 ```
 
+### RigidBody / Physics Forces (Issue #130)
+
+```lua
+-- Runtime RigidBody (EC_DOD_RigidBody) property access - authoring-time-only (XML
+-- <RigidBody>) until now. 0/false on an entity with no RigidBody.
+local mass = entity:getMass()
+entity:setMass(5.0)
+local restitution = entity:getRestitution()
+entity:setRestitution(0.5)
+local friction = entity:getFriction()          -- kinetic
+entity:setFriction(0.3)
+local staticFriction = entity:getStaticFriction()
+entity:setStaticFriction(0.5)
+local static = entity:isStatic()
+entity:setStatic(false)
+local sleeping = entity:isSleeping()
+entity:wake()
+
+-- Persistent, script-set external force - integrated into velocity every physics
+-- substep exactly like gravity, until changed again. Call with 0,0,0 to turn it off
+-- (the standard "thruster" idiom - a script must keep calling this every tick it wants
+-- the force active, same as real physics engines' continuous-force APIs). No-op on an
+-- entity with no RigidBody.
+entity:applyForce(0.0, 0.0, 20.0)
+
+-- One-shot instantaneous change, added directly to velocity/angular velocity this
+-- frame - the standard recoil/knockback/jump-pad/explosion idiom. No-op on an entity
+-- with no RigidBody (or a static one).
+entity:applyImpulse(0.0, 10.0, 0.0)
+entity:applyTorque(0.0, 5.0, 0.0)
+```
+
 ### Hierarchy
 
 ```lua
@@ -365,6 +397,25 @@ game:loadScene("alias")      -- Begin loading a scene by its Scenes.xml alias
 game:unloadScene("alias")    -- Unload a loaded scene
 game:activateScene("alias")  -- Make a loaded scene the active one
 local active = game:isSceneActive("alias")  -- Query current state instead of tracking it yourself
+```
+
+### Runtime Entity Spawn/Destroy (Issue #130)
+
+Spawns a standalone entity file (a "prefab") registered by alias in `data/scripts/XML/
+Prefabs.xml` (optional - a game with no use for runtime spawning can omit it entirely).
+Each prefab file is a single `<Entity>...</Entity>` block, same shape as any scene-authored
+entity - see `data/scripts/XML/Prefabs/TestBox.xml` for a minimal physics-enabled example.
+
+```lua
+-- Returns an invalid Entity (getID() == 0) on any failure - unknown alias, or the prefab
+-- file failed to load.
+local box = game:spawnEntity("test_box", 5.0, 10.0, 0.0)
+if box:getID() ~= 0 then
+    box:applyImpulse(0.0, 5.0, 0.0)
+end
+
+-- Raw numeric ID, matching setParent/clearParent's existing convention.
+game:destroyEntity(box:getID())
 ```
 
 ### Graphics

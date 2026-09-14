@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!-- Issue #130 - alias -> standalone entity file, looked up by game:spawnEntity(alias, x, y, z).
+     Optional: an engine/game with no use for runtime spawning can simply omit the
+     <Prefabs filename="..."> entry in its GameMode file entirely. -->
+<Prefabs>
+	<Prefab alias="test_box">data/scripts/XML/Prefabs/TestBox.xml</Prefab>
+</Prefabs>

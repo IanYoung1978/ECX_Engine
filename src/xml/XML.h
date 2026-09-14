@@ -49,6 +49,30 @@ namespace XML
 		return true;
 	}
 
+	// Issue #130 - alias -> filepath, one small step below Scenes.xml: no precache/unload
+	// flags, since a prefab is loaded fresh on every spawnEntity() call rather than kept
+	// resident like a scene. Absence of the file itself (not this function's own failure)
+	// is handled by the caller checking GameModeSettings::prefabs_file for emptiness first.
+	inline bool loadPrefabsFile(const std::string& file, std::map<std::string, std::string>& aliasToPath)
+	{
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root || strcmp(root->Value(), "Prefabs") != 0)
+			return false;
+
+		auto child = root->FirstChildElement("Prefab");
+		while (child)
+		{
+			const char* alias = child->Attribute("alias");
+			if (alias && child->GetText())
+				aliasToPath[alias] = child->GetText();
+			child = child->NextSiblingElement("Prefab");
+		}
+		return true;
+	}
+
 	inline bool loadKeyMapping(const std::string& file, std::map<SDL_Scancode, std::string>& mappings)
 	{
 		TiXmlDocument doc(file.c_str());
@@ -124,6 +148,14 @@ namespace XML
 				else if (strcmp(child->Value(), "PhysicsMaterials") == 0)
 				{
 					settings.physics_materials_file = child->FirstAttribute()->Value();
+				}
+				else if (strcmp(child->Value(), "Prefabs") == 0)
+				{
+					// Issue #130 - optional, unlike every entry above: no null-check
+					// needed elsewhere only because every other entry is mandatory in
+					// every existing TestMode.xml; this one may simply be absent.
+					auto att = child->FirstAttribute();
+					if (att) settings.prefabs_file = att->Value();
 				}
 				child = child->NextSiblingElement();
 			}
