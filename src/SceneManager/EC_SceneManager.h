@@ -98,6 +98,14 @@ private:
     std::unordered_map<std::string, size_t> m_AliasMap;
     std::unordered_map<uint32_t, EntityID> m_UIDMap;
     std::unordered_map<std::string, EntityID> m_NameMap;
+    // Issue #135 - written from loadScene()/init() (reachable from Lua's activateScene()
+    // on the scripting thread) and iterated/erased every frame from update() on the main
+    // thread. An unsynchronized insert concurrent with iterate/erase on a
+    // std::unordered_set is undefined behaviour - observed as the engine hanging
+    // entirely (a corrupted iterator or internal rehash mid-iteration, not a crash).
+    // Same fix EC_GameScene already applies to its own m_Entities/m_Cameras/m_Lights: a
+    // plain mutex around every access.
+    std::mutex m_LoadingScenesLock;
     std::unordered_set<size_t> m_LoadingScenes;
     // Issue #130 - alias -> standalone entity file path, loaded once at init() from
     // m_Settings.prefabs_file (see XML::loadPrefabsFile). Empty if that file is absent.

@@ -38,6 +38,20 @@ namespace {
 void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
+    // Issue #135 - gravity/external-force/integration below previously ran for every
+    // RigidBody in the process regardless of which scene it belonged to or whether that
+    // scene was even active - a scene loading in the background (see
+    // EC_SceneManager::loadScene) started falling under gravity and integrating position
+    // the moment its entities existed, well before it became the active scene. Same
+    // active+sceneActive check EC_DOD_EntityManager::getActiveEntitiesWithComponents
+    // already applies elsewhere, inlined here since these loops iterate a component
+    // array's raw data directly rather than going through that helper.
+    auto isActiveInScene = [&manager](EntityID entity) {
+        if (!manager.hasComponent<EC_DOD_EntityInfo>(entity)) return true;
+        const auto& info = manager.getComponent<EC_DOD_EntityInfo>(entity);
+        return info.active && info.sceneActive;
+    };
+
     // --- Gravity applied first, before the solve, so the constraint solve
     // below sees and cancels THIS tick's gravity directly. Applying it after
     // instead leaves the solve chasing last tick's residual one step behind
@@ -55,6 +69,7 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
                 auto& rb = rigidBodiesGravity[i];
                 if (rb.isStatic || rb.isSleeping) continue;
                 EntityID entity = rbArrayGravity->getEntity(i);
+                if (!isActiveInScene(entity)) continue;
                 if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
                 manager.getComponent<EC_DOD_Spatial>(entity).velocity += kGravity * deltaTimeS;
             }
@@ -73,6 +88,7 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             auto& forces = forceArray->getData();
             for (size_t i = 0; i < forces.size(); i++) {
                 EntityID entity = forceArray->getEntity(i);
+                if (!isActiveInScene(entity)) continue;
                 if (!manager.hasComponent<EC_DOD_RigidBody>(entity)) continue;
                 if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
                 const auto& rb = manager.getComponent<EC_DOD_RigidBody>(entity);
@@ -275,6 +291,7 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         EntityID entity = rbArray->getEntity(i);
 
         if (rb.isStatic) continue;
+        if (!isActiveInScene(entity)) continue;
         if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
         auto& spatial = manager.getComponent<EC_DOD_Spatial>(entity);
 

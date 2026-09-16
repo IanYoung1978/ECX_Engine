@@ -25,8 +25,14 @@ namespace {
 
 void EC_BroadPhase::broadPhaseCollisionDetection()
 {
-    // Get all entities with collider and spatial components
-    auto entities = EC_DOD_EntityManager::getInstance().getEntitiesWithComponents({
+    // Issue #135 - active+sceneActive filtered: without this, every collider entity
+    // across EVERY loaded scene (not just the active one) formed broad-phase pairs with
+    // every other one, regardless of whether either scene was actually active - an
+    // inactive scene's geometry could spuriously collide with the active scene's, and a
+    // scene with many entities loading in the background (see EC_SceneManager::loadScene)
+    // suddenly added a large, unrelated batch of pairs the moment its entities existed,
+    // before it was even the active scene.
+    auto entities = EC_DOD_EntityManager::getInstance().getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_DOD_Collider)),
         std::type_index(typeid(EC_DOD_Spatial))
         });

@@ -106,7 +106,10 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
         if (m_Scenes[i].isPrecached())
         {
             m_Loader->scheduleScene(m_Scenes[i].getFilename(), m_Scenes[i]);
-            m_LoadingScenes.insert(i);
+            {
+                std::lock_guard<std::mutex> loadingLock(m_LoadingScenesLock);
+                m_LoadingScenes.insert(i);
+            }
         }
     }
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
@@ -125,17 +128,20 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
     {
         m_Loader->finalizeOnMainThread();
 
-        for (auto it = m_LoadingScenes.begin(); it != m_LoadingScenes.end(); )
         {
-            size_t idx = *it;
-            if (m_Scenes[idx].isLoaded())
+            std::lock_guard<std::mutex> loadingLock(m_LoadingScenesLock);
+            for (auto it = m_LoadingScenes.begin(); it != m_LoadingScenes.end(); )
             {
-                m_Renderer->bakeStaticShadows(m_Scenes[idx]);
-                it = m_LoadingScenes.erase(it);
-            }
-            else
-            {
-                ++it;
+                size_t idx = *it;
+                if (m_Scenes[idx].isLoaded())
+                {
+                    m_Renderer->bakeStaticShadows(m_Scenes[idx]);
+                    it = m_LoadingScenes.erase(it);
+                }
+                else
+                {
+                    ++it;
+                }
             }
         }
 
@@ -173,10 +179,12 @@ void EC_SceneManager::loadScene(const std::string& alias)
     }
 
     size_t idx = it->second;
-    if (m_Scenes[idx].isLoaded() || m_LoadingScenes.count(idx))
-        return;
-
-    m_LoadingScenes.insert(idx);
+    {
+        std::lock_guard<std::mutex> loadingLock(m_LoadingScenesLock);
+        if (m_Scenes[idx].isLoaded() || m_LoadingScenes.count(idx))
+            return;
+        m_LoadingScenes.insert(idx);
+    }
     m_Loader->scheduleScene(m_Scenes[idx].getFilename(), m_Scenes[idx]);
     m_Loader->start();
 }
