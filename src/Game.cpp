@@ -368,6 +368,16 @@ void EC_Game::setCategoryVolume(const std::string& category, float volume)
     m_SceneManager.setCategoryVolume(category, volume);
 }
 
+EntityID EC_Game::spawnEntity(const std::string& alias, float x, float y, float z)
+{
+    return m_SceneManager.spawnEntity(alias, x, y, z);
+}
+
+void EC_Game::destroyEntity(EntityID id)
+{
+    m_SceneManager.destroyEntity(id);
+}
+
 void EC_Game::regenerateTerrain()
 {
     m_VoxelChunkSystem.requestRegenerate();

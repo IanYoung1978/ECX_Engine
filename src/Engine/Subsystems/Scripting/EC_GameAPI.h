@@ -43,6 +43,12 @@ namespace ScriptAPI
         void loadScene(const std::string& alias);
         void unloadScene(const std::string& alias);
         void activateScene(const std::string& alias);
+        // Issue #130. Returns an invalid EntityAPI (getID() == 0) on any failure - unknown
+        // alias, or the prefab file failed to load - matching getEntityByName's existing
+        // not-found convention. destroyEntity takes a raw numeric ID, matching setParent/
+        // clearParent's existing convention for cross-entity operations.
+        EntityAPI spawnEntity(const std::string& alias, float x, float y, float z);
+        void destroyEntity(unsigned int entityId);
         // Issue #129. Already used internally (e.g. EC_VoxelChunkSystem gating chunk
         // visibility) but never bound - without this, scripts calling loadScene/unloadScene/
         // activateScene had no way to query current state and had to track their own
