@@ -1,7 +1,6 @@
 #include "EC_PhysicsThreadTask.h"
 
 
-
 EC_PhysicsThreadTask::EC_PhysicsThreadTask()
 {
 	m_timestep = 0.0f;
@@ -68,6 +67,7 @@ void EC_PhysicsThreadTask::execute()
 						s->update(substepDt, *m_game);
 					}
 				}
+				recordTick();
 			}
 			m_accumulator = 0.0f;
 		}

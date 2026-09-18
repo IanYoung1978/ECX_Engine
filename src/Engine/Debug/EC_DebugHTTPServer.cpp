@@ -260,6 +260,18 @@ namespace {
           }
         }
       }
+    },
+    "/components": {
+      "get": {
+        "summary": "Per-component-type storage usage",
+        "description": "Current size/capacity for every component array that's been touched at least once, one per line as 'typeName size capacity'. Lets an author watch how close each type is to its configured ComponentStorage capacity (EngineConfig.xml) during development - reaching capacity at all triggers a growth-lock hitch and a WARNING log line naming the type, so this is how to catch it before that happens instead of after.",
+        "responses": {
+          "200": {
+            "description": "One line per component type.",
+            "content": { "text/plain": { "schema": { "type": "string" } } }
+          }
+        }
+      }
     }
   }
 })JSON";
@@ -307,6 +319,19 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port, EC_Game* game
         std::string body;
         for (const auto& line : lines) {
             body += line;
+            body += '\n';
+        }
+        res.set_content(body, "text/plain");
+    });
+
+    // Same as /log - EC_DOD_EntityManager::getComponentStorageUsage() only takes its own
+    // internal shared_mutex, safe to call directly from this handler's own httplib worker
+    // thread.
+    m_Server->Get("/components", [](const httplib::Request&, httplib::Response& res) {
+        auto usage = EC_DOD_EntityManager::getInstance().getComponentStorageUsage();
+        std::string body;
+        for (const auto& entry : usage) {
+            body += entry.typeName + " " + std::to_string(entry.size) + " " + std::to_string(entry.capacity);
             body += '\n';
         }
         res.set_content(body, "text/plain");

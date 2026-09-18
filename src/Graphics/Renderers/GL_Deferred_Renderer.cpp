@@ -574,11 +574,11 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
         if (!manager.hasComponent<EC_DOD_Light>(entityID)) continue;
         // A deactivated light (EntityAPI::deactivate(), e.g. a debug light-cycling script)
         // must stop contributing entirely, and so must one whose scene is no longer active
-        // - matches the same active+sceneActive check EC_BroadPhase's broad-phase build
-        // already does. See EC_DOD_EntityInfo's comment for why they're separate flags.
+        // - matches the same active+sceneState check EC_BroadPhase's broad-phase build
+        // already does. See EC_DOD_EntityInfo's comment for why they're separate.
         if (manager.hasComponent<EC_DOD_EntityInfo>(entityID)) {
             const auto& info = manager.getComponent<EC_DOD_EntityInfo>(entityID);
-            if (!info.active || !info.sceneActive) continue;
+            if (!info.active || info.sceneState != EC_SceneLifecycleState::Active) continue;
         }
 
         const auto& light = manager.getComponent<EC_DOD_Light>(entityID);
@@ -1377,7 +1377,10 @@ void GL_Deferred_Renderer::debugPass(EC_GameScene& scene)
 void GL_Deferred_Renderer::uiPass(EC_GameScene& scene)
 {
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto entities = manager.getEntitiesWithComponents({
+    // Active+sceneState filtered, matching every other system - see EC_CameraSystem.cpp's
+    // own comment for why. UI elements are scene-authored entities like any other, so an
+    // inactive scene's UI must not keep drawing over the active one's.
+    auto entities = manager.getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_UI_Element))
         });
 

@@ -246,7 +246,9 @@ void GL_DebugRenderer::renderContactPoints(const glm::mat4& view, const glm::mat
     constexpr float kCrossHalfSize = 0.1f;
 
     auto& manager = EC_DOD_EntityManager::getInstance();
-    auto entities = manager.getEntitiesWithComponents({
+    // Active+sceneState filtered, matching every other system - see EC_CameraSystem.cpp's
+    // own comment for why.
+    auto entities = manager.getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_DOD_DebugContacts))
         });
 
@@ -273,7 +275,9 @@ void GL_DebugRenderer::render(const glm::mat4& view, const glm::mat4& projection
 
     if (m_Enabled) {
         auto& manager = EC_DOD_EntityManager::getInstance();
-        auto entities = manager.getEntitiesWithComponents({
+        // Active+sceneState filtered, matching every other system - see EC_CameraSystem.cpp's
+        // own comment for why.
+        auto entities = manager.getActiveEntitiesWithComponents({
             std::type_index(typeid(EC_DOD_Collider)),
             std::type_index(typeid(EC_DOD_Transform))
             });

@@ -71,7 +71,7 @@ private:
     // procedurally, not authored in a scene's XML), so scene switching can't filter them
     // the normal way (EC_GameScene::activate()/deactivate() only ever touches entities
     // explicitly added to it). Tracked here instead so update() can toggle their
-    // EC_DOD_EntityInfo::sceneActive itself, keyed on whether "voxelchunkdemo" is the
+    // EC_DOD_EntityInfo::sceneState itself, keyed on whether "voxelchunkdemo" is the
     // active scene - without this, chunks stayed visible and collidable in every scene.
     std::vector<EntityID> m_ChunkEntities;
 };

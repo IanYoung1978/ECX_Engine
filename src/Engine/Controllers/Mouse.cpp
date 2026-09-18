@@ -20,7 +20,7 @@ Mouse::~Mouse()
 {
 }
 
-void Mouse::update(ECXMessenger& messenger)
+void Mouse::update(ECXMessenger& messenger, float deltaTimeS)
 {
 	if (m_running == true)
 	{

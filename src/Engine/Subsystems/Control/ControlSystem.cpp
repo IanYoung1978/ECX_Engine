@@ -56,7 +56,7 @@ void ControlSystem::update(const float & deltaTimeS, EC_Game & game)
 	{
 		if (c != nullptr)
 		{
-			c->update(*m_Messenger);
+			c->update(*m_Messenger, deltaTimeS);
 		}
 	}
 }

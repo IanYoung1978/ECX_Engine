@@ -21,6 +21,10 @@ namespace ScriptAPI
         return game->getEntityByUID(static_cast<uint32_t>(uid));
     }
 
+    EntityAPI GameAPI::getEntityByID(unsigned int id) {
+        return EntityAPI(static_cast<EntityID>(id));
+    }
+
     void GameAPI::shutdown() {
         if (game) game->shutDown();
     }
@@ -250,6 +254,25 @@ namespace ScriptAPI
         auto logs = LOGGING::ECX_Logger::GetInstance()->GetRecentPlainLogs(200);
         if (index < 0 || static_cast<size_t>(index) >= logs.size()) return "";
         return logs[index];
+    }
+
+    int GameAPI::getThreadCount() {
+        if (!game) return 0;
+        return static_cast<int>(game->getThreadRates().size());
+    }
+
+    std::string GameAPI::getThreadName(int index) {
+        if (!game) return "";
+        auto rates = game->getThreadRates();
+        if (index < 0 || static_cast<size_t>(index) >= rates.size()) return "";
+        return rates[index].name;
+    }
+
+    float GameAPI::getThreadFPS(int index) {
+        if (!game) return 0.0f;
+        auto rates = game->getThreadRates();
+        if (index < 0 || static_cast<size_t>(index) >= rates.size()) return 0.0f;
+        return rates[index].ticksPerSecond;
     }
 
     void GameAPI::setMouseCaptured(bool captured) {

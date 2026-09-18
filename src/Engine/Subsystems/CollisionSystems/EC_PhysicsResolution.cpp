@@ -113,7 +113,10 @@ namespace EC_PhysicsResolution
 
         if (manager.hasComponent<EC_DOD_RigidBody>(entity)) {
             const auto& rb = manager.getComponent<EC_DOD_RigidBody>(entity);
-            if (!rb.isStatic && rb.mass > kEpsilon) {
+            // Static and Kinematic both get treated as infinite mass here (invMass 0) -
+            // neither should ever be pushed by collision response, only Dynamic bodies are
+            // actually resolved by the impulse solver (see EC_BodyType's own comment).
+            if (rb.bodyType == EC_BodyType::Dynamic && rb.mass > kEpsilon) {
                 body.invMass = 1.0f / rb.mass;
                 body.invInertiaWorld = computeInvInertiaWorld(entity, rb.mass);
             }

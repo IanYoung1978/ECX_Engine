@@ -40,6 +40,19 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     m_Engine.init(m_Settings.engine_settings, game, messenger);
     m_PauseOnStart = XML::loadPauseOnStartSetting(m_Settings.engine_settings);
 
+    XML::EntityLifecycleSettings lifecycleSettings;
+    XML::loadEntityLifecycleSettings(m_Settings.engine_settings, lifecycleSettings);
+    m_QuarantineFrames = static_cast<uint64_t>(lifecycleSettings.quarantineFrames);
+
+    // Must happen before any entity/component is created - EC_ComponentArray<T> only reads
+    // this at construction (see its own comment), and scene loading below is the first
+    // thing that creates any.
+    XML::ComponentStorageSettings componentStorageSettings;
+    XML::loadComponentStorageSettings(m_Settings.engine_settings, componentStorageSettings);
+    EC_DOD_EntityManager::configureComponentStorage(
+        componentStorageSettings.initialCapacity,
+        componentStorageSettings.growthThreshold);
+
     EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
     EC_DOD_EntityFactory::loadManifestFile(m_Settings.physics_materials_file);
 
@@ -120,6 +133,9 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
 
 void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
 {
+    m_FrameCounter++;
+    sweepPendingDeletions();
+
     // Resolve a handful of pending GPU resources every frame (not gated on the whole batch
     // finishing) so entities visibly pop in as they load, rather than appearing all at once.
     EC_DOD_EntityFactory::finalizePendingGraphics(kMaxGraphicsFinalizePerFrame);
@@ -290,6 +306,11 @@ void EC_SceneManager::setCategoryVolume(const std::string& category, float volum
     m_Engine.setCategoryVolume(category, volume);
 }
 
+std::vector<EC_Engine::ThreadRate> EC_SceneManager::getThreadRates() const
+{
+    return m_Engine.getThreadRates();
+}
+
 EntityID EC_SceneManager::spawnEntity(const std::string& alias, float x, float y, float z)
 {
     auto it = m_PrefabRegistry.find(alias);
@@ -354,7 +375,20 @@ void EC_SceneManager::activateSceneByIndex(size_t index)
     {
         m_Scenes[previous].deactivate();
         if (m_Scenes[previous].isUnloadOnDeactivate())
-            unloadSceneByIndex(previous);
+        {
+            // Entities are excluded from every subsystem's per-frame query the instant
+            // deactivate() above runs - immediate and safe, since it's just a flag flip.
+            // Actual destruction is queued for the deferred sweep instead of happening
+            // here: this can run on the Scripting thread, as a direct result of one of the
+            // deactivated scene's OWN entities calling game:activateScene() - destroying
+            // that entity synchronously here would free it while its own script is still
+            // mid-execution on this same call stack. markForDeletion() schedules it; the
+            // sweep (see sweepPendingDeletions()) waits out the quarantine period before
+            // actually calling destroyEntity() on the main thread.
+            m_Scenes[previous].markForDeletion();
+            std::lock_guard<std::mutex> lock(m_PendingDeletionsLock);
+            m_PendingDeletions.push_back({ previous, m_FrameCounter });
+        }
     }
 
     m_ActiveScene = index;
@@ -365,6 +399,36 @@ void EC_SceneManager::unloadSceneByIndex(size_t index)
 {
     m_Scenes[index].unload();
     buildEntityMaps();
+}
+
+void EC_SceneManager::sweepPendingDeletions()
+{
+    // Called once per frame from update(), main thread only. Everything queued here has
+    // already been Inactive/MarkedForDeletion (excluded from every subsystem's per-frame
+    // query) for at least m_QuarantineFrames consecutive frames by the time it's actually
+    // destroyed - see m_QuarantineFrames' own comment for why that makes this safe.
+    std::vector<size_t> ready;
+    {
+        std::lock_guard<std::mutex> lock(m_PendingDeletionsLock);
+        auto it = m_PendingDeletions.begin();
+        while (it != m_PendingDeletions.end())
+        {
+            if (m_FrameCounter - it->markedAtFrame >= m_QuarantineFrames)
+            {
+                ready.push_back(it->sceneIndex);
+                it = m_PendingDeletions.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    for (size_t idx : ready)
+    {
+        unloadSceneByIndex(idx);
+    }
 }
 
 void EC_SceneManager::toggleDebug()
@@ -378,29 +442,36 @@ void EC_SceneManager::buildEntityMaps()
     auto* infoArray = manager.getComponentArray<EC_DOD_EntityInfo>();
     if (!infoArray) return;
 
-    m_UIDMap.clear();
-    m_NameMap.clear();
+    size_t entityCount = 0;
+    {
+        std::lock_guard<std::mutex> mapsLock(m_EntityMapsLock);
+        m_UIDMap.clear();
+        m_NameMap.clear();
 
-    auto& data = infoArray->getData();
-    for (size_t i = 0; i < data.size(); i++) {
-        EntityID entity = infoArray->getEntity(i);
-        m_UIDMap[data[i].uid] = entity;
-        m_NameMap[data[i].name] = entity;
+        auto& data = infoArray->getData();
+        for (size_t i = 0; i < data.size(); i++) {
+            EntityID entity = infoArray->getEntity(i);
+            m_UIDMap[data[i].uid] = entity;
+            m_NameMap[data[i].name] = entity;
+        }
+        entityCount = m_UIDMap.size();
     }
 
     LOGGING::ECX_Logger::GetInstance()->LogMessage(
-        "Entity maps built: " + std::to_string(m_UIDMap.size()) + " entities",
+        "Entity maps built: " + std::to_string(entityCount) + " entities",
         LOGGING::LogLevel::INFORMATION);
 }
 
 EntityID EC_SceneManager::getEntityByUID(uint32_t uid) const
 {
+    std::lock_guard<std::mutex> mapsLock(m_EntityMapsLock);
     auto it = m_UIDMap.find(uid);
     return (it != m_UIDMap.end()) ? it->second : INVALID_ENTITY;
 }
 
 EntityID EC_SceneManager::getEntityByName(const std::string& name) const
 {
+    std::lock_guard<std::mutex> mapsLock(m_EntityMapsLock);
     auto it = m_NameMap.find(name);
     return (it != m_NameMap.end()) ? it->second : INVALID_ENTITY;
 }

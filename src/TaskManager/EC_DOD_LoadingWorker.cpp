@@ -143,6 +143,12 @@ void EC_DOD_LoadingWorker::execute() {
             success = loadSceneFile(task.filename, *task.scene);
 
         {
+            // queueLock before progressLock, matching every other site that takes both
+            // (scheduleEntity/scheduleScene/start/abort) - this used to take them in the
+            // opposite order, a lock-order inversion that could deadlock against any of
+            // those (classic AB-BA: one thread holding queueLock waiting on progressLock
+            // while this one holds progressLock waiting on queueLock).
+            std::lock_guard<std::mutex> queueLock(m_QueueMutex);
             std::lock_guard<std::mutex> progressLock(m_ProgressMutex);
             m_CompletedTasks++;
 
@@ -157,7 +163,6 @@ void EC_DOD_LoadingWorker::execute() {
                     "Failed to load: " + task.filename,
                     LOGGING::LogLevel::SEVERE);
 
-            std::lock_guard<std::mutex> queueLock(m_QueueMutex);
             if (m_CompletedTasks >= m_TotalTasks && m_LoadQueue.empty()) {
                 m_Loading = false;
                 m_ReadyToFinalize = true;

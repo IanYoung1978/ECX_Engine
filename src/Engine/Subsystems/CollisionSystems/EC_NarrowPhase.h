@@ -17,17 +17,20 @@ public:
     void narrowPhaseCollisionDetection();
 
 private:
-    // Collision function signature
+    // Collision function signature - EC_DOD_MeshCollisionData is passed for both sides
+    // regardless of collider type (default-constructed/empty for anything that isn't
+    // Type::Mesh) so a Mesh-involving dispatch entry can reach the real triangle data
+    // without needing its own entity-ID-aware signature.
     using CollisionCheckFunc = std::function<bool(
-        const EC_DOD_Collider&, const EC_DOD_Spatial&,
-        const EC_DOD_Collider&, const EC_DOD_Spatial&,
+        const EC_DOD_Collider&, const EC_DOD_Spatial&, const EC_DOD_MeshCollisionData&,
+        const EC_DOD_Collider&, const EC_DOD_Spatial&, const EC_DOD_MeshCollisionData&,
         CollisionManifold&)>;
 
     void initCollisionDispatchTable();
 
     bool performCollisionCheck(
-        const EC_DOD_Collider& colliderA, const EC_DOD_Spatial& spatialA,
-        const EC_DOD_Collider& colliderB, const EC_DOD_Spatial& spatialB,
+        const EC_DOD_Collider& colliderA, const EC_DOD_Spatial& spatialA, const EC_DOD_MeshCollisionData& meshDataA,
+        const EC_DOD_Collider& colliderB, const EC_DOD_Spatial& spatialB, const EC_DOD_MeshCollisionData& meshDataB,
         CollisionManifold& manifold);
 
     void handleCollisionStateChange(

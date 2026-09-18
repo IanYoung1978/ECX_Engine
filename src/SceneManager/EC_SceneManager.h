@@ -65,6 +65,9 @@ public:
     void stopMusic();
     void setCategoryVolume(const std::string& category, float volume);
 
+    // Forwards to m_Engine's per-task tick-rate readout - see EC_Engine::getThreadRates().
+    std::vector<EC_Engine::ThreadRate> getThreadRates() const;
+
     // Issue #130. Looks up alias in the prefab registry (see m_PrefabRegistry), loads that
     // standalone entity file, repositions it, and registers it into the currently active
     // scene - see EC_SceneManager.cpp's own comment for the full sequence. Returns
@@ -88,23 +91,58 @@ private:
     EC_ThreadManager m_ThreadManager;
     GameModeSettings m_Settings;
     std::vector<EC_GameScene> m_Scenes;
-    // Written from game:activateScene(), which Lua handlers call from the scripting
-    // subsystem's thread (EC_ScriptingTask runs alongside physics on a background thread -
-    // see EC_Engine::init()), and read every frame from update() on the main/render
-    // thread. A plain size_t here was an unsynchronized cross-thread data race - the
-    // render thread could observe a stale value, making a scene switch intermittently
-    // fail to actually change what's drawn even though the switch itself succeeded.
+    // Written from game:activateScene(), which Lua handlers call from Scripting's own
+    // dedicated thread (EC_SingleSystemTask - see EC_Engine::init()), and read every frame
+    // from update() on the main/render thread. A plain size_t here was an unsynchronized
+    // cross-thread data race - the render thread could observe a stale value, making a
+    // scene switch intermittently fail to actually change what's drawn even though the
+    // switch itself succeeded.
     std::atomic<size_t> m_ActiveScene{ 0 };
+    // activateSceneByIndex() never unloads the deactivated scene inline: an entity's own
+    // script calling game:activateScene() could otherwise trigger that entity's own
+    // destruction (EC_GameScene::unload() -> destroyEntity()) synchronously, mid-call, on
+    // the Scripting thread - the entity destroying itself while still executing its own
+    // update() handler. Deactivation (flipping sceneState to Inactive, safe and immediate,
+    // reversible) is decoupled from actual destruction, which only ever happens in
+    // sweepPendingDeletions() below, on the main thread, after a quarantine period.
+    //
+    // The quarantine is what makes the sweep safe without any additional locking or
+    // per-loop existence checks: every subsystem's per-frame query already excludes
+    // anything not EC_SceneLifecycleState::Active (see EC_CameraSystem.cpp's comment for
+    // the full list), so an entity that has been Inactive/MarkedForDeletion for
+    // kQuarantineFrames consecutive frames provably has no live reader anywhere - nothing
+    // has included it in a query in all that time. The sweep's exclusive lock (inside
+    // EC_ComponentArray<T>::removeEntity) may still briefly wait on a reader holding a
+    // shared lock on the same array for a *different*, still-active entity - but that's a
+    // performance question now, not a correctness one, since the entity being destroyed
+    // itself has had zero readers for the entire quarantine window.
+    // Author-configurable via EngineConfig.xml's <EntityLifecycle quarantineFrames=""/> -
+    // see XML::EntityLifecycleSettings' own comment. Defaults to 30 (~0.5s at 60fps) if
+    // never loaded/set.
+    uint64_t m_QuarantineFrames = 30;
+    uint64_t m_FrameCounter = 0; // incremented once per update() call (main thread only)
+    struct PendingSceneDeletion { size_t sceneIndex; uint64_t markedAtFrame; };
+    std::mutex m_PendingDeletionsLock;
+    std::vector<PendingSceneDeletion> m_PendingDeletions;
+    void sweepPendingDeletions();
     std::unordered_map<std::string, size_t> m_AliasMap;
+    // Rebuilt wholesale (clear() + repopulate) by buildEntityMaps() on the main thread
+    // right after a scene finishes loading, and read by getEntityByUID()/getEntityByName()
+    // - reachable from Lua's game:getEntityByUID()/getEntityByName(), called from scripts
+    // on the scripting thread every frame (e.g. a script's own update() handler). An
+    // unsynchronized read racing the clear+rebuild on an unordered_map is undefined
+    // behaviour - observed in practice as "cannot dereference value-initialized list
+    // iterator" (MSVC's debug STL diagnostic for exactly this). Same class of bug as
+    // m_LoadingScenes below - a dedicated mutex around every access to both maps.
+    mutable std::mutex m_EntityMapsLock;
     std::unordered_map<uint32_t, EntityID> m_UIDMap;
     std::unordered_map<std::string, EntityID> m_NameMap;
-    // Issue #135 - written from loadScene()/init() (reachable from Lua's activateScene()
-    // on the scripting thread) and iterated/erased every frame from update() on the main
-    // thread. An unsynchronized insert concurrent with iterate/erase on a
-    // std::unordered_set is undefined behaviour - observed as the engine hanging
-    // entirely (a corrupted iterator or internal rehash mid-iteration, not a crash).
-    // Same fix EC_GameScene already applies to its own m_Entities/m_Cameras/m_Lights: a
-    // plain mutex around every access.
+    // Written from loadScene()/init() (reachable from Lua's activateScene() on the
+    // scripting thread) and iterated/erased every frame from update() on the main thread.
+    // An unsynchronized insert concurrent with iterate/erase on a std::unordered_set is
+    // undefined behaviour - observed as the engine hanging entirely (a corrupted iterator
+    // or internal rehash mid-iteration, not a crash). Same fix EC_GameScene already
+    // applies to its own m_Entities/m_Cameras/m_Lights: a plain mutex around every access.
     std::mutex m_LoadingScenesLock;
     std::unordered_set<size_t> m_LoadingScenes;
     // Issue #130 - alias -> standalone entity file path, loaded once at init() from

@@ -26,7 +26,11 @@ function update(entity, deltaTimeS)
         return
     end
 
-    game:setUIText(fpsTextID, string.format("FPS: %.1f  (%.2f ms)", game:getFPS(), game:getMSPF()))
+    local fpsLine = string.format("Main: %.1f  (%.2f ms)", game:getFPS(), game:getMSPF())
+    for i = 0, game:getThreadCount() - 1 do
+        fpsLine = fpsLine .. string.format("   %s: %.1f", game:getThreadName(i), game:getThreadFPS(i))
+    end
+    game:setUIText(fpsTextID, fpsLine)
 
     local count = game:getRecentLogCount()
     local startIndex = math.max(0, count - 8)

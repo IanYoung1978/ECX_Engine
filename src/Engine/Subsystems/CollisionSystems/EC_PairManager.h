@@ -40,6 +40,18 @@ struct EC_CollisionPair
 	// non-colliding pairs), so no separate cleanup is needed when contact
 	// genuinely ends.
 	std::vector<EC_ContactImpulseCache> m_ContactCache;
+	// Physics-thread-only, like everything else here - see this class's own comment.
+	// EC_NarrowPhase re-checks these each tick against a Kinematic body's actual current
+	// Spatial (see EC_BodyType's own comment for why only Kinematic needs this at all -
+	// Dynamic already gets continuous resolution every tick regardless of BEGIN/END
+	// transitions). If either side moved since the last check while this pair was already
+	// colliding, EC_NarrowPhase treats this tick as a fresh BEGIN so script (e.g.
+	// ArcadeCollision.lua's OnCollisionBegin) gets another chance to react to the new
+	// contact instead of only ever hearing about the first touch.
+	glm::vec3 m_LastCheckedPositionA{ 0.0f };
+	glm::vec3 m_LastCheckedOrientationA{ 0.0f };
+	glm::vec3 m_LastCheckedPositionB{ 0.0f };
+	glm::vec3 m_LastCheckedOrientationB{ 0.0f };
 	EC_CollisionPair() :body_A(0), body_B(0), m_Colliding(false) {}
 };
 // All state below is physics-thread-only working data - collision pairs are

@@ -3,6 +3,7 @@
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Messaging/KeyEvent.h"
 #include "Messaging/MouseEvent.h"
+#include "Engine/Subsystems/CollisionSystems/EC_CollisionShapes.h"
 
 namespace ScriptAPI
 {
@@ -56,6 +57,19 @@ namespace ScriptAPI
             catch (const std::bad_any_cast&) { return false; }
         }
         return false;
+    }
+
+    float EventAPI::getDeltaTime() {
+        if (event.type == ECXEventType::key_down ||
+            event.type == ECXEventType::key_up ||
+            event.type == ECXEventType::key_held) {
+            try {
+                KeyEvent keyEvent = std::any_cast<KeyEvent>(event.args[0]);
+                return keyEvent.getDeltaTime();
+            }
+            catch (const std::bad_any_cast&) { return 0.0f; }
+        }
+        return 0.0f;
     }
 
     float EventAPI::getMouseMotionX() {
@@ -212,5 +226,21 @@ namespace ScriptAPI
             catch (const std::bad_any_cast&) { return 0; }
         }
         return 0;
+    }
+
+    glm::vec3 EventAPI::getCollisionNormal() {
+        if (event.type == ECXEventType::CollisionBeginEvent) {
+            try { return std::any_cast<CollisionManifold>(event.args[0]).contactNormal; }
+            catch (const std::bad_any_cast&) { return glm::vec3(0.0f); }
+        }
+        return glm::vec3(0.0f);
+    }
+
+    float EventAPI::getCollisionPenetrationDepth() {
+        if (event.type == ECXEventType::CollisionBeginEvent) {
+            try { return std::any_cast<CollisionManifold>(event.args[0]).penetrationDepth; }
+            catch (const std::bad_any_cast&) { return 0.0f; }
+        }
+        return 0.0f;
     }
 }

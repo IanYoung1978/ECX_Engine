@@ -101,6 +101,9 @@ public:
     void playMusic(const std::string& path, float volume, bool loop);
     void stopMusic();
     void setCategoryVolume(const std::string& category, float volume);
+    // Forwards to the scene manager's engine - see EC_Engine::getThreadRates(). Main
+    // thread's own rate is getFPS() above, not included here.
+    std::vector<EC_Engine::ThreadRate> getThreadRates() const;
     // Issue #130. Forwards to the scene manager's prefab registry - see
     // EC_SceneManager::spawnEntity/destroyEntity's own comments.
     EntityID spawnEntity(const std::string& alias, float x, float y, float z);
