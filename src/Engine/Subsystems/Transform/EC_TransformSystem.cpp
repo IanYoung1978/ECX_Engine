@@ -22,7 +22,9 @@ static glm::mat4 buildLocal(const EC_DOD_Spatial& spatial, const EC_DOD_Transfor
 void EC_TransformSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    auto entities = manager.getEntitiesWithComponents({
+    // Active+sceneState filtered, matching EC_LuaScriptSystem/EC_BroadPhase/EC_PhysicsSystem/
+    // EC_CameraSystem - see EC_CameraSystem.cpp's own comment for why this matters.
+    auto entities = manager.getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_DOD_Spatial)),
         std::type_index(typeid(EC_DOD_Transform))
         });

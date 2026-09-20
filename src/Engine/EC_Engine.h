@@ -5,6 +5,7 @@
 #include "TaskManager/EC_ThreadManager.h"
 #include <memory>
 #include <vector>
+#include <string>
 #include "Messaging/ECXMessenger.h"
 #include "Engine/Subsystems/Scripting/EC_VolumeAPI.h"
 
@@ -44,6 +45,13 @@ public:
 	void playMusic(const std::string& path, float volume, bool loop);
 	void stopMusic();
 	void setCategoryVolume(const std::string& category, float volume);
+
+	// One entry per background task (Physics, Scripting, Audio - see init()) with its
+	// current real-updates-per-second rate - see EC_SystemTask::getTickRate()'s own
+	// comment. Doesn't include the main thread itself; that's EC_Game::getFPS().
+	struct ThreadRate { std::string name; float ticksPerSecond; };
+	std::vector<ThreadRate> getThreadRates() const;
+
 	~EC_Engine();
 private:
 	EC_AudioSystem* getAudioSystem() const;

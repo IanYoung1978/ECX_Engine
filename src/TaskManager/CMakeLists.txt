@@ -3,8 +3,8 @@ target_sources(ECX PRIVATE
     EC_DOD_LoadingWorker.h
     EC_PhysicsThreadTask.cpp
     EC_PhysicsThreadTask.h
-    EC_ScriptingTask.cpp
-    EC_ScriptingTask.h
+    EC_SingleSystemTask.cpp
+    EC_SingleSystemTask.h
     EC_SystemTask.cpp
     EC_SystemTask.h
     EC_Task.h

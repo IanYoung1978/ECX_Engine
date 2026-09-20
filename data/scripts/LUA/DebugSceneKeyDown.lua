@@ -19,6 +19,11 @@ lightCycleIndex = 0 -- 0 = nothing activated yet; first L press selects index 1
 sceneCycleNames = { "voxelchunkdemo", "shadowdebug", "yard", "physics_demo", "main", "streamed" }
 sceneCycleIndex = 1 -- whichever scene is precached/active at startup is index 1
 
+JUMP_STRENGTH = 2.6 -- gameplay decision, not an engine concern - see ArcadeCollision.lua's
+                     -- own comment for the landing half of this mechanic. Tuned to an average
+                     -- human standing vertical jump (~0.35m) at this engine's 9.8 gravity:
+                     -- v = sqrt(2 * g * h).
+
 local function applyLightCycle()
     for i, name in ipairs(lightCycleNames) do
         -- activate()/deactivate() are no-ops on an invalid/dead entity ID, so no need to
@@ -45,6 +50,18 @@ function onKeyDown(entity, event)
     if key == "F4" then
         mouseCaptured = not mouseCaptured
         game:setMouseCaptured(mouseCaptured)
+    end
+    if key == "Space" then
+        -- Straight vertical push, preserving whatever horizontal velocity already exists -
+        -- a directional jump (factoring in currently-held movement keys) is the other
+        -- option and is purely a gameplay choice, not something the engine mechanism cares
+        -- about either way. Only fires if not already airborne (getIgnoreGravity() true ==
+        -- grounded, per ArcadeCollision.lua's own mechanic).
+        if entity:getIgnoreGravity() then
+            local v = entity:getVelocity()
+            entity:setVelocity(v.x, JUMP_STRENGTH, v.z)
+            entity:setIgnoreGravity(false)
+        end
     end
     if key == "P" then
         gamePaused = not gamePaused

@@ -253,6 +253,57 @@ TEST_CASE("CapsuleVsMesh detects overlap against the real triangle surface, not 
     }
 }
 
+TEST_CASE("CapsuleVsMesh on a many-triangle mesh still finds the one nearby contact and ignores the rest", "[CollisionChecks][Capsule]") {
+    // A 40x40-quad flat grid (3200 triangles) with a single raised bump at one vertex - the
+    // capsule only ever sits near a tiny fraction of it, which is exactly the case
+    // CapsuleVsMesh's triangle bounding-box cull exists for. Results must match what a
+    // full scan would give: hit/miss, contact normal, and penetration depth.
+    constexpr int N = 40;
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
+    std::vector<uint32_t> indices;
+    for (int z = 0; z <= N; z++) {
+        for (int x = 0; x <= N; x++) {
+            positions.push_back(glm::vec3(static_cast<float>(x), 0.0f, static_cast<float>(z)));
+            normals.push_back(glm::vec3(0.0f, 1.0f, 0.0f));
+        }
+    }
+    for (int z = 0; z < N; z++) {
+        for (int x = 0; x < N; x++) {
+            uint32_t i0 = static_cast<uint32_t>(z * (N + 1) + x);
+            uint32_t i1 = i0 + 1;
+            uint32_t i2 = i0 + (N + 1);
+            uint32_t i3 = i2 + 1;
+            indices.insert(indices.end(), { i0, i2, i1, i1, i2, i3 });
+        }
+    }
+    const glm::vec3 meshPos(100.0f, 5.0f, -30.0f); // nonzero offset: culling happens in mesh-local space
+    CollisionManifold manifold;
+
+    SECTION("capsule hovering just inside the surface far from the grid's origin corner still hits") {
+        // World position over grid vertex (33, 0, 7): local y=0 is world y=5, so a segment
+        // bottom at world y=5.3 with radius 0.5 penetrates by 0.2.
+        const glm::vec3 base = meshPos + glm::vec3(33.0f, 0.3f, 7.0f);
+        Capsule capsule{ glm::vec3(0.0f), glm::vec3(0.0f, 2.0f, 0.0f), 0.5f };
+        bool hit = EC_CollisionChecks::CapsuleVsMesh(capsule, base, positions, normals, indices, meshPos, manifold);
+        REQUIRE(hit);
+        REQUIRE_THAT(manifold.contactNormal.y, WithinAbs(1.0f, kTol));
+        REQUIRE_THAT(manifold.penetrationDepth, WithinAbs(0.2f, kTol));
+    }
+
+    SECTION("capsule just above the reach of the surface does not hit") {
+        const glm::vec3 base = meshPos + glm::vec3(33.0f, 0.6f, 7.0f);
+        Capsule capsule{ glm::vec3(0.0f), glm::vec3(0.0f, 2.0f, 0.0f), 0.5f };
+        REQUIRE_FALSE(EC_CollisionChecks::CapsuleVsMesh(capsule, base, positions, normals, indices, meshPos, manifold));
+    }
+
+    SECTION("capsule beyond the grid's footprint does not hit") {
+        const glm::vec3 base = meshPos + glm::vec3(60.0f, 0.3f, 7.0f);
+        Capsule capsule{ glm::vec3(0.0f), glm::vec3(0.0f, 2.0f, 0.0f), 0.5f };
+        REQUIRE_FALSE(EC_CollisionChecks::CapsuleVsMesh(capsule, base, positions, normals, indices, meshPos, manifold));
+    }
+}
+
 TEST_CASE("CapsuleVsCapsule detects overlap between two segments, self-orienting A->B", "[CollisionChecks][Capsule]") {
     Capsule a{ glm::vec3(0.0f, -2.0f, 0.0f), glm::vec3(0.0f, 2.0f, 0.0f), 1.0f };
     Capsule b{ glm::vec3(0.0f, -2.0f, 0.0f), glm::vec3(0.0f, 2.0f, 0.0f), 1.0f };

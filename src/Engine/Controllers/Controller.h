@@ -23,7 +23,7 @@ class Controller
 {
 public:
 	Controller();
-	virtual void update(ECXMessenger& messenger) = 0;
+	virtual void update(ECXMessenger& messenger, float deltaTimeS) = 0;
 	virtual void handleEvent(SDL_Event& e) = 0;
 	virtual bool keyPressed(SDL_Scancode key) = 0;
 	virtual bool keyHeld(SDL_Scancode key) = 0;

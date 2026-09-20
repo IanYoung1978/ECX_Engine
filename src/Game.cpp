@@ -368,6 +368,11 @@ void EC_Game::setCategoryVolume(const std::string& category, float volume)
     m_SceneManager.setCategoryVolume(category, volume);
 }
 
+std::vector<EC_Engine::ThreadRate> EC_Game::getThreadRates() const
+{
+    return m_SceneManager.getThreadRates();
+}
+
 EntityID EC_Game::spawnEntity(const std::string& alias, float x, float y, float z)
 {
     return m_SceneManager.spawnEntity(alias, x, y, z);

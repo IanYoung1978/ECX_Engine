@@ -83,10 +83,10 @@ void EC_LuaScriptSystem::update(const float& deltaTimeS, EC_Game& game) {
     if (m_shuttingDown) return;
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    // Excludes a deactivated scene's entities (EC_GameScene::deactivate() -> sceneActive)
+    // Excludes a deactivated scene's entities (EC_GameScene::deactivate() -> sceneState)
     // and any entity a script has individually deactivated (EntityAPI::deactivate() ->
     // active) - see EC_DOD_EntityInfo's comment for why the two are separate. Without the
-    // sceneActive check, an inactive scene's OnKeyHeld/update handlers kept firing right
+    // sceneState check, an inactive scene's OnKeyHeld/update handlers kept firing right
     // alongside the active scene's - notably breaking any script logic (e.g. a debug
     // scene-switch toggle) that multiple simultaneously-alive entities across scenes both
     // subscribe to.
@@ -110,7 +110,7 @@ void EC_LuaScriptSystem::receive(ECXEvent& event) {
     if (m_shuttingDown) return;
 
     auto& manager = EC_DOD_EntityManager::getInstance();
-    // See the matching call in update() above for why this is active+sceneActive filtered.
+    // See the matching call in update() above for why this is active+sceneState filtered.
     auto entities = manager.getActiveEntitiesWithComponents(
         { std::type_index(typeid(EC_DOD_ScriptData)) }
     );
@@ -416,10 +416,16 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("setFriction", &ScriptAPI::EntityAPI::setFriction)
         .addFunction("getStaticFriction", &ScriptAPI::EntityAPI::getStaticFriction)
         .addFunction("setStaticFriction", &ScriptAPI::EntityAPI::setStaticFriction)
+        .addFunction("getBodyType", &ScriptAPI::EntityAPI::getBodyType)
+        .addFunction("setBodyType", &ScriptAPI::EntityAPI::setBodyType)
         .addFunction("isStatic", &ScriptAPI::EntityAPI::isStatic)
         .addFunction("setStatic", &ScriptAPI::EntityAPI::setStatic)
+        .addFunction("isKinematic", &ScriptAPI::EntityAPI::isKinematic)
+        .addFunction("setKinematic", &ScriptAPI::EntityAPI::setKinematic)
         .addFunction("isSleeping", &ScriptAPI::EntityAPI::isSleeping)
         .addFunction("wake", &ScriptAPI::EntityAPI::wake)
+        .addFunction("getIgnoreGravity", &ScriptAPI::EntityAPI::getIgnoreGravity)
+        .addFunction("setIgnoreGravity", &ScriptAPI::EntityAPI::setIgnoreGravity)
         .endClass()
 
         .beginClass<ScriptAPI::EventAPI>("Event")
@@ -427,6 +433,7 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("isPressed", &ScriptAPI::EventAPI::isPressed)
         .addFunction("isHeld", &ScriptAPI::EventAPI::isHeld)
         .addFunction("isReleased", &ScriptAPI::EventAPI::isReleased)
+        .addFunction("getDeltaTime", &ScriptAPI::EventAPI::getDeltaTime)
         .addFunction("getMouseMotionX", &ScriptAPI::EventAPI::getMouseMotionX)
         .addFunction("getMouseMotionY", &ScriptAPI::EventAPI::getMouseMotionY)
         .addFunction("getMouseButton", &ScriptAPI::EventAPI::getMouseButton)
@@ -441,6 +448,8 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("getCollisionEntityB", &ScriptAPI::EventAPI::getCollisionEntityB)
         .addFunction("getOtherEntityID", &ScriptAPI::EventAPI::getOtherEntityID)
         .addFunction("entityIdToUID", &ScriptAPI::EventAPI::entityIdToUID)
+        .addFunction("getCollisionNormal", &ScriptAPI::EventAPI::getCollisionNormal)
+        .addFunction("getCollisionPenetrationDepth", &ScriptAPI::EventAPI::getCollisionPenetrationDepth)
         .endClass()
 
         .beginClass<glm::vec2>("vec2")
@@ -467,6 +476,7 @@ void EC_LuaScriptSystem::registerAPI() {
         .beginClass<ScriptAPI::GameAPI>("game")
         .addFunction("getEntityByName", &ScriptAPI::GameAPI::getEntityByName)
         .addFunction("getEntityIDByUID", &ScriptAPI::GameAPI::getEntityIDByUID)
+        .addFunction("getEntityByID", &ScriptAPI::GameAPI::getEntityByID)
         .addFunction("getKeyState", &ScriptAPI::GameAPI::getKeyState)
         .addFunction("shutdown", &ScriptAPI::GameAPI::shutdown)
         .addFunction("pauseGame", &ScriptAPI::GameAPI::pauseGame)
@@ -498,6 +508,9 @@ void EC_LuaScriptSystem::registerAPI() {
         .addFunction("getMSPF", &ScriptAPI::GameAPI::getMSPF)
         .addFunction("getRecentLogCount", &ScriptAPI::GameAPI::getRecentLogCount)
         .addFunction("getRecentLog", &ScriptAPI::GameAPI::getRecentLog)
+        .addFunction("getThreadCount", &ScriptAPI::GameAPI::getThreadCount)
+        .addFunction("getThreadName", &ScriptAPI::GameAPI::getThreadName)
+        .addFunction("getThreadFPS", &ScriptAPI::GameAPI::getThreadFPS)
         .addFunction("setMouseCaptured", &ScriptAPI::GameAPI::setMouseCaptured)
         .addFunction("log", &ScriptAPI::GameAPI::log)
         .addFunction("getMousePosition", &ScriptAPI::GameAPI::getMousePosition)

@@ -12,9 +12,13 @@ public:
 	virtual ~EC_PhysicsThreadTask();
 	void addSystem(std::shared_ptr<EC_System> system);
 	// Collision + Physics only - run once per visual tick isn't enough for
-	// stable stacking (see setSubstepCount below); everything else
-	// (Spatial/Transform/Camera/Scripting) still only needs the once-per-
-	// tick addSystem() above.
+	// stable stacking (see setSubstepCount below); Spatial/Transform/Camera
+	// still only need the once-per-tick addSystem() above. Scripting and
+	// Audio do NOT belong on this task at all - each gets its own dedicated
+	// thread via EC_SingleSystemTask instead (see EC_Engine::init()) so
+	// their per-frame work, and anything a script touches through them
+	// (e.g. EC_SceneManager's entity lookup maps), is never touched
+	// concurrently from this thread and the main thread at the same time.
 	void addSubsteppedSystem(std::shared_ptr<EC_System> system);
 	void addGameRef(EC_Game& game);
 	void setTimeStep(float timestep);

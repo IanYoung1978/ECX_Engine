@@ -15,6 +15,11 @@ public:
 
     void activate();
     void deactivate();
+    // Schedules this scene's entities for actual destruction by the deferred sweep - a
+    // one-way door, see EC_SceneLifecycleState's own comment. Called separately from
+    // deactivate() (only for scenes with unloadondeactivate=true) rather than folded into
+    // it, since a merely-deactivated scene must remain reactivatable.
+    void markForDeletion();
     void unload();
 
     void addEntity(EntityID id);

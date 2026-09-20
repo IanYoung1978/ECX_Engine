@@ -90,6 +90,23 @@ struct EC_DOD_Spatial {
     glm::quat orientationQuat{ 1.0f, 0.0f, 0.0f, 0.0f };
 };
 
+// The standard three-way rigid-body classification (matches Box2D's b2BodyType exactly):
+// Static never moves and has infinite mass - other bodies collide against it but it's never
+// affected. Kinematic moves (repositioned directly, by script) but the impulse solver never
+// applies forces or collision response to it - detection and CollisionBeginEvent/
+// CollisionEndEvent still fire normally, so it can still push around/be reacted to by
+// Dynamic bodies; this is the "arcade physics" pattern's whole mechanism (see
+// EC_DOD_RigidBody::ignoreGravity's own comment - gravity is a separate, orthogonal
+// concern from body type, since a Kinematic body may still want gravity applied to its
+// velocity even though nothing resolves its collisions). Dynamic is fully simulated:
+// forces, gravity, and collision response all drive its motion - the default, and what
+// every RigidBody was implicitly assumed to be before this distinction existed.
+enum class EC_BodyType : uint8_t {
+    Static,
+    Kinematic,
+    Dynamic
+};
+
 struct EC_DOD_RigidBody {
     float mass = 1.0f;
     float restitution = 0.3f;
@@ -137,7 +154,14 @@ struct EC_DOD_RigidBody {
     // from friction, which only acts at a contact point.
     float linearDamping = 0.01f;
     float angularDamping = 0.05f;
-    bool isStatic = false;
+    EC_BodyType bodyType = EC_BodyType::Dynamic;
+    // EC_PhysicsSystem's gravity step skips any entity with this set - script-toggled (e.g.
+    // an OnCollisionBegin handler turning it on the instant it lands, then back off on
+    // jump) rather than a permanent per-entity authoring choice, though it can be authored
+    // that way too for something that should just never fall. Orthogonal to bodyType - a
+    // Kinematic body (see EC_BodyType's own comment) may still want gravity accumulating
+    // into its velocity even though nothing resolves its collisions.
+    bool ignoreGravity = false;
     // Runtime state (not authored via XML) - once velocity has been
     // negligible for long enough, the body is frozen entirely (no gravity,
     // no integration, no collision resolution) until something with real
@@ -247,21 +271,47 @@ struct EC_DOD_Light {
     bool dynamic = false;
 };
 
+// An entity's scene-membership lifecycle - distinct from EC_DOD_EntityInfo::active (a
+// gameplay-level toggle a script sets deliberately, e.g. cycling which of several lights
+// is on). Active/Inactive/MarkedForDeletion, not a bool, because "temporarily off" and
+// "scheduled to actually be destroyed" are different things: an author may want to
+// reactivate a merely-deactivated scene later without reloading it, and collapsing that
+// into a single flag would make deletion look reversible when it isn't (or vice versa).
+//
+// MarkedForDeletion is a one-way door - once set, there is no path back to Active. In
+// gameplay this is correct: a deletion is the result of a real event (death, consumption,
+// expiry) and should be final. An author changing their mind about a deletion is an
+// editor-side undo concern operating on the editor's own document model, before a scene is
+// ever written out or handed to the running engine - not something this runtime lifecycle
+// needs to represent.
+//
+// Only Active entities are visible to any subsystem's per-frame query (see
+// EC_DOD_EntityManager::getActiveEntitiesWithComponents and every inline `if (!info.active
+// || info.sceneState != Active) continue;` check across the engine) - Inactive and
+// MarkedForDeletion are treated identically for that purpose. The two states exist to
+// support reactivation and the deferred-destroy sweep respectively (see
+// EC_SceneManager's own comments), not because any subsystem currently distinguishes them.
+enum class EC_SceneLifecycleState : uint8_t {
+    Active,
+    Inactive,
+    MarkedForDeletion
+};
+
 struct EC_DOD_EntityInfo {
     std::string name;
     // Gameplay-level toggle - what EntityAPI::activate()/deactivate() (Lua-exposed) and
     // isActive() control. A script (e.g. a debug light-cycling feature) sets this
     // deliberately per entity and expects it to stick.
     bool active = true;
-    // Scene-membership toggle - what EC_GameScene::activate()/deactivate() controls when a
-    // scene is switched to/from. Kept separate from `active` because the two used to share
-    // one flag: EC_GameScene::deactivate()/activate() unconditionally overwrote every one
-    // of its entities' `active`, silently discarding any gameplay-level state a script had
-    // set (e.g. cycling to one active light out of three, then switching scenes and back,
-    // reset all three to active again). Subsystems that need "should this entity actually
-    // participate right now" must check active && sceneActive (see
-    // EC_DOD_EntityManager::getActiveEntitiesWithComponents).
-    bool sceneActive = true;
+    // Scene-membership state - what EC_GameScene::activate()/deactivate()/markForDeletion()
+    // control when a scene is switched to/from/unloaded. Kept separate from `active`
+    // because the two used to share one flag: EC_GameScene::deactivate()/activate()
+    // unconditionally overwrote every one of its entities' `active`, silently discarding
+    // any gameplay-level state a script had set (e.g. cycling to one active light out of
+    // three, then switching scenes and back, reset all three to active again). Subsystems
+    // that need "should this entity actually participate right now" must check
+    // active && sceneState == Active (see EC_DOD_EntityManager::getActiveEntitiesWithComponents).
+    EC_SceneLifecycleState sceneState = EC_SceneLifecycleState::Active;
     uint32_t uid = 0;
 };
 

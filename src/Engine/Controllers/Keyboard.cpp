@@ -19,18 +19,18 @@ Keyboard::~Keyboard()
 
 }
 
-void Keyboard::update(ECXMessenger& messenger)
+void Keyboard::update(ECXMessenger& messenger, float deltaTimeS)
 {
 	if (m_running == true)
 	{
 		for (size_t i = 0; i < 256; i++)
 		{
-			
+
 			if (m_PressedBuffer[i] && m_HeldBuffer[i])
 			{
 				ECXEvent Event;
 				Event.type = ECXEventType::key_held;
-				Event.args[0] = KeyEvent((SDL_Scancode)i, true, true);
+				Event.args[0] = KeyEvent((SDL_Scancode)i, true, true, deltaTimeS);
 				messenger.publish(Event);
 			}
 			else if (!m_PressedBuffer[i] && m_HeldBuffer[i])

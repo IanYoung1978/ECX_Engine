@@ -2,7 +2,7 @@
 
 
 
-KeyEvent::KeyEvent():m_pressed(false), m_held(false), m_key(SDL_SCANCODE_UNKNOWN)
+KeyEvent::KeyEvent():m_pressed(false), m_held(false), m_key(SDL_SCANCODE_UNKNOWN), m_deltaTimeS(0.0f)
 {
 }
 
@@ -11,11 +11,12 @@ KeyEvent::~KeyEvent()
 {
 }
 
-KeyEvent::KeyEvent(SDL_Scancode key, bool pressed, bool held)
+KeyEvent::KeyEvent(SDL_Scancode key, bool pressed, bool held, float deltaTimeS)
 {
 	m_key = key;
 	m_pressed = pressed;
 	m_held = held;
+	m_deltaTimeS = deltaTimeS;
 }
 
 SDL_Scancode & KeyEvent::getKey()
@@ -41,5 +42,10 @@ bool KeyEvent::isReleased()
 bool KeyEvent::isHeld()
 {
 	return m_held && m_pressed;
+}
+
+float KeyEvent::getDeltaTime()
+{
+	return m_deltaTimeS;
 }
 

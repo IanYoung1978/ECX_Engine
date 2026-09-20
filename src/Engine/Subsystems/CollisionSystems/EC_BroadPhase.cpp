@@ -25,8 +25,14 @@ namespace {
 
 void EC_BroadPhase::broadPhaseCollisionDetection()
 {
-    // Get all entities with collider and spatial components
-    auto entities = EC_DOD_EntityManager::getInstance().getEntitiesWithComponents({
+    // Active+sceneState filtered: without this, every collider entity
+    // across EVERY loaded scene (not just the active one) formed broad-phase pairs with
+    // every other one, regardless of whether either scene was actually active - an
+    // inactive scene's geometry could spuriously collide with the active scene's, and a
+    // scene with many entities loading in the background (see EC_SceneManager::loadScene)
+    // suddenly added a large, unrelated batch of pairs the moment its entities existed,
+    // before it was even the active scene.
+    auto entities = EC_DOD_EntityManager::getInstance().getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_DOD_Collider)),
         std::type_index(typeid(EC_DOD_Spatial))
         });
@@ -55,11 +61,11 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
                 // what actually stops a deactivated scene's geometry from continuing to
                 // render/collide/hit-test after a scene switch. Checks both `active`
                 // (gameplay-level, e.g. a script deactivating one specific entity) and
-                // `sceneActive` (scene-membership) - see EC_DOD_EntityInfo's comment for
-                // why they're separate flags.
+                // `sceneState` (scene-membership) - see EC_DOD_EntityInfo's comment for why
+                // they're separate.
                 if (EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_EntityInfo>(entityId)) {
                     const auto& info = EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entityId);
-                    if (!info.active || !info.sceneActive) continue;
+                    if (!info.active || info.sceneState != EC_SceneLifecycleState::Active) continue;
                 }
 
                 // Lock and get components (get() has its own locking)

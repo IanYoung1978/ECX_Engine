@@ -5,6 +5,7 @@
 
 namespace ScriptAPI
 {
+
     float EntityAPI::getBlendFactor() {
         auto& mgr = EC_DOD_EntityManager::getInstance();
         if (!mgr.isAlive(entityID)) return 1.0f;
@@ -540,7 +541,7 @@ namespace ScriptAPI
         if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
         if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
         const auto& rb = mgr.getComponent<EC_DOD_RigidBody>(entityID);
-        if (rb.isStatic || rb.mass <= 1e-6f) return;
+        if (rb.bodyType == EC_BodyType::Static || rb.mass <= 1e-6f) return;
         mgr.getComponent<EC_DOD_Spatial>(entityID).velocity += glm::vec3(x, y, z) / rb.mass;
     }
 
@@ -550,7 +551,7 @@ namespace ScriptAPI
         if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
         if (!mgr.hasComponent<EC_DOD_Spatial>(entityID)) return;
         const auto& rb = mgr.getComponent<EC_DOD_RigidBody>(entityID);
-        if (rb.isStatic || rb.mass <= 1e-6f) return;
+        if (rb.bodyType == EC_BodyType::Static || rb.mass <= 1e-6f) return;
         const glm::mat3 invInertiaWorld = EC_PhysicsResolution::computeInvInertiaWorld(entityID, rb.mass);
         mgr.getComponent<EC_DOD_Spatial>(entityID).angVelocity += invInertiaWorld * glm::vec3(x, y, z);
     }
@@ -611,18 +612,60 @@ namespace ScriptAPI
         mgr.getComponent<EC_DOD_RigidBody>(entityID).staticFriction = staticFriction;
     }
 
+    namespace {
+        std::string bodyTypeToString(EC_BodyType type) {
+            switch (type) {
+                case EC_BodyType::Static:    return "Static";
+                case EC_BodyType::Kinematic: return "Kinematic";
+                case EC_BodyType::Dynamic:   return "Dynamic";
+            }
+            return "Dynamic";
+        }
+    }
+
+    std::string EntityAPI::getBodyType() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return "";
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return "";
+        return bodyTypeToString(mgr.getComponent<EC_DOD_RigidBody>(entityID).bodyType);
+    }
+
+    void EntityAPI::setBodyType(const std::string& bodyType) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        auto& rb = mgr.getComponent<EC_DOD_RigidBody>(entityID);
+        if (bodyType == "Static")          rb.bodyType = EC_BodyType::Static;
+        else if (bodyType == "Kinematic")  rb.bodyType = EC_BodyType::Kinematic;
+        else if (bodyType == "Dynamic")    rb.bodyType = EC_BodyType::Dynamic;
+    }
+
     bool EntityAPI::isStatic() {
         auto& mgr = EC_DOD_EntityManager::getInstance();
         if (!mgr.isAlive(entityID)) return false;
         if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return false;
-        return mgr.getComponent<EC_DOD_RigidBody>(entityID).isStatic;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).bodyType == EC_BodyType::Static;
     }
 
     void EntityAPI::setStatic(bool isStatic) {
         auto& mgr = EC_DOD_EntityManager::getInstance();
         if (!mgr.isAlive(entityID)) return;
         if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
-        mgr.getComponent<EC_DOD_RigidBody>(entityID).isStatic = isStatic;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).bodyType = isStatic ? EC_BodyType::Static : EC_BodyType::Dynamic;
+    }
+
+    bool EntityAPI::isKinematic() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return false;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return false;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).bodyType == EC_BodyType::Kinematic;
+    }
+
+    void EntityAPI::setKinematic(bool isKinematic) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).bodyType = isKinematic ? EC_BodyType::Kinematic : EC_BodyType::Dynamic;
     }
 
     bool EntityAPI::isSleeping() {
@@ -635,4 +678,19 @@ namespace ScriptAPI
     void EntityAPI::wake() {
         EC_PhysicsResolution::wakeIfSleeping(entityID);
     }
+
+    bool EntityAPI::getIgnoreGravity() {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return false;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return false;
+        return mgr.getComponent<EC_DOD_RigidBody>(entityID).ignoreGravity;
+    }
+
+    void EntityAPI::setIgnoreGravity(bool ignore) {
+        auto& mgr = EC_DOD_EntityManager::getInstance();
+        if (!mgr.isAlive(entityID)) return;
+        if (!mgr.hasComponent<EC_DOD_RigidBody>(entityID)) return;
+        mgr.getComponent<EC_DOD_RigidBody>(entityID).ignoreGravity = ignore;
+    }
+
 }

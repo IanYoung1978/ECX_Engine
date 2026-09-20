@@ -154,9 +154,26 @@ namespace ScriptAPI
         void setFriction(float friction);
         float getStaticFriction();
         void setStaticFriction(float staticFriction);
+        // Static/Kinematic/Dynamic - see EC_BodyType's own comment. getBodyType/setBodyType
+        // use the same strings XML's <BodyType> authors ("Static"/"Kinematic"/"Dynamic");
+        // isStatic/setStatic and isKinematic/setKinematic are convenience wrappers matching
+        // getMass/setMass's existing shape - setStatic(false)/setKinematic(false) both mean
+        // "make it Dynamic", not "toggle back to whatever it was before". "" / no-op on an
+        // entity with no RigidBody.
+        std::string getBodyType();
+        void setBodyType(const std::string& bodyType);
         bool isStatic();
         void setStatic(bool isStatic);
+        bool isKinematic();
+        void setKinematic(bool isKinematic);
         bool isSleeping();
         void wake();
+
+        // Runtime toggle for the "arcade physics" pattern: an OnCollisionBegin handler
+        // deciding what it hit sets this directly instead of the full impulse solver
+        // deciding for it - see EC_DOD_RigidBody::ignoreGravity's own comment. false on an
+        // entity with no RigidBody.
+        bool getIgnoreGravity();
+        void setIgnoreGravity(bool ignore);
     };
 }

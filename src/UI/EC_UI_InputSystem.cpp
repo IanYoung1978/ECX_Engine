@@ -14,7 +14,10 @@ namespace
     EntityID findTopmostUIElementAt(const glm::vec2& point)
     {
         auto& manager = EC_DOD_EntityManager::getInstance();
-        auto entities = manager.getEntitiesWithComponents({
+        // Active+sceneState filtered, matching every other system - see EC_CameraSystem.cpp's
+        // own comment for why. An inactive scene's hidden UI shouldn't be clickable/
+        // hoverable just because it's still alive in memory.
+        auto entities = manager.getActiveEntitiesWithComponents({
             std::type_index(typeid(EC_UI_Element))
             });
 

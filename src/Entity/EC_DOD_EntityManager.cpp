@@ -19,6 +19,34 @@ EC_DOD_EntityManager::EC_DOD_EntityManager()
     m_AliveEntities.reserve(256);
 }
 
+void EC_DOD_EntityManager::configureComponentStorage(size_t initialCapacity, float growthThreshold)
+{
+    s_InitialComponentCapacity = initialCapacity;
+    s_ComponentGrowthThreshold = growthThreshold;
+}
+
+size_t EC_DOD_EntityManager::getInitialComponentCapacity()
+{
+    return s_InitialComponentCapacity;
+}
+
+float EC_DOD_EntityManager::getComponentGrowthThreshold()
+{
+    return s_ComponentGrowthThreshold;
+}
+
+std::vector<EC_DOD_EntityManager::ComponentStorageUsage> EC_DOD_EntityManager::getComponentStorageUsage() const
+{
+    std::shared_lock lock(m_ComponentArraysMutex);
+    std::vector<ComponentStorageUsage> usage;
+    usage.reserve(m_ComponentArrays.size());
+    for (const auto& [type, array] : m_ComponentArrays)
+    {
+        usage.push_back({ type.name(), array->size(), array->capacity() });
+    }
+    return usage;
+}
+
 EC_DOD_EntityManager::~EC_DOD_EntityManager() {
     clear();
 	delete s_Instance;
@@ -156,7 +184,7 @@ std::vector<EntityID> EC_DOD_EntityManager::getActiveEntitiesWithComponents(cons
     for (EntityID entity : candidates) {
         if (hasComponent<EC_DOD_EntityInfo>(entity)) {
             const auto& info = getComponent<EC_DOD_EntityInfo>(entity);
-            if (!info.active || !info.sceneActive) continue;
+            if (!info.active || info.sceneState != EC_SceneLifecycleState::Active) continue;
         }
         result.push_back(entity);
     }

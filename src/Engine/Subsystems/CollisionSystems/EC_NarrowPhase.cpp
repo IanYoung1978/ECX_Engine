@@ -46,12 +46,52 @@ void EC_NarrowPhase::narrowPhaseCollisionDetection()
             continue;
         }
 
+        // Only Type::Mesh entities (e.g. voxel terrain chunks) ever have this - default-
+        // constructed (null shared_ptrs) for everything else, which the Mesh-involving
+        // dispatch entries below check for before dereferencing.
+        EC_DOD_MeshCollisionData meshDataA, meshDataB;
+        auto& entityManager = EC_DOD_EntityManager::getInstance();
+        if (entityManager.hasComponent<EC_DOD_MeshCollisionData>(pair.body_A))
+            meshDataA = entityManager.getComponent<EC_DOD_MeshCollisionData>(pair.body_A);
+        if (entityManager.hasComponent<EC_DOD_MeshCollisionData>(pair.body_B))
+            meshDataB = entityManager.getComponent<EC_DOD_MeshCollisionData>(pair.body_B);
+
+        // A Kinematic body moving while already mid-contact (e.g. walking across uneven
+        // terrain) needs a fresh BEGIN to give script another chance to react to the new
+        // contact - Dynamic bodies don't need this at all, since EC_PhysicsSystem already
+        // re-resolves every currently-colliding pair every tick regardless of BEGIN/END.
+        // See EC_CollisionPair's own comment on the fields this reads/writes.
+        auto isKinematic = [&entityManager](EntityID e) {
+            return entityManager.hasComponent<EC_DOD_RigidBody>(e) &&
+                entityManager.getComponent<EC_DOD_RigidBody>(e).bodyType == EC_BodyType::Kinematic;
+        };
+        bool wasCollidingBeforeMoveCheck = pair.m_Colliding;
+        bool moved = false;
+        if (wasCollidingBeforeMoveCheck && (isKinematic(pair.body_A) || isKinematic(pair.body_B))) {
+            moved = spatialA.position != pair.m_LastCheckedPositionA ||
+                spatialA.orientation != pair.m_LastCheckedOrientationA ||
+                spatialB.position != pair.m_LastCheckedPositionB ||
+                spatialB.orientation != pair.m_LastCheckedOrientationB;
+        }
+        pair.m_LastCheckedPositionA = spatialA.position;
+        pair.m_LastCheckedOrientationA = spatialA.orientation;
+        pair.m_LastCheckedPositionB = spatialB.position;
+        pair.m_LastCheckedOrientationB = spatialB.orientation;
+
         // Prepare collision manifold
         CollisionManifold manifold;
         bool collisionDetected = false;
 
         // Perform collision detection based on collider types
-        collisionDetected = performCollisionCheck(colliderA, spatialA, colliderB, spatialB, manifold);
+        collisionDetected = performCollisionCheck(colliderA, spatialA, meshDataA, colliderB, spatialB, meshDataB, manifold);
+
+        // Only fake a false->true transition (to re-fire BEGIN with the fresh manifold) if
+        // the pair is genuinely STILL colliding after moving - a real loss of contact (moved
+        // off the edge of the surface) must fall through to handleCollisionStateChange's
+        // normal true->false path below and fire a real END, not get swallowed here.
+        if (moved && collisionDetected) {
+            pair.m_Colliding = false;
+        }
 
         // Handle collision state changes
         handleCollisionStateChange(pair, collisionDetected, manifold);
@@ -89,7 +129,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
     m_CollisionDispatch = {
         // Sphere vs Sphere
         {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::Sphere),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 return EC_CollisionChecks::SphereVsSphere(
                     Sphere{a.center, a.radius}, sa.position,
                     Sphere{b.center, b.radius}, sb.position, m);
@@ -97,7 +137,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // AABB vs AABB
         {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::AABB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 return EC_CollisionChecks::AABBVsAABB(
                     AABB{a.center - a.extents, a.center + a.extents}, sa.position,
                     AABB{b.center - b.extents, b.center + b.extents}, sb.position, m);
@@ -105,7 +145,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // Sphere vs AABB
         {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::AABB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 bool hit = EC_CollisionChecks::SphereVsAABB(
                     Sphere{a.center, a.radius}, sa.position,
                     AABB{b.center - b.extents, b.center + b.extents}, sb.position, m);
@@ -118,7 +158,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // AABB vs Sphere (swap parameters)
         {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::Sphere),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 return EC_CollisionChecks::SphereVsAABB(
                     Sphere{b.center, b.radius}, sb.position,
                     AABB{a.center - a.extents, a.center + a.extents}, sa.position, m);
@@ -126,7 +166,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // OBB vs OBB
         {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::OBB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
                                              glm::normalize(sa.up),
                                              glm::normalize(sa.direction));
@@ -143,7 +183,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // self-orients its normal body_A -> body_B, no extra sign-flip needed
         // here unlike the Sphere pairs above).
         {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::AABB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
                                              glm::normalize(sa.up),
                                              glm::normalize(sa.direction));
@@ -154,7 +194,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // AABB vs OBB (swap parameters)
         {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::OBB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::mat3 orientB = glm::mat3(glm::normalize(sb.right),
                                              glm::normalize(sb.up),
                                              glm::normalize(sb.direction));
@@ -165,7 +205,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // Sphere vs OBB
         {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::OBB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::mat3 orientB = glm::mat3(glm::normalize(sb.right),
                                              glm::normalize(sb.up),
                                              glm::normalize(sb.direction));
@@ -179,7 +219,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // OBB vs Sphere (swap parameters)
         {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::Sphere),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
                                              glm::normalize(sa.up),
                                              glm::normalize(sa.direction));
@@ -190,7 +230,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // Frustum vs AABB (no manifold for frustum checks)
         {makeKey(EC_DOD_Collider::Type::Frustum, EC_DOD_Collider::Type::AABB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 return EC_CollisionChecks::FrustumVsAABB(
                     Frustum{sa.position, sa.direction, sa.up, sa.right,
                            a.radius, a.height, 60.0f, 1.77f}, sa.position,
@@ -199,7 +239,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // AABB vs Frustum (swap parameters)
         {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::Frustum),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 return EC_CollisionChecks::FrustumVsAABB(
                     Frustum{sb.position, sb.direction, sb.up, sb.right,
                            b.radius, b.height, 60.0f, 1.77f}, sb.position,
@@ -208,7 +248,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
 
         // Capsule vs Capsule - self-orienting (like SphereVsSphere), no flip needed.
         {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::Capsule),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
                 glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
                 return EC_CollisionChecks::CapsuleVsCapsule(
@@ -220,7 +260,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // parameter (the sphere), which is dispatch-B here, so this is already the
         // correct A -> B direction; no flip.
         {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::Sphere),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
                 return EC_CollisionChecks::CapsuleVsSphere(
                     Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
@@ -231,7 +271,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // second parameter (so the normal points toward it) but it's dispatch-A, so
         // this is backwards (B -> A) and must be flipped.
         {makeKey(EC_DOD_Collider::Type::Sphere, EC_DOD_Collider::Type::Capsule),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
                 bool hit = EC_CollisionChecks::CapsuleVsSphere(
                     Capsule{b.center - upB, b.center + upB, b.radius}, sb.position,
@@ -243,7 +283,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // Capsule vs AABB - normal points toward the AABB (CapsuleVsAABB's second
         // parameter), which is dispatch-B here - correct A -> B direction as-is.
         {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::AABB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
                 return EC_CollisionChecks::CapsuleVsAABB(
                     Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
@@ -254,7 +294,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // parameter (so the normal points toward it) but it's dispatch-A, so this is
         // backwards (B -> A) and must be flipped.
         {makeKey(EC_DOD_Collider::Type::AABB, EC_DOD_Collider::Type::Capsule),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
                 bool hit = EC_CollisionChecks::CapsuleVsAABB(
                     Capsule{b.center - upB, b.center + upB, b.radius}, sb.position,
@@ -266,7 +306,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // Capsule vs OBB - normal points toward the OBB (CapsuleVsOBB's second
         // parameter), which is dispatch-B here - correct A -> B direction as-is.
         {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::OBB),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
                 glm::mat3 orientB = glm::mat3(glm::normalize(sb.right),
                                              glm::normalize(sb.up),
@@ -280,7 +320,7 @@ void EC_NarrowPhase::initCollisionDispatchTable()
         // parameter (so the normal points toward it) but it's dispatch-A, so this is
         // backwards (B -> A) and must be flipped.
         {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::Capsule),
-            [](auto& a, auto& sa, auto& b, auto& sb, auto& m) {
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
                 glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
                                              glm::normalize(sa.up),
@@ -291,12 +331,37 @@ void EC_NarrowPhase::initCollisionDispatchTable()
                 if (hit) m.contactNormal = -m.contactNormal;
                 return hit;
             }},
+
+        // Capsule vs Mesh - real triangle-level collision (e.g. voxel terrain), reusing
+        // the same math EC_BroadPhase::castCapsule already uses for one-shot queries (see
+        // EC_CollisionChecks::CapsuleVsMesh). Its contactNormal is the winning triangle's
+        // own absolute surface normal, not relative to dispatch order like the primitive-
+        // vs-primitive entries above - no flip needed in either direction below.
+        {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::Mesh),
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
+                if (!mdb.positions || !mdb.normals || !mdb.indices) return false;
+                glm::vec3 upA = glm::normalize(sa.up) * (a.height * 0.5f);
+                return EC_CollisionChecks::CapsuleVsMesh(
+                    Capsule{a.center - upA, a.center + upA, a.radius}, sa.position,
+                    *mdb.positions, *mdb.normals, *mdb.indices, sb.position, m);
+            }},
+
+        // Mesh vs Capsule (swap parameters) - same underlying test; the mesh's own
+        // absolute surface normal still needs no flip regardless of dispatch order.
+        {makeKey(EC_DOD_Collider::Type::Mesh, EC_DOD_Collider::Type::Capsule),
+            [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
+                if (!mda.positions || !mda.normals || !mda.indices) return false;
+                glm::vec3 upB = glm::normalize(sb.up) * (b.height * 0.5f);
+                return EC_CollisionChecks::CapsuleVsMesh(
+                    Capsule{b.center - upB, b.center + upB, b.radius}, sb.position,
+                    *mda.positions, *mda.normals, *mda.indices, sa.position, m);
+            }},
     };
 }
 
 bool EC_NarrowPhase::performCollisionCheck(
-    const EC_DOD_Collider& colliderA, const EC_DOD_Spatial& spatialA,
-    const EC_DOD_Collider& colliderB, const EC_DOD_Spatial& spatialB,
+    const EC_DOD_Collider& colliderA, const EC_DOD_Spatial& spatialA, const EC_DOD_MeshCollisionData& meshDataA,
+    const EC_DOD_Collider& colliderB, const EC_DOD_Spatial& spatialB, const EC_DOD_MeshCollisionData& meshDataB,
     CollisionManifold& manifold)
 {
     // Create key from collider types
@@ -306,7 +371,7 @@ bool EC_NarrowPhase::performCollisionCheck(
     auto it = m_CollisionDispatch.find(key);
     if (it != m_CollisionDispatch.end())
     {
-        return it->second(colliderA, spatialA, colliderB, spatialB, manifold);
+        return it->second(colliderA, spatialA, meshDataA, colliderB, spatialB, meshDataB, manifold);
     }
 
     // Unsupported collision type combination

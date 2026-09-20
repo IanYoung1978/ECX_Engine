@@ -887,9 +887,20 @@ void EC_DOD_EntityFactory::parseRigidBody(TiXmlElement* elem, EntityID entity) {
     if (angularDampingElem && angularDampingElem->GetText())
         rigidBody.angularDamping = static_cast<float>(atof(angularDampingElem->GetText()));
 
-    auto staticElem = elem->FirstChildElement("Static");
-    if (staticElem && staticElem->GetText())
-        rigidBody.isStatic = (strcmp(staticElem->GetText(), "true") == 0);
+    // Static/Kinematic/Dynamic - see EC_BodyType's own comment. Defaults to Dynamic
+    // (every RigidBody's implicit assumption before this distinction existed).
+    auto bodyTypeElem = elem->FirstChildElement("BodyType");
+    if (bodyTypeElem && bodyTypeElem->GetText())
+    {
+        std::string bodyType = bodyTypeElem->GetText();
+        if (bodyType == "Static")          rigidBody.bodyType = EC_BodyType::Static;
+        else if (bodyType == "Kinematic")  rigidBody.bodyType = EC_BodyType::Kinematic;
+        else if (bodyType == "Dynamic")    rigidBody.bodyType = EC_BodyType::Dynamic;
+        else
+            LOGGING::ECX_Logger::GetInstance()->LogMessage(
+                "RigidBody: unknown BodyType '" + bodyType + "'",
+                LOGGING::LogLevel::WARNING);
+    }
 
     // Lets an author start a body already asleep (motionless, no gravity)
     // rather than waiting for it to settle down naturally - e.g. a stack
@@ -898,6 +909,10 @@ void EC_DOD_EntityFactory::parseRigidBody(TiXmlElement* elem, EntityID entity) {
     auto sleepingElem = elem->FirstChildElement("Sleeping");
     if (sleepingElem && sleepingElem->GetText())
         rigidBody.isSleeping = (strcmp(sleepingElem->GetText(), "true") == 0);
+
+    auto ignoreGravityElem = elem->FirstChildElement("IgnoreGravity");
+    if (ignoreGravityElem && ignoreGravityElem->GetText())
+        rigidBody.ignoreGravity = (strcmp(ignoreGravityElem->GetText(), "true") == 0);
 
     manager.addComponent(entity, rigidBody);
     // Every RigidBody needs somewhere for collision resolution to cache its

@@ -78,14 +78,14 @@ void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
             // Chunks aren't in any EC_GameScene's own entity list (they're spawned
             // procedurally here, not scene-authored), so EC_GameScene::activate()/
             // deactivate() never touches them - without this component, every check that
-            // gates on active&&sceneActive (EC_BroadPhase, rendering) treats a component-
-            // less entity as always-active, so chunks stayed visible/collidable in every
-            // scene regardless of which was active. update() keeps sceneActive in sync
-            // with whether voxelchunkdemo is the active scene every frame instead.
+            // gates on active+sceneState (EC_BroadPhase, rendering) treats a component-less
+            // entity as always-active, so chunks stayed visible/collidable in every scene
+            // regardless of which was active. update() keeps sceneState in sync with
+            // whether voxelchunkdemo is the active scene every frame instead.
             EC_DOD_EntityInfo info;
             info.name = "voxelchunk_" + std::to_string(x) + "_" + std::to_string(z);
             info.active = true;
-            info.sceneActive = true;
+            info.sceneState = EC_SceneLifecycleState::Active;
             manager.addComponent(entity, info);
 
             m_ChunkEntities.push_back(entity);
@@ -142,7 +142,8 @@ void EC_VoxelChunkSystem::update(const float& deltaTimeS, EC_Game& game) {
     for (EntityID chunkEntity : m_ChunkEntities) {
         if (!manager.isAlive(chunkEntity)) continue;
         if (!manager.hasComponent<EC_DOD_EntityInfo>(chunkEntity)) continue;
-        manager.getComponent<EC_DOD_EntityInfo>(chunkEntity).sceneActive = voxelSceneActive;
+        manager.getComponent<EC_DOD_EntityInfo>(chunkEntity).sceneState =
+            voxelSceneActive ? EC_SceneLifecycleState::Active : EC_SceneLifecycleState::Inactive;
     }
 
     for (int i = 0; i < kMaxUploadsPerFrame; i++) {

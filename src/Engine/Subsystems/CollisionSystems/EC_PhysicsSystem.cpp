@@ -38,6 +38,33 @@ namespace {
 void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
+    // Gravity/external-force/integration below must not run for an entity outside the
+    // active scene - a scene loading in the background (see EC_SceneManager::loadScene)
+    // would otherwise start falling under gravity and integrating position the moment its
+    // entities existed, well before it became the active scene. Same active+sceneState
+    // check EC_DOD_EntityManager::getActiveEntitiesWithComponents already applies
+    // elsewhere, inlined here since these loops iterate a component array's raw data
+    // directly rather than going through that helper.
+    auto isActiveInScene = [&manager](EntityID entity) {
+        if (!manager.hasComponent<EC_DOD_EntityInfo>(entity)) return true;
+        const auto& info = manager.getComponent<EC_DOD_EntityInfo>(entity);
+        return info.active && info.sceneState == EC_SceneLifecycleState::Active;
+    };
+
+    // Detection (and CollisionBeginEvent/CollisionEndEvent) already happened upstream in
+    // EC_CollisionSystem regardless of this - it only gates whether this pair gets run
+    // through the impulse solver below. A pair with either side Kinematic is handed
+    // entirely to script instead (see EC_BodyType's own comment). An entity with no
+    // RigidBody at all (e.g. voxel terrain) is neutral here, not Dynamic-by-default - it
+    // never forces a skip on its own, only an explicit Kinematic side does.
+    auto pairSkipsResolution = [&manager](EntityID a, EntityID b) {
+        auto isKinematic = [&manager](EntityID e) {
+            return manager.hasComponent<EC_DOD_RigidBody>(e) &&
+                manager.getComponent<EC_DOD_RigidBody>(e).bodyType == EC_BodyType::Kinematic;
+        };
+        return isKinematic(a) || isKinematic(b);
+    };
+
     // --- Gravity applied first, before the solve, so the constraint solve
     // below sees and cancels THIS tick's gravity directly. Applying it after
     // instead leaves the solve chasing last tick's residual one step behind
@@ -53,8 +80,11 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             auto& rigidBodiesGravity = rbArrayGravity->getData();
             for (size_t i = 0; i < rigidBodiesGravity.size(); i++) {
                 auto& rb = rigidBodiesGravity[i];
-                if (rb.isStatic || rb.isSleeping) continue;
-                EntityID entity = rbArrayGravity->getEntity(i);
+                // Kinematic still wants gravity if it hasn't opted out via ignoreGravity -
+                // see EC_BodyType's own comment on why that's a separate, orthogonal flag.
+                if (rb.bodyType == EC_BodyType::Static || rb.isSleeping || rb.ignoreGravity) continue;
+                EntityID entity = rbArrayGravity->getEntityUnlocked(i);
+                if (!isActiveInScene(entity)) continue;
                 if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
                 manager.getComponent<EC_DOD_Spatial>(entity).velocity += kGravity * deltaTimeS;
             }
@@ -72,11 +102,12 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             std::shared_lock forceLock(forceArray->getMutex());
             auto& forces = forceArray->getData();
             for (size_t i = 0; i < forces.size(); i++) {
-                EntityID entity = forceArray->getEntity(i);
+                EntityID entity = forceArray->getEntityUnlocked(i);
+                if (!isActiveInScene(entity)) continue;
                 if (!manager.hasComponent<EC_DOD_RigidBody>(entity)) continue;
                 if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
                 const auto& rb = manager.getComponent<EC_DOD_RigidBody>(entity);
-                if (rb.isStatic || rb.isSleeping || rb.mass <= 1e-6f) continue;
+                if (rb.bodyType == EC_BodyType::Static || rb.isSleeping || rb.mass <= 1e-6f) continue;
                 manager.getComponent<EC_DOD_Spatial>(entity).velocity += (forces[i].force / rb.mass) * deltaTimeS;
             }
         }
@@ -96,6 +127,7 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         std::unordered_map<EntityID, std::vector<glm::vec3>> bodyContactPoints;
         for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
+            if (pairSkipsResolution(pair.body_A, pair.body_B)) continue;
             bodies.try_emplace(pair.body_A, EC_PhysicsResolution::recordBody(pair.body_A));
             bodies.try_emplace(pair.body_B, EC_PhysicsResolution::recordBody(pair.body_B));
 
@@ -130,6 +162,7 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         // velocity (see EC_PhysicsResolution::applyWarmStart). ---
         for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
+            if (pairSkipsResolution(pair.body_A, pair.body_B)) continue;
 
             auto& bodyA = bodies.at(pair.body_A);
             auto& bodyB = bodies.at(pair.body_B);
@@ -162,6 +195,7 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         for (int pass = 0; pass < kSolverPasses; pass++) {
             for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
                 if (!pair.m_Colliding) continue;
+                if (pairSkipsResolution(pair.body_A, pair.body_B)) continue;
 
                 auto& bodyA = bodies.at(pair.body_A);
                 auto& bodyB = bodies.at(pair.body_B);
@@ -233,15 +267,16 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         for (const EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
             if (pair.m_PenetrationDepth <= kPenetrationSlop) continue;
+            if (pairSkipsResolution(pair.body_A, pair.body_B)) continue;
 
             float invMassA = 0.0f, invMassB = 0.0f;
             if (manager.hasComponent<EC_DOD_RigidBody>(pair.body_A)) {
                 const auto& rb = manager.getComponent<EC_DOD_RigidBody>(pair.body_A);
-                if (!rb.isStatic && rb.mass > 1e-6f) invMassA = 1.0f / rb.mass;
+                if (rb.bodyType == EC_BodyType::Dynamic && rb.mass > 1e-6f) invMassA = 1.0f / rb.mass;
             }
             if (manager.hasComponent<EC_DOD_RigidBody>(pair.body_B)) {
                 const auto& rb = manager.getComponent<EC_DOD_RigidBody>(pair.body_B);
-                if (!rb.isStatic && rb.mass > 1e-6f) invMassB = 1.0f / rb.mass;
+                if (rb.bodyType == EC_BodyType::Dynamic && rb.mass > 1e-6f) invMassB = 1.0f / rb.mass;
             }
             const float invMassSum = invMassA + invMassB;
             if (invMassSum <= 1e-6f) continue;
@@ -272,9 +307,20 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
 
     for (size_t i = 0; i < rigidBodies.size(); i++) {
         auto& rb = rigidBodies[i];
-        EntityID entity = rbArray->getEntity(i);
+        EntityID entity = rbArray->getEntityUnlocked(i);
 
-        if (rb.isStatic) continue;
+        // Damping, sleeping, and quaternion-based orientation are all real physics
+        // simulation, which only a Dynamic body wants (see EC_BodyType's own comment) -
+        // Static never moves, and Kinematic (a RigidBody kept only for gravity bookkeeping
+        // on an otherwise script/mouse-controlled entity, the "arcade physics" pattern)
+        // is moved directly, never by this. Skipping this whole block for non-Dynamic also
+        // fixes a real bug the first version of this pattern had: sitting still while
+        // grounded would eventually sleep it regardless, and since gravity's own check
+        // skips sleeping bodies, jumping (which only clears ignoreGravity) would leave
+        // gravity permanently inert - the entity would float upward forever instead of
+        // arcing back down.
+        if (rb.bodyType != EC_BodyType::Dynamic) continue;
+        if (!isActiveInScene(entity)) continue;
         if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
         auto& spatial = manager.getComponent<EC_DOD_Spatial>(entity);
 
@@ -330,13 +376,12 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             continue;
         }
 
-        // --- Integrate position/orientation from the final velocity.
-        // Angular velocity is composed as a real quaternion rotation, not
-        // summed component-wise into Euler angles and rebuilt via three
-        // sequential single-axis rotations - that only tracks rotation
-        // correctly about one fixed axis at a time. ---
-        spatial.position += spatial.velocity * deltaTimeS;
-
+        // --- Integrate orientation from the final angular velocity. Position is
+        // integrated once, for every entity with a Spatial (RigidBody included), by
+        // EC_SpatialSystem instead - doing it here too would double it. Angular velocity
+        // is composed as a real quaternion rotation, not summed component-wise into Euler
+        // angles and rebuilt via three sequential single-axis rotations - that only tracks
+        // rotation correctly about one fixed axis at a time. ---
         const glm::mat3 basis(spatial.right, spatial.up, -spatial.direction);
         const glm::quat currentQuat = glm::normalize(glm::quat_cast(basis));
 

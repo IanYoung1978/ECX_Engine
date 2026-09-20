@@ -11,7 +11,7 @@ public:
 	virtual ~Mouse();
 
 	// Inherited via Controller
-	virtual void update(ECXMessenger& messenger) override;
+	virtual void update(ECXMessenger& messenger, float deltaTimeS) override;
 	virtual void handleEvent(SDL_Event & e) override;
 	virtual bool keyPressed(SDL_Scancode key) override;
 	virtual bool keyHeld(SDL_Scancode key) override;

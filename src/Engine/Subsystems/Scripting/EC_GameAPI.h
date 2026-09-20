@@ -20,6 +20,11 @@ namespace ScriptAPI
 
         EntityAPI getEntityByName(const std::string& name);
         unsigned int getEntityIDByUID(unsigned int uid);
+        // Wraps a raw entity ID (e.g. from EventAPI::getCollisionEntityA/B) as an EntityAPI,
+        // so a collision handler can call .getName()/.getVelocity()/etc. on whatever it hit
+        // without a separate name/UID lookup. Invalid/dead IDs behave like any other
+        // EntityAPI on a dead entity (calls are no-ops / return defaults).
+        EntityAPI getEntityByID(unsigned int id);
         void shutdown();
         void pauseGame();
         void resumeGame();
@@ -68,6 +73,15 @@ namespace ScriptAPI
         float getMSPF();
         int getRecentLogCount();
         std::string getRecentLog(int index);
+
+        // Per-background-task (Physics, Scripting, Audio) real-updates-per-second, for
+        // diagnosing which of the engine's fixed-timestep threads is actually the one
+        // throttled rather than guessing from the main thread's own getFPS() alone - see
+        // EC_SystemTask::getTickRate()'s own comment. Same paginated-getter pattern as
+        // getRecentLogCount/getRecentLog above.
+        int getThreadCount();
+        std::string getThreadName(int index);
+        float getThreadFPS(int index);
         void setMouseCaptured(bool captured);
         void log(const std::string& message);
 

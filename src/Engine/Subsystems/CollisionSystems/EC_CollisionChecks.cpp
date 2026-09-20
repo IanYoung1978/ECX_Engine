@@ -633,7 +633,30 @@ bool EC_CollisionChecks::CapsuleVsMesh(const Capsule& capsule, const glm::vec3& 
     glm::vec3 bestSegPoint(0.0f), bestMeshPoint(0.0f), bestFaceNormal(0.0f, 1.0f, 0.0f);
     bool found = false;
 
+    // The capsule's own bounding box grown by its radius, in the mesh's local space. A
+    // triangle whose bounding box doesn't overlap it is farther than `radius` from the
+    // capsule's segment everywhere, so it can neither be a hit nor beat one that is - skipping
+    // it can't change the result (surviving triangles are still visited in the same order, so
+    // the strict-< tie-break below is unaffected), and this comparison is a handful of
+    // min/max ops against closestPointsSegmentTriangle's ~2 point-triangle + 3 segment-segment
+    // + 1 plane test per triangle, which used to run for every triangle of a 32x32x32 chunk
+    // on every call to test a ~2m capsule. kCullMargin only guards float rounding at the
+    // exact boundary.
+    constexpr float kCullMargin = 0.01f;
+    const glm::vec3 reach(capsule.radius + kCullMargin);
+    const glm::vec3 boxLo = glm::min(segA, segB) - reach - meshPos;
+    const glm::vec3 boxHi = glm::max(segA, segB) + reach - meshPos;
+
     for (size_t i = 0; i + 2 < meshIndices.size(); i += 3) {
+        const glm::vec3& la = meshPositions[meshIndices[i]];
+        const glm::vec3& lb = meshPositions[meshIndices[i + 1]];
+        const glm::vec3& lc = meshPositions[meshIndices[i + 2]];
+        if (std::max({ la.x, lb.x, lc.x }) < boxLo.x || std::min({ la.x, lb.x, lc.x }) > boxHi.x ||
+            std::max({ la.y, lb.y, lc.y }) < boxLo.y || std::min({ la.y, lb.y, lc.y }) > boxHi.y ||
+            std::max({ la.z, lb.z, lc.z }) < boxLo.z || std::min({ la.z, lb.z, lc.z }) > boxHi.z) {
+            continue;
+        }
+
         const glm::vec3 a = meshPos + meshPositions[meshIndices[i]];
         const glm::vec3 b = meshPos + meshPositions[meshIndices[i + 1]];
         const glm::vec3 c = meshPos + meshPositions[meshIndices[i + 2]];

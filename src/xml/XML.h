@@ -312,6 +312,82 @@ namespace XML
 		return true;
 	}
 
+	// EngineConfig.xml's <EntityLifecycle quarantineFrames=""/> - how many consecutive
+	// main-thread frames an entity must stay Inactive/MarkedForDeletion (excluded from
+	// every subsystem's per-frame queries) before EC_SceneManager's deferred sweep actually
+	// destroys it. This quarantine is what makes the sweep safe without any additional
+	// locking: after this many frames with zero readers, nothing can be holding a live
+	// reference to that entity's components. Defaults to 30 (~0.5s at 60fps) - deliberately
+	// generous, not tuned to a minimum; a game with heavier per-frame work than this
+	// engine's own test scenes may want a larger value.
+	struct EntityLifecycleSettings
+	{
+		int quarantineFrames = 30;
+	};
+
+	inline bool loadEntityLifecycleSettings(const std::string& file, EntityLifecycleSettings& outSettings)
+	{
+		outSettings = EntityLifecycleSettings{};
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto entityLifecycle = root->FirstChildElement("EntityLifecycle");
+		if (!entityLifecycle)
+			return true;
+
+		const char* quarantineAttr = entityLifecycle->Attribute("quarantineFrames");
+		if (quarantineAttr)
+			outSettings.quarantineFrames = std::max(1, atoi(quarantineAttr));
+
+		return true;
+	}
+
+	// EngineConfig.xml's <ComponentStorage initialCapacity="" growthThreshold=""/> - each
+	// EC_ComponentArray<T> reserves initialCapacity up front so normal play never triggers a
+	// reallocation (see EC_ComponentArray<T>::insert()'s own comment for why that matters: a
+	// reference obtained via getComponent<T>() and held across a call, e.g. a Lua handler
+	// dispatch, would otherwise dangle the instant another thread's insert() reallocates the
+	// buffer under it). growthThreshold (0..1) is how full an array gets, as a fraction of
+	// capacity, before insert() grows it ahead of actually running out. Seeing the "reached
+	// capacity" warning in the log at all means initialCapacity is set too low for real
+	// usage - defaults are deliberately generous so it should be rare in practice.
+	struct ComponentStorageSettings
+	{
+		size_t initialCapacity = 512;
+		float growthThreshold = 0.95f;
+	};
+
+	inline bool loadComponentStorageSettings(const std::string& file, ComponentStorageSettings& outSettings)
+	{
+		outSettings = ComponentStorageSettings{};
+
+		TiXmlDocument doc(file.c_str());
+		if (!doc.LoadFile())
+			return false;
+		auto root = doc.FirstChildElement();
+		if (!root)
+			return false;
+
+		auto componentStorage = root->FirstChildElement("ComponentStorage");
+		if (!componentStorage)
+			return true;
+
+		const char* capacityAttr = componentStorage->Attribute("initialCapacity");
+		if (capacityAttr)
+			outSettings.initialCapacity = static_cast<size_t>(std::max(1, atoi(capacityAttr)));
+
+		const char* thresholdAttr = componentStorage->Attribute("growthThreshold");
+		if (thresholdAttr)
+			outSettings.growthThreshold = static_cast<float>(atof(thresholdAttr));
+
+		return true;
+	}
+
 	// EngineConfig.xml's <Startup pauseOnStart=""/> - whether EC_SceneManager::update()
 	// auto-pauses the engine right after the first scene finishes loading (see that call
 	// site's own comment for why that pause exists at all). Defaults to true (existing

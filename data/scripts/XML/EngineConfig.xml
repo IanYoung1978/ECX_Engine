@@ -51,10 +51,29 @@
 		</Debug>
 	</Physics>
 
-	<!-- Dev-build-only debug HTTP server (Issue #87) - GET-only, localhost-bound, no
-	     authentication. See GET /docs for the full route list. Off by default; must be
-	     explicitly enabled per-machine. -->
+	<!-- Dev-build-only debug HTTP server - GET-only, localhost-bound, no authentication.
+	     See GET /docs for the full route list. Off by default; must be explicitly enabled
+	     per-machine. -->
 	<DebugHTTP enabled="false" port="8089"/>
+
+	<!-- How many main-thread update() frames a scene's entities sit quarantined (marked for
+	     deletion but not yet actually destroyed) before EC_SceneManager's sweep runs
+	     destroyEntity() on them. Exists so no subsystem's per-frame active-filtered query
+	     can ever be mid-read on an entity at the moment it's destroyed: every such query
+	     already excludes MarkedForDeletion entities, so once quarantineFrames have elapsed
+	     none of them can possibly still hold a reference. Higher = safer under heavier
+	     subsystem contention, at the cost of holding dead entities' memory longer; 30
+	     (~0.5s @ 60fps) is a generous default. -->
+	<EntityLifecycle quarantineFrames="30"/>
+
+	<!-- Every component type's backing store reserves initialCapacity up front (one global
+	     default, not per-type) so ordinary play never triggers a reallocation - a component
+	     reference held across a call (e.g. a Lua handler dispatch) would otherwise dangle
+	     the instant another thread's insert() grows the buffer under it. growthThreshold is
+	     how full an array gets (as a fraction of capacity) before insert() grows it ahead of
+	     actually running out. Seeing the "reached capacity" warning in the log at all means
+	     this value is set too low for the component type it names - raise it. -->
+	<ComponentStorage initialCapacity="512" growthThreshold="0.95"/>
 
 	<!-- Issue #99 - voxel terrain is opt-in (a game with no use for it gets zero side
 	     effects: no worker thread, no chunk entities, no generation work). Enabled here
