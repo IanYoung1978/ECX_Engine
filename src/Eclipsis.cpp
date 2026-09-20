@@ -1,8 +1,10 @@
 #include "Game.h"
+#include "Logging/ECX_CrashHook.h"
 #include <memory>
 
 int main(int argc, char *args[])
 {
+	LOGGING::installCrashHook();
 	auto game = std::make_unique<EC_Game>();
 	Game_Error err = game->init("data/scripts/XML/Game.xml");
 	if (err != Game_Error::NO_ERROR)

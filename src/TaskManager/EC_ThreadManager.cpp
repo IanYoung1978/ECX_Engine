@@ -4,21 +4,28 @@
 
 int EC_ThreadFunction(EC_ThreadManager* manager)
 {
-	while (manager->running())
+	while (true)
 	{
-		while (!manager->hasTasks())
+		std::shared_ptr<EC_Task> task;
 		{
-			manager->getSignal()->wait(std::unique_lock<std::mutex>(*(manager->getLock())));
+			// Check-and-wait under one continuous hold of the lock, with the predicate
+			// re-tested by wait() itself: a stop() (or a new task) that lands at any point
+			// before the wait is seen by the predicate, and one that lands after is a real
+			// notification to a thread that is genuinely waiting - never a lost wakeup.
+			// Also copes with spurious wakeups, which a bare wait() did not.
+			std::unique_lock<std::mutex> lock(*(manager->getLock()));
+			manager->getSignal()->wait(lock, [manager] {
+				return !manager->running() || manager->hasTasksLocked();
+			});
 			if (!manager->running())
 			{
 				break;
 			}
+			task = manager->popTaskLocked();
 		}
-		auto task = manager->getTask();
 		if (task != nullptr)
 		{
 			task->execute();
-			task = manager->getTask();
 		}
 	}
 	return 0;
@@ -28,7 +35,7 @@ std::vector<std::thread> EC_ThreadManager::s_Workers;
 std::deque<std::shared_ptr<EC_Task>> EC_ThreadManager::s_Tasks;
 std::mutex EC_ThreadManager::s_Lock;
 std::condition_variable EC_ThreadManager::s_Flag;
-bool EC_ThreadManager::s_running;
+std::atomic<bool> EC_ThreadManager::s_running;
 size_t EC_ThreadManager::s_activeThreads;
 
 EC_ThreadManager::EC_ThreadManager()
@@ -69,6 +76,17 @@ std::shared_ptr<EC_Task> EC_ThreadManager::getTask()
 	return nullptr;
 }
 
+std::shared_ptr<EC_Task> EC_ThreadManager::popTaskLocked()
+{
+	if (s_Tasks.empty())
+	{
+		return nullptr;
+	}
+	auto task = s_Tasks.front();
+	s_Tasks.pop_front();
+	return task;
+}
+
 void EC_ThreadManager::addTask(std::shared_ptr<EC_Task> task)
 {
 	std::scoped_lock<std::mutex> lock(s_Lock);
@@ -105,7 +123,14 @@ std::mutex * EC_ThreadManager::getLock()
 
 void EC_ThreadManager::stop()
 {
-	s_running = false;
+	{
+		// Set under the same lock the workers' wait predicate is tested under, so a worker
+		// is either yet to check it (and will see false) or already asleep (and gets the
+		// notify_all below) - there is no third state where the flag changes unseen and the
+		// notification arrives before the worker is waiting.
+		std::scoped_lock<std::mutex> lock(s_Lock);
+		s_running = false;
+	}
 	s_Flag.notify_all();
 
 	for (size_t i = 0; i < s_Workers.size(); i++)

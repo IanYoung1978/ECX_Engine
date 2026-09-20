@@ -34,6 +34,9 @@ namespace LOGGING
 		static constexpr size_t kMaxPlainLogEntries = 200;
 		mutable std::mutex lock;
 		std::string outputFilename;
+		// The file-writing half of printToFile(), with no locking of its own - callers hold
+		// `lock` (printToFile) or have deliberately given up on getting it (logCrashAndFlush).
+		void writeLogFile();
 	public:
 		~ECX_Logger() { ; }
 		static std::unique_ptr<ECX_Logger>& GetInstance()
@@ -50,6 +53,13 @@ namespace LOGGING
 			outputFilename = output;
 		}
 		void printToFile();
+		// For a dying process (CRT assertion / unhandled exception - see ECX_CrashHook.h):
+		// appends `message` as a CRITICAL entry, then immediately writes the whole log to
+		// file. Waits briefly for the log's mutex but proceeds without it if it can't get
+		// it - the crashing thread may be the one holding it (e.g. an assertion fired inside
+		// LogMessage itself), and hanging there would lose the very report this exists to
+		// save. The process is about to die anyway, so best-effort beats deadlock.
+		void logCrashAndFlush(const std::string& message);
 		std::deque<std::string> GetRecentPlainLogs(size_t maxLines) const;
 	};
 	

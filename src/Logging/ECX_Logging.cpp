@@ -6,6 +6,8 @@
 #include <iomanip>
 #include <ctime>
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 namespace LOGGING
 {
@@ -111,7 +113,44 @@ namespace LOGGING
     {
 #ifdef LOG_ENABLED
         std::scoped_lock<std::mutex> scopedLock(lock);
+        writeLogFile();
+#endif
+    }
 
+    void ECX_Logger::logCrashAndFlush(const std::string& message)
+    {
+#ifdef LOG_ENABLED
+        std::unique_lock<std::mutex> scopedLock(lock, std::defer_lock);
+        for (int attempt = 0; attempt < 100 && !scopedLock.try_lock(); ++attempt)
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+        std::stringstream ss;
+        auto t = std::time(nullptr);
+        std::tm tm{};
+        localtime_s(&tm, &t);
+        ss << std::put_time(&tm, "%d-%m-%Y %H:%M:%S") << ": CRITICAL: " << message;
+        const std::string finalMessage = ss.str();
+
+        // <pre> so the multi-line stack keeps its line breaks in the HTML log.
+        log[std::this_thread::get_id()].push_back(
+            "<span style='color:" + GetHTMLColour(LogLevel::CRITICAL) + "'><pre>" +
+            finalMessage + "</pre></span>");
+        m_PlainLog.push_back(finalMessage);
+        if (m_PlainLog.size() > kMaxPlainLogEntries)
+            m_PlainLog.pop_front();
+        std::printf("%s%s%s\n", GetColour(LogLevel::CRITICAL), finalMessage.c_str(), Reset);
+        std::fflush(stdout); // redirected stdout is block-buffered and this process may not live to flush it
+
+        // A crash before EC_Game::init() has picked the log's filename must still land somewhere.
+        if (outputFilename.empty())
+            outputFilename = "log.html";
+        writeLogFile();
+#endif
+    }
+
+    void ECX_Logger::writeLogFile()
+    {
+#ifdef LOG_ENABLED
         // Check if file exists
         std::ifstream checkFile(outputFilename);
         bool fileExists = checkFile.good();
