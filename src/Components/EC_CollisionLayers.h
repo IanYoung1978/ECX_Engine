@@ -6,12 +6,8 @@
 // from EC_DOD_Components.h since it's a shared vocabulary, not a component.
 namespace CollisionLayers
 {
-    // Every entity that should be discoverable by a spatial/rendering query (camera
-    // frustum, light influence radius) carries this bit, whether via an explicit
-    // <Collider> the author OR's it into, or an auto-generated one
-    // (see EC_DOD_EntityFactory::constructEntity). Auto-generated colliders use a
-    // collisionMask of 0 so they never form gameplay collision pairs with anything -
-    // this bit only matters for single-sided spatial discovery queries, which test a
-    // candidate's collisionLayer directly and never consult its mask.
+    // Carried by every entity a spatial/rendering query should find (camera frustum, light radius),
+    // via an authored <Collider> or an auto-generated one. Auto-generated colliders use collisionMask 0,
+    // so they never form gameplay pairs; queries test the layer bit directly and ignore the mask.
     constexpr uint32_t Renderable = 1u << 31;
 }

@@ -14,13 +14,9 @@ struct EC_AudioSystem::Impl {
     ma_engine engine{};
     bool engineInitialised = false;
 
-    // Heap-allocated and initialised in place (never moved/copied after
-    // ma_sound_group_init): miniaudio's sound/group/node types register themselves into the
-    // engine's node graph by their own address, so relocating an already-initialised one
-    // (e.g. via an unordered_map rehash, or emplace copying a stack temporary in) corrupts
-    // those internal pointers - this is exactly what a prior version of this code did by
-    // storing ma_sound_group by value in the map, and it segfaulted immediately on the
-    // first sound group created.
+    // Heap-allocated and initialised in place: miniaudio registers sound/group/node types in the
+    // engine's node graph by address, so moving or copying one after ma_sound_group_init (e.g. an
+    // unordered_map rehash) corrupts it.
     std::unordered_map<std::string, std::unique_ptr<ma_sound_group>> categories;
 
     // Tracked purely so update() can free them once finished (ma_sound_uninit does not

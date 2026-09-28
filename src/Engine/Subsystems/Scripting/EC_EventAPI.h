@@ -44,12 +44,9 @@ namespace ScriptAPI
         unsigned int getCollisionEntityB();
         unsigned int getOtherEntityID();
 
-        // CollisionBeginEvent-only (CollisionEndEvent carries no manifold - see
-        // EC_NarrowPhase.cpp's own publish calls). Zero-valued default on any other event
-        // type. See EC_CollisionShapes.h's CollisionManifold for what these mean - the
-        // normal generally points body_A -> body_B (EC_NarrowPhase's dispatch table's own
-        // convention), except a Mesh-involving pair where it's the triangle's own absolute
-        // surface normal instead (see EC_CollisionChecks::CapsuleVsMesh's own comment).
+        // CollisionBeginEvent only (End carries no manifold); zero on any other event. The normal generally
+        // points body_A -> body_B, except for Mesh pairs where it's the triangle's absolute surface normal
+        // (see EC_CollisionChecks::CapsuleVsMesh).
         glm::vec3 getCollisionNormal();
         float getCollisionPenetrationDepth();
     };

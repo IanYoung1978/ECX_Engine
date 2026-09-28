@@ -18,17 +18,13 @@ public:
 	void PostProcessPass();
 	void UIPass();
 	void FinalPass();
-	// Issue #28 receivesShadow-exempt pass: depth-tests (GL_EQUAL) against the G-buffer's
-	// own depth and writes into FrameBuffer1's colour texture - the same buffer every
-	// LightingPass() call this frame already accumulates lit colour into.
+	// receivesShadow-exempt pass: depth-tests (GL_EQUAL) against the G-buffer depth and writes into
+	// FrameBuffer1's colour texture, where lighting accumulates.
 	void ExemptShadowPass();
 	void EndExemptShadowPass();
-	// Mip-chain bloom (see BloomChain.h). BeginBloomChain() binds the G-buffer for reading so
-	// its Glow texture can be used as the level-0 downsample source. getBloomDownsampleSource/
-	// getBloomUpsampleSource return the correct source texture for step `level` of each walk.
-	// EndBloomChain() copies the final blurred result (level 0, post-upsample) back into the
-	// G-buffer's Glow texture - same contract the old GlowPass(..., last=true) had, so nothing
-	// downstream (emissivePass()) needs to change.
+	// Mip-chain bloom (see BloomChain.h). BeginBloomChain() binds the G-buffer for reading so Glow is
+	// the level-0 source; getBloomDownsampleSource/getBloomUpsampleSource give the source texture for
+	// step `level`; EndBloomChain() copies the result (level 0) back into the G-buffer's Glow texture.
 	void BeginBloomChain();
 	int getBloomLevelCount() { return m_BloomChain.getLevelCount(); }
 	unsigned int getBloomDownsampleSource(int level);

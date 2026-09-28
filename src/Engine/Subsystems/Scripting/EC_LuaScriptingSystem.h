@@ -8,12 +8,8 @@
 #include "Messaging/IEventListener.h"
 #include "Engine/Subsystems/Scripting/EC_VolumeAPI.h"
 
-// Forward declarations only - the Lua/luabridge headers and the ScriptAPI
-// wrapper classes are only needed by the .cpp's method bodies, not by this
-// class's own declaration. Keeping them out of the header means anything
-// that just needs to know EC_LuaScriptSystem exists (most of the engine)
-// doesn't have to recompile against ~1,200 lines of Lua binding machinery
-// every time this file changes.
+// Forward declarations only: the Lua/luabridge headers and ScriptAPI classes are needed just by the
+// .cpp, so the rest of the engine doesn't recompile when the bindings change.
 struct lua_State;
 namespace ScriptAPI { struct GameAPI; struct VolumeAPI; }
 class EC_VolumeNode;
@@ -27,20 +23,16 @@ public:
     void update(const float& deltaTimeS, EC_Game& game) override;
     void receive(ECXEvent& event) override;
 
-    // Runs a script exactly once, straight through (plain luaL_dofile against the same
-    // shared lua_State every other script uses) - unlike loadScript() below, this does NOT
-    // capture named handler functions for repeated per-frame/per-event calls. For one-shot
-    // setup scripts (e.g. procedural generation authoring - see EC_VolumeAPI) that just make
-    // imperative calls into an exposed API and are done; safe to call multiple times (each
-    // call re-runs the file). Returns false on a Lua error (logged).
+    // Runs a script once, straight through, on the shared lua_State: unlike loadScript() it captures no
+    // handlers. For one-shot setup scripts (e.g. terrain generation, see EC_VolumeAPI); may be called
+    // again to re-run. Returns false on a Lua error (logged).
     bool runScriptOnce(const std::string& filename);
 
     // Valid only after runScriptOnce() on a script that called volume.setRoot(...) - null
     // otherwise. See EC_VolumeAPI::setRoot/getRoot.
     std::shared_ptr<EC_VolumeNode> getVolumeRoot() const;
-    // Bundles everything else EC_VoxelChunkSystem needs besides the shape itself (issue
-    // #99) - see VoxelTerrainConfig's own comment. Returns the struct's defaults if no
-    // script has run yet.
+    // Everything EC_VoxelChunkSystem needs besides the shape (see VoxelTerrainConfig); the struct's
+    // defaults if no script has run.
     ScriptAPI::VoxelTerrainConfig getVoxelTerrainConfig() const;
 
 private:
@@ -49,13 +41,10 @@ private:
     ScriptAPI::GameAPI* m_game;
     ScriptAPI::VolumeAPI* m_volumeAPI;
     std::unordered_map<std::string, bool> m_loadedScripts;
-    // Per-script-file handler functions, captured out of the shared global table right
-    // after that file loads (see loadScript()) - every Lua script in the game executes
-    // into ONE shared lua_State, so two different files both defining e.g. a global
-    // `onKeyDown` would otherwise silently clobber each other (whichever loads second
-    // wins, permanently). Keyed by script filename, then handler name (e.g. "onKeyDown");
-    // value is a Lua registry reference (luaL_ref), not a luabridge::LuaRef, so this
-    // header doesn't have to pull in the Lua/LuaBridge headers just to declare this map.
+    // Per-script-file handler functions, captured out of the shared global table right after each file
+    // loads (see loadScript()): all scripts share one lua_State, so two files defining the same global
+    // `onKeyDown` would clobber each other. Keyed by filename, then handler name; the value is a luaL_ref
+    // registry reference so this header needn't include LuaBridge.
     std::unordered_map<std::string, std::unordered_map<std::string, int>> m_ScriptHandlers;
     std::mutex m_LuaMutex;
 

@@ -3,17 +3,9 @@
 #include <glm/glm.hpp>
 #include "Graphics/FrameBuffers/FrameBuffer.h"
 
-// A chain of progressively half-resolution FrameBuffers used for mip-chain bloom. Level 0 is
-// half the source resolution, each subsequent level halves again. Downsampling walks the
-// chain from level 0 to the last level; upsampling walks back from the last level to level 0,
-// additively blending onto each level's existing content as it goes. After a full down-then-up
-// pass, level 0 holds the final blurred bloom result.
-//
-// This exists because an object's bloom halo needs to scale with its actual screen footprint
-// (not a fixed pixel radius) - a small/distant emissive object's signal only survives in the
-// finest levels and picks up a small halo on upsample, while a large/close object's signal
-// persists into coarser levels too and picks up a proportionally bigger one. See BloomChain.cpp
-// and the paired bloomDownsample.frag/bloomUpsample.frag for the filter details.
+// Chain of progressively half-resolution FrameBuffers for mip-chain bloom. Level 0 is half the
+// source; downsampling walks 0..last, upsampling walks back additively, leaving the result in
+// level 0. The halo scales with an object's screen footprint.
 class BloomChain
 {
 public:
@@ -25,9 +17,8 @@ public:
     unsigned int getLevelFBO(int level) { return m_Levels[level].getBufferHandle(); }
     glm::ivec2 getLevelSize(int level) const { return m_LevelSizes[level]; }
 
-    // Binds level `level`'s FBO for writing and sets the viewport to its resolution. Caller
-    // binds the downsample source texture (the original full-res glow texture for level 0,
-    // getLevelTexture(level-1) otherwise) separately before drawing.
+    // Binds level's FBO for writing and sets the viewport. The caller binds the downsample source (the
+    // full-res glow texture for level 0, getLevelTexture(level-1) otherwise).
     void bindDownsampleTarget(int level);
     // Binds level `level`'s FBO for writing (existing content preserved - caller is expected to
     // have additive blending enabled) and sets the viewport. Caller binds

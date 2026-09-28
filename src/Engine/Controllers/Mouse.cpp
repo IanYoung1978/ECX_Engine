@@ -26,11 +26,8 @@ void Mouse::update(ECXMessenger& messenger, float deltaTimeS)
 	{
 		for (int i = 0; i < Num_Mouse_Buttons; i++)
 		{
-			// Edge-detect against last frame's held state BEFORE syncing it below - matches
-			// Keyboard::update()'s ordering. Syncing first (the old code) meant m_HeldBuffer
-			// always equalled m_PressedBuffer by the time it was checked, so "held"/"up" were
-			// unreachable and any downstream keyPressed(MouseButton) edge check (e.g. UI click
-			// hit-testing) could never see a press.
+			// Edge-detect against last frame's held state before syncing it, matching Keyboard::update();
+			// syncing first makes "held" and "up" unreachable.
 			if (m_PressedBuffer[i] && m_HeldBuffer[i])
 			{
 				MouseEvent m(static_cast<MouseButton>(i), m_PressedBuffer[i], m_HeldBuffer[i], m_mouse_position.x, m_mouse_position.y);

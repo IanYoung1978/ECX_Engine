@@ -40,13 +40,10 @@ namespace {
         return a + t * ab;
     }
 
-    // Closest point between a segment [segA,segB] and an axis-aligned box: alternately
-    // clamp a point on the segment into the box, then clamp that result back onto the
-    // segment. Both shapes are convex, so this converges in a handful of iterations -
-    // there's no simple closed form for segment-vs-box the way there is for point-vs-box
-    // or segment-vs-segment, and real-time narrow-phase use doesn't need an exact one.
-    // Returns the closest point ON THE SEGMENT via the return value, and the closest
-    // point IN THE BOX via outPointInBox.
+    // Closest point between segment [segA,segB] and an axis-aligned box: alternately clamp a segment
+    // point into the box and the result back onto the segment (both convex, so it converges in a few
+    // iterations; there is no closed form). Returns the closest point on the segment, and the closest
+    // point in the box via outPointInBox.
     glm::vec3 closestPointSegmentAABB(const glm::vec3& segA, const glm::vec3& segB,
         const glm::vec3& boxMin, const glm::vec3& boxMax, glm::vec3& outPointInBox) {
         glm::vec3 pointOnSegment = (segA + segB) * 0.5f;
@@ -151,20 +148,9 @@ namespace {
         return a + ab * v + ac * w;
     }
 
-    // Closest points between segment [s0,s1] and triangle (a,b,c). When the segment does
-    // NOT cross the triangle's plane within the triangle's interior, the minimum distance
-    // pair is always either a segment-endpoint-vs-triangle-interior pair or a
-    // segment-vs-triangle-edge pair - covered by the endpoint/edge checks below. But when
-    // the segment actually PENETRATES the triangle (its interior crosses the plane at a
-    // point inside the triangle - exactly the "capsule embedded in/resting on a flat
-    // surface" case), the true zero-distance closest pair is that interior crossing point,
-    // which lies strictly BETWEEN the two endpoints - neither endpoint/edge check can ever
-    // find it. Missing this case was the actual root cause of the capsule "bounce" bug: for
-    // a flat quad split into two triangles, whichever triangle's endpoint/edge-only
-    // candidate happened to come out marginally closer would win the global-minimum pick,
-    // even though its winning point wasn't the true closest (perpendicular) pair - producing
-    // a bogus non-vertical "contact normal" that flip-flopped between triangles frame to
-    // frame as the capsule's Y position drifted by fractions of a unit.
+    // Closest points between segment [s0,s1] and triangle (a,b,c). A segment crossing the triangle's
+    // interior has a zero-distance pair strictly between its endpoints, which the endpoint/edge checks
+    // can't find, so the plane-crossing test below is required.
     void closestPointsSegmentTriangle(const glm::vec3& s0, const glm::vec3& s1,
         const glm::vec3& a, const glm::vec3& b, const glm::vec3& c,
         glm::vec3& outSegPoint, glm::vec3& outTriPoint) {
@@ -288,11 +274,9 @@ bool EC_CollisionChecks::AABBVsAABB(const AABB& aabbA, const glm::vec3& posA, co
     const glm::vec3 overlapMin = glm::max(wa.min, wb.min);
     const glm::vec3 overlapMax = glm::min(wa.max, wb.max);
 
-    // Contact face: the 4 corners of the overlap region in the plane
-    // perpendicular to the collision normal (both boxes are axis-aligned, so
-    // this is exact - no clipping needed, unlike the general OBB case).
-    // Multiple points let a resting/toppled box get counter-torque from all
-    // 4 corners at once, instead of pivoting/rolling around one.
+    // Contact face: the 4 corners of the overlap region perpendicular to the normal (exact for
+    // axis-aligned boxes, no clipping). Multiple points give a resting box counter-torque from all 4
+    // corners instead of pivoting on one.
     manifold.contactNormal = normal;
     manifold.penetrationDepth = penetration;
     manifold.contactPoints.clear();
@@ -372,11 +356,9 @@ bool EC_CollisionChecks::OBBVsOBB(const OBB& obbA, const glm::vec3& posA,
         }
     }
 
-    // Track the axis with the smallest penetration across all 15 candidate
-    // axes (standard SAT-derived manifold technique) - that axis becomes the
-    // contact normal. Unlike the boolean-only test, cross-product (edge-edge)
-    // axes must be normalized here so their overlap is a real distance,
-    // comparable against the face axes.
+    // Track the smallest penetration across all 15 candidate axes; that axis becomes the contact
+    // normal. Edge-edge cross-product axes are normalized here so their overlap is a real distance
+    // comparable to the face axes.
     float bestOverlap = 1e30f;
     glm::vec3 bestAxis(0.0f);
 
@@ -399,29 +381,9 @@ bool EC_CollisionChecks::OBBVsOBB(const OBB& obbA, const glm::vec3& posA,
         if (overlap < bestOverlap) { bestOverlap = overlap; bestAxis = axisB[i]; }
     }
 
-    // Test the 9 edge-edge cross-product axes L = Ai x Bj. For axis-aligned
-    // (or near-axis-aligned) boxes - e.g. a cube resting flat on the floor -
-    // several of these 9 axes are mathematically identical to a face axis
-    // already tested above (cross(X,Y) is the same line as the Z face axis),
-    // just computed through a different formula path with different
-    // floating-point rounding. Without a tie-breaking bias, that rounding
-    // noise can make the "duplicate" edge-edge overlap come out marginally
-    // smaller than the true face overlap and win the naive minimum
-    // comparison - which permanently misclassifies a flat face-face rest as
-    // a single-point edge-edge contact, and a box resting on one point
-    // instead of a stable 4-point face can only pivot/rotate freely about
-    // its own centre rather than being held flat. kEdgeEdgeBias requires an
-    // edge-edge axis to beat the best face overlap by a real margin, not
-    // just numerically, before it's allowed to override a face axis -
-    // standard SAT practice for exactly this degeneracy. Kept deliberately
-    // small: the true floating-point noise between the duplicate axis-
-    // aligned computations is only ~1e-5 to 1e-4 at this engine's unit
-    // scale, so this only needs to be comfortably above that - not so
-    // large that it starts overriding a GENUINE edge/vertex contact for a
-    // meaningfully tilted box (e.g. a corner striking the floor mid-topple)
-    // in favour of an incorrect face axis, which would understate that
-    // corner's true penetration depth and let it sink before the impulse
-    // solver reacts properly.
+    // Edge-edge axes duplicate a face axis for near-axis-aligned boxes and differ only by rounding
+    // noise. kEdgeEdgeBias makes an edge-edge axis win only by a real margin, so a flat face rest isn't
+    // read as an edge contact. Keep it just above the noise (~1e-4) or it hides genuine corner contacts.
     constexpr float kEdgeEdgeBias = 0.001f;
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
@@ -453,13 +415,9 @@ bool EC_CollisionChecks::OBBVsOBB(const OBB& obbA, const glm::vec3& posA,
     manifold.contactNormal = normal;
     manifold.penetrationDepth = bestOverlap;
 
-    // SAT above is only used for the boolean test and penetration depth -
-    // both robust regardless of body size. Which FEATURE pair (face/edge/
-    // vertex on each box) is actually touching is picked independently here,
-    // by walking to the true closest features via local Voronoi-region
-    // classification rather than SAT's raw numeric overlap comparison, which
-    // misclassifies "edge-edge" whenever body sizes are grossly mismatched
-    // (e.g. a cube vs a room-sized floor slab) - see EC_VClip.h for why.
+    // SAT above gives only the boolean and penetration depth. The touching feature pair is picked
+    // separately by walking to the closest features (see EC_VClip.h), because SAT's overlap comparison
+    // misclassifies edge-edge for very different box sizes.
     EC_VClip::generateContactPoints(obbA, posA, obbB, posB, normal, bestOverlap, manifold);
 
     return true;
@@ -633,15 +591,10 @@ bool EC_CollisionChecks::CapsuleVsMesh(const Capsule& capsule, const glm::vec3& 
     glm::vec3 bestSegPoint(0.0f), bestMeshPoint(0.0f), bestFaceNormal(0.0f, 1.0f, 0.0f);
     bool found = false;
 
-    // The capsule's own bounding box grown by its radius, in the mesh's local space. A
-    // triangle whose bounding box doesn't overlap it is farther than `radius` from the
-    // capsule's segment everywhere, so it can neither be a hit nor beat one that is - skipping
-    // it can't change the result (surviving triangles are still visited in the same order, so
-    // the strict-< tie-break below is unaffected), and this comparison is a handful of
-    // min/max ops against closestPointsSegmentTriangle's ~2 point-triangle + 3 segment-segment
-    // + 1 plane test per triangle, which used to run for every triangle of a 32x32x32 chunk
-    // on every call to test a ~2m capsule. kCullMargin only guards float rounding at the
-    // exact boundary.
+    // The capsule's bounding box grown by its radius, in mesh-local space. A triangle whose box
+    // doesn't overlap it is farther than `radius` everywhere, so skipping it can't change the result
+    // (survivors keep their order, so the strict-< tie-break is unaffected). kCullMargin covers float
+    // rounding at the boundary.
     constexpr float kCullMargin = 0.01f;
     const glm::vec3 reach(capsule.radius + kCullMargin);
     const glm::vec3 boxLo = glm::min(segA, segB) - reach - meshPos;
@@ -670,11 +623,8 @@ bool EC_CollisionChecks::CapsuleVsMesh(const Capsule& capsule, const glm::vec3& 
             bestDist2 = dist2;
             bestSegPoint = segPoint;
             bestMeshPoint = triPoint;
-            // Average of the winning triangle's 3 vertex gradient normals - see this
-            // function's header comment for why this, not a cross-product winding-based
-            // normal, is what's reliable here (a marching-cubes winding parity bug can
-            // flip individual triangles' winding even on a flat, continuous surface; the
-            // gradient normals don't depend on winding at all).
+            // Average of the winning triangle's 3 vertex gradient normals, not a winding-based cross product
+            // (see this function's header comment).
             const glm::vec3& na = meshNormals[meshIndices[i]];
             const glm::vec3& nb = meshNormals[meshIndices[i + 1]];
             const glm::vec3& nc = meshNormals[meshIndices[i + 2]];

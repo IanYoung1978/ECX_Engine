@@ -5,12 +5,8 @@
 
 namespace ScriptAPI
 {
-    // Everything EC_VoxelChunkSystem needs besides the shape itself (see VolumeAPI::getRoot)
-    // to spawn/mesh/render voxel terrain - previously hardcoded C++ constants
-    // (kGridRadius, the chunk shader paths, the tint colour) in EC_VoxelChunkSystem.cpp
-    // (issue #99). Defaults here match that old hardcoded behaviour exactly, so a
-    // generation script that doesn't call setChunkMaterial()/setChunkColour()/
-    // setGridRadius() gets today's look unchanged.
+    // Everything EC_VoxelChunkSystem needs besides the shape (see VolumeAPI::getRoot). A generation
+    // script that doesn't call setChunkMaterial()/setChunkColour()/setGridRadius() gets these defaults.
     struct VoxelTerrainConfig
     {
         std::string chunkVertShader = "data/assets/shaders/basic.vert";
@@ -28,11 +24,9 @@ namespace ScriptAPI
         EC_VolumeNodePtr node;
     };
 
-    // The `volume` global - an author-facing toolbox of composable shape/noise primitives
-    // (Stage 1: "create a volume", Stage 2: "subtract from it" - see the terrain generation
-    // plan). One instance, pushed as a Lua global the same way GameAPI is - see
-    // EC_LuaScriptSystem::registerAPI(). setRoot()/getRoot() capture the finished tree for
-    // the engine to retrieve once the authoring script finishes running.
+    // The `volume` global: composable shape/noise primitives, registered like GameAPI (see
+    // EC_LuaScriptSystem::registerAPI()). setRoot()/getRoot() capture the finished tree for the engine
+    // once the script ends.
     struct VolumeAPI
     {
         VolumeHandle constant(float value);
@@ -58,10 +52,8 @@ namespace ScriptAPI
         void setRoot(VolumeHandle root);
         EC_VolumeNodePtr getRoot() const { return m_Root; }
 
-        // Issue #99 - author-facing config a generation script can set alongside setRoot(),
-        // instead of the engine hardcoding a chunk material/tint/grid size for every game.
-        // All optional; see VoxelTerrainConfig's own comment for the defaults used if a
-        // script doesn't call these.
+        // Optional config a generation script can set alongside setRoot(); see VoxelTerrainConfig for the
+        // defaults.
         void setChunkMaterial(const std::string& vertShader, const std::string& fragShader);
         void setChunkColour(float r, float g, float b, float a);
         void setGridRadius(int radius);

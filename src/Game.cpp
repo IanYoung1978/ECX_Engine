@@ -46,9 +46,8 @@ Game_Error EC_Game::init(const std::string& configurationFilename)
     m_Timer = std::make_unique<Timer>();
     m_threadmanager.init(8);
 
-    // Issue #99 - voxel terrain is opt-in: a game that doesn't enable it gets zero side
-    // effects (no worker thread, no chunk entities, no generation work), matching
-    // DebugHTTPSettings' own "off unless explicitly requested" pattern just above.
+    // Voxel terrain is opt-in; a game that doesn't enable it gets no worker thread, chunk entities or
+    // generation work.
     XML::VoxelTerrainSettings voxelTerrainSettings;
     XML::loadVoxelTerrainSettings(m_SceneManager.getEngineConfigPath(), voxelTerrainSettings);
     if (voxelTerrainSettings.enabled)
@@ -85,11 +84,8 @@ Game_Error EC_Game::run()
         {
             if (e.type == SDL_QUIT)
                 m_Running = false;
-            // SDL_WINDOWEVENT_SIZE_CHANGED fires for both a user dragging the window edge
-            // and SDL_SetWindowSize() being called programmatically (SystemChangeResolution
-            // -> GL_Deferred_Renderer::receive() -> Window::resize()) - handling it here,
-            // once, keeps a single source of truth for "the window's size actually changed"
-            // regardless of which of those triggered it (see issue #108).
+            // SDL_WINDOWEVENT_SIZE_CHANGED fires for user drags and for SDL_SetWindowSize() alike, so handling
+            // it here gives one source of truth for a size change.
             if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
                 m_Window->onResized(e.window.data1, e.window.data2);
                 m_SceneManager.changeResolution(e.window.data1, e.window.data2);
@@ -173,11 +169,9 @@ void EC_Game::update(const float& deltaTimeS)
         m_Controls->update(deltaTimeS, *this);
         m_UIInput.update(*this, m_Messenger);
 
-        // Must run after all of this frame's rendering-relevant work (above) but before
-        // present()'s swap - GL_BACK still holds this frame's fully composited image
-        // (scene, skybox, debug overlay, UI) at this exact point. See
-        // EC_DebugHTTPServer::requestCapture()'s comment for why this hand-off exists at
-        // all (glReadPixels is only valid on this, the GL/main, thread).
+        // Must run after this frame's rendering work but before present()'s swap: GL_BACK still holds the
+        // fully composited frame here, and glReadPixels is only valid on this (GL/main) thread. See
+        // EC_DebugHTTPServer::requestCapture().
         std::string pendingCaptureTarget;
         if (m_DebugHTTPServer && m_DebugHTTPServer->hasPendingCapture(pendingCaptureTarget)) {
             std::vector<unsigned char> pngBytes;

@@ -8,11 +8,9 @@ int EC_ThreadFunction(EC_ThreadManager* manager)
 	{
 		std::shared_ptr<EC_Task> task;
 		{
-			// Check-and-wait under one continuous hold of the lock, with the predicate
-			// re-tested by wait() itself: a stop() (or a new task) that lands at any point
-			// before the wait is seen by the predicate, and one that lands after is a real
-			// notification to a thread that is genuinely waiting - never a lost wakeup.
-			// Also copes with spurious wakeups, which a bare wait() did not.
+			// Check and wait under one hold of the lock, with the predicate re-tested by wait(): a stop() or
+			// new task at any point is either seen by the predicate or notifies a genuinely waiting thread, so
+			// there is no lost wakeup (and spurious wakeups are handled).
 			std::unique_lock<std::mutex> lock(*(manager->getLock()));
 			manager->getSignal()->wait(lock, [manager] {
 				return !manager->running() || manager->hasTasksLocked();

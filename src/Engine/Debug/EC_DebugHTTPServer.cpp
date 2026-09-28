@@ -352,11 +352,8 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port, EC_Game* game
         res.set_content(reinterpret_cast<const char*>(png.data()), png.size(), "image/png");
     });
 
-    // Unlike /screenshot, no GL work and no rendezvous needed: EC_Game::queryRay and
-    // showDebugRay each end up calling into a mutex-guarded queue/snapshot (see this
-    // constructor's own parameter comment) that's already designed for cross-thread
-    // access, so this handler can call straight into EC_Game from its own httplib worker
-    // thread.
+    // Unlike /screenshot, no GL work or rendezvous: EC_Game::queryRay and showDebugRay go through
+    // mutex-guarded queues/snapshots, so this handler can call them from its httplib worker thread.
     m_Server->Get("/resize", [this](const httplib::Request& req, httplib::Response& res) {
         if (!m_Game) {
             res.status = 400;
@@ -483,12 +480,8 @@ EC_DebugHTTPServer::EC_DebugHTTPServer(std::string host, int port, EC_Game* game
         res.set_content(hitsToJson(hits), "application/json");
     });
 
-    // Re-runs data/scripts/LUA/TerrainGeneration.lua and re-schedules every voxel chunk
-    // against the new shape - lets an author edit the script and see the result without a
-    // full engine restart. Safe from this handler's own httplib worker thread: it only
-    // flips an atomic flag (EC_VoxelChunkSystem::requestRegenerate()) - the actual
-    // regeneration work happens on the main thread on its next update() tick, same
-    // reasoning as GET /rayQuery not needing a rendezvous.
+    // Re-runs the terrain generation script and reschedules every chunk. Only sets an atomic flag
+    // (EC_VoxelChunkSystem::requestRegenerate()); the work runs on the main thread's next update().
     m_Server->Get("/regenerateTerrain", [this](const httplib::Request&, httplib::Response& res) {
         if (!m_Game) {
             res.status = 400;

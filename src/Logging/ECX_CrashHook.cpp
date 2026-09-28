@@ -108,12 +108,9 @@ namespace
 		t_reporting = false;
 	}
 
-	// Only the wide hook is installed: assert() reports through the wide CRT path, and the
-	// narrow one (_RPTF, which is how the STL's "vector iterators incompatible" arrives)
-	// runs the wide hooks as well - installing both logged every report twice.
-	// Returning FALSE tells the CRT to carry on with its normal reporting - the
-	// Abort/Retry/Ignore dialog (and Retry -> break into the debugger) still appears exactly
-	// as before; this only makes sure the log is already on disk when it does.
+	// Only the wide hook is installed: assert() reports through it, and the narrow path (_RPTF, the
+	// STL's iterator checks) runs the wide hooks too, so installing both logged everything twice.
+	// Returning FALSE leaves the normal Abort/Retry/Ignore dialog in place.
 	int __cdecl wideReportHook(int reportType, wchar_t* message, int* /*returnValue*/)
 	{
 		if (reportType == _CRT_ASSERT || reportType == _CRT_ERROR)

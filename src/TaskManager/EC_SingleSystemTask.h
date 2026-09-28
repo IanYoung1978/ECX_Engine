@@ -6,13 +6,7 @@
 class EC_Game;
 class EC_System;
 
-// A dedicated background thread for exactly one system - used to keep Scripting and Audio
-// each on their own thread, off EC_PhysicsThreadTask entirely (that class is scoped to
-// Collision+Physics, not a general-purpose task runner - see its own header comment).
-// Genuinely generic despite living in TaskManager/ (this class was previously named
-// EC_ScriptingTask, single-purpose in name only - it never referenced anything
-// scripting-specific - and was never actually instantiated anywhere: Scripting had been
-// folded onto the physics thread instead, the exact mistake this class exists to avoid).
+// Runs exactly one system on its own thread (Scripting and Audio each get one).
 class EC_SingleSystemTask :
 	public EC_SystemTask
 {

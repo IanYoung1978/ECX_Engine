@@ -4,14 +4,9 @@
 #include <memory>
 #include <cstddef>
 
-// One contact point's accumulated impulse, persisted across ticks while the
-// pair keeps colliding - "warm starting". Physics resolution seeds each
-// tick's solve from last tick's converged total instead of starting at zero
-// every time, which is what lets a persistent contact (e.g. a box resting
-// or tumbling on the floor across many consecutive ticks) actually converge
-// tick-to-tick instead of re-deriving the same answer from scratch and
-// re-introducing solver noise every frame - standard technique in every
-// production physics engine (Box2D, Bullet, etc).
+// One contact point's accumulated impulse, kept across ticks while the pair keeps colliding (warm
+// starting): each solve starts from last tick's converged total rather than zero, so persistent
+// contacts converge instead of re-deriving the answer and reintroducing noise every frame.
 struct EC_ContactImpulseCache
 {
 	glm::vec3 point{ 0.0f };
@@ -33,39 +28,21 @@ struct EC_CollisionPair
 	// from them itself.
 	glm::vec3 m_ContactNormal{ 0.0f };
 	float m_PenetrationDepth = 0.0f;
-	// Warm-start cache, one entry per contact point, matched frame-to-frame
-	// by closest position (see EC_PhysicsResolution::accumulateImpulses) -
-	// owned and updated entirely by the physics system. Naturally cleared
-	// when the pair itself is destroyed (EC_PairManager::update() erases
-	// non-colliding pairs), so no separate cleanup is needed when contact
-	// genuinely ends.
+	// Warm-start cache, one entry per contact point, matched frame to frame by closest position (see
+	// EC_PhysicsResolution::accumulateImpulses). Owned by the physics system; cleared with the pair when
+	// EC_PairManager::update() erases it.
 	std::vector<EC_ContactImpulseCache> m_ContactCache;
-	// Physics-thread-only, like everything else here - see this class's own comment.
-	// EC_NarrowPhase re-checks these each tick against a Kinematic body's actual current
-	// Spatial (see EC_BodyType's own comment for why only Kinematic needs this at all -
-	// Dynamic already gets continuous resolution every tick regardless of BEGIN/END
-	// transitions). If either side moved since the last check while this pair was already
-	// colliding, EC_NarrowPhase treats this tick as a fresh BEGIN so script (e.g.
-	// ArcadeCollision.lua's OnCollisionBegin) gets another chance to react to the new
-	// contact instead of only ever hearing about the first touch.
+	// Physics-thread-only. EC_NarrowPhase compares these against a Kinematic body's current Spatial;
+	// if either side moved while the pair was already colliding, that tick is treated as a fresh BEGIN
+	// so scripts get updated contact data. Dynamic bodies don't need it: they are re-resolved every tick.
 	glm::vec3 m_LastCheckedPositionA{ 0.0f };
 	glm::vec3 m_LastCheckedOrientationA{ 0.0f };
 	glm::vec3 m_LastCheckedPositionB{ 0.0f };
 	glm::vec3 m_LastCheckedOrientationB{ 0.0f };
 	EC_CollisionPair() :body_A(0), body_B(0), m_Colliding(false) {}
 };
-// All state below is physics-thread-only working data - collision pairs are
-// produced and consumed entirely within one tick of the collision/physics
-// pipeline (EC_BroadPhase -> EC_NarrowPhase -> EC_CollisionSystem ->
-// EC_PhysicsSystem), all of which run sequentially on the same thread. It is
-// NOT safe to read from any other thread (e.g. the render thread) - there is
-// no synchronization, by design, because nothing outside this pipeline is
-// meant to touch it. Debug rendering gets contact-point data via
-// EC_DOD_DebugContacts instead (published once per tick as component data by
-// EC_PhysicsSystem) rather than reading this class directly - see
-// GL_DebugRenderer::renderContactPoints. The methods below are private and
-// friended to exactly the classes that make up that pipeline, to keep it that
-// way rather than relying on convention.
+// Physics-thread-only working data, no synchronization by design. The methods below are private and
+// friended to the collision/physics pipeline classes. Debug rendering reads EC_DOD_DebugContacts.
 class EC_BroadPhase;
 class EC_NarrowPhase;
 class EC_CollisionSystem;
@@ -92,11 +69,9 @@ private:
 	void update();
 	bool hasPairs();
 	EC_CollisionPair& getNextPair();
-	// Mutable view of every tracked pair, independent of the hasPairs()/
-	// getNextPair() consuming cursor - lets the physics system iterate all
-	// currently-colliding pairs after collision detection has already
-	// drained the cursor this tick. Mutable (not just read-only) so physics
-	// can update each pair's m_ContactCache for next tick's warm start.
+	// Mutable view of every tracked pair, independent of the consuming hasPairs()/getNextPair() cursor,
+	// so physics can iterate all colliding pairs after detection drained it and update each
+	// m_ContactCache for the next tick's warm start.
 	static std::vector<EC_CollisionPair>& getAllPairs();
 
 	static std::vector<EC_CollisionPair> s_Pairs;

@@ -2,18 +2,10 @@
 #include <glm/glm.hpp>
 #include <memory>
 
-// A small, composable library of native volume primitives - signed-density shapes (sphere,
-// box, cylinder, halfspace), noise, and CSG-style combinators (union/intersect/subtract,
-// plus smooth-blended variants) - that an author composes into a tree describing an
-// arbitrary 3D shape. Pure C++/glm, zero engine/terrain/game coupling, same reusability bar
-// as EC_Noise3D: any game can build a cylinder habitat shell, rolling hills, a cave system,
-// or anything else expressible from these primitives, without touching engine source.
-//
-// Convention matches EC_DensityField's own documented convention: negative = solid,
-// positive = open - so any composed tree's evaluate() output drops straight into the
-// existing marching-cubes pipeline unchanged. Every node is stateless and safe to evaluate
-// from any thread once built (composition itself - building the tree - is expected to
-// happen once, single-threaded, e.g. from a one-shot Lua script; see EC_VolumeAPI).
+// Composable signed-density primitives (sphere, box, cylinder, halfspace), noise and CSG
+// combinators (union/intersect/subtract, smooth variants) built into a tree. Pure C++/glm.
+// Negative is solid and positive is open, matching EC_DensityField. Nodes are stateless and safe to
+// evaluate from any thread once built; build the tree single-threaded.
 class EC_VolumeNode {
 public:
     virtual ~EC_VolumeNode() = default;

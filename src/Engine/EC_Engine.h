@@ -26,11 +26,9 @@ public:
 	void receive(ECXCommand& command) override;
 	void pause();
 	void resume();
-	// Runs every system's update() once, synchronously, on the calling thread -
-	// independent of the threaded task loop and its pause flag. Used to bake a
-	// correct initial transform/camera state (position, scale, view matrix)
-	// before the very first render, since starting paused means the normal
-	// per-tick loop may never run before that first frame is drawn.
+	// Runs every system's update() once, synchronously on the calling thread, independent of the task
+	// loop and its pause flag. Bakes the initial transform/camera state before the first render when
+	// starting paused.
 	void stepOnce(float deltaTimeS);
 	void start();
 	void stop();

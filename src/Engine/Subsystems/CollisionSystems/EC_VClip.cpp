@@ -5,19 +5,8 @@
 namespace
 {
     constexpr float kEpsilon = 1e-5f;
-    // Tolerance for "is this local coordinate at the box's boundary" (feature
-    // classification) and "is this point within the face's lateral extent"
-    // (face clipping) - deliberately much looser than kEpsilon above. A
-    // resting box's position/orientation accumulates ordinary floating-point
-    // drift well above 1e-5 tick to tick (from position correction, impulse
-    // integration, etc), so a corner sitting almost exactly at the boundary
-    // would otherwise flip between "on the face" and "off it" depending on
-    // which side of 1e-5 that noise happened to land on - flickering the
-    // manifold's point count (2/3/4) every few ticks even for a box at
-    // genuine rest, which feeds inconsistent torque/friction budgets into
-    // the solver and reads as slow unexplained creep. 1e-3 is still far
-    // tighter than anything that should register as a real geometric
-    // difference at this engine's unit scale.
+    // Tolerance for feature classification and face clipping, much looser than kEpsilon: a resting
+    // box drifts by more than 1e-5 per tick, and anything tighter flickers the manifold's point count.
     constexpr float kFeatureEpsilon = 1e-3f;
 
     // 8 local-space vertices, indexed by a sign triple packed into 3 bits
@@ -49,16 +38,9 @@ namespace
         return (diff == 1) ? 0 : (diff == 2) ? 1 : 2;
     }
 
-    // Local-space closest point on/in a box to local point q, plus which
-    // feature (vertex/edge/face) that point belongs to. For a box, whose
-    // faces are axis-aligned in its own local frame, this clamp-and-count
-    // test IS the Voronoi-region membership test: an axis needing clamping
-    // means q is beyond that face's plane, and the SET of axes that needed
-    // clamping exactly identifies the feature (1 -> face, 2 -> edge, 3 ->
-    // vertex) - no separate per-feature half-plane tests are needed. If q is
-    // strictly inside the box (the two interpenetrating-body case), fall
-    // back to the axis with the least penetration margin, matching SAT's own
-    // face choice for a body in isolation.
+    // Closest point on/in a box to local point q, plus its feature (vertex/edge/face). For an
+    // axis-aligned local box, the number of axes that needed clamping identifies the feature (1 face,
+    // 2 edge, 3 vertex). If q is inside, use the axis with the least penetration margin.
     EC_VClip::Feature classifyLocalPoint(const glm::vec3& q, const glm::vec3& he, glm::vec3& outClosestLocal)
     {
         bool clamped[3] = { false, false, false };
@@ -245,19 +227,9 @@ namespace EC_VClip
         const glm::vec3 centerA = posA + obbA.center;
         const glm::vec3 centerB = posB + obbB.center;
 
-        // Seed the walk at the closest point ON box A to box B's CENTRE
-        // (transform B's centre into A's local frame, clamp to A's extents) -
-        // not merely offset along the SAT normal from A's own centre. That
-        // distinction matters: for a small box resting on a huge floor slab,
-        // seeding purely along the normal from the floor's centre leaves the
-        // seed's lateral (X/Z) position at the FLOOR's centre, nowhere near
-        // where the box actually is - which then misclassifies against the
-        // box (the seed can land on one of the box's SIDE faces rather than
-        // its bottom face, since the box's own centre is offset from the
-        // floor's centre by more than the box's half-extent). Clamping B's
-        // centre into A's frame instead keeps the seed's lateral position
-        // tied to B's actual location, converging to the right feature pair
-        // reliably regardless of how large the size mismatch is.
+        // Seed the walk at the closest point on box A to box B's centre (B's centre in A's frame, clamped),
+        // not offset along the SAT normal from A's centre: with a huge floor slab that seed lands nowhere
+        // near a small box and picks the wrong feature.
         glm::vec3 candidateWorld;
         {
             glm::vec3 localBCenterInA = glm::transpose(obbA.orientation) * (centerB - centerA);

@@ -39,10 +39,8 @@ public:
     glm::ivec2 getMousePosition();
     void setMouseCaptured(bool captured);
     bool isMouseButtonPressed(MouseButton button);
-    // Issue #30/#29. All entities the ray/cone intersects (not just the nearest) unless
-    // firstHitOnly is set - the caller decides what matters. Synchronous, callable from
-    // any C++ code with a game reference (physics callbacks, AI, renderer), mirroring the
-    // ECXRequestType::FrustumCheck/EntitySearch pattern in EC_BroadPhase.
+    // All entities the ray/cone intersects unless firstHitOnly is set. Synchronous and callable from
+    // any C++ code with a game reference.
     std::vector<RayQueryHit> queryRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance,
         bool firstHitOnly = false, uint32_t layerMask = 0xFFFFFFFFu);
     // checkOcclusion opts into additionally requiring unobstructed line-of-sight to the
@@ -50,37 +48,22 @@ public:
     // fused with, containment: default false returns pure geometric containment.
     std::vector<RayQueryHit> queryCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees,
         float maxDistance, bool castsShadowOnly = true, bool checkOcclusion = false, uint32_t layerMask = 0xFFFFFFFFu);
-    // Real capsule-vs-scene-geometry overlap query (see EC_BroadPhase::castCapsule) - the
-    // capsule's own segment/radius against every candidate's actual collider, Mesh
-    // (terrain) included via EC_CollisionChecks::CapsuleVsMesh. Unlike queryRay/queryCone,
-    // this is a static overlap test, not a sweep - RayQueryHit::distance is repurposed as
-    // penetration depth and ::normal points away from the capsule.
-    // excludeEntity skips one candidate (INVALID_ENTITY = exclude nothing) - pass an
-    // entity's own ID when it's querying its own capsule's surroundings, otherwise it
-    // finds itself and reports a trivial full-penetration self-hit.
+    // Capsule-vs-scene overlap (see EC_BroadPhase::castCapsule), including Mesh terrain. A static
+    // overlap test, not a sweep: RayQueryHit::distance is penetration depth and normal points away from
+    // the capsule. excludeEntity skips one candidate (INVALID_ENTITY = none); pass the caller's own ID or
+    // it finds itself.
     std::vector<RayQueryHit> queryCapsule(const glm::vec3& pointA, const glm::vec3& pointB, float radius,
         bool firstHitOnly = false, uint32_t layerMask = 0xFFFFFFFFu, EntityID excludeEntity = INVALID_ENTITY);
-    // Debug-draw the last ray/cone query (Issues #30/#29) - the single implementation
-    // both EC_GameAPI's Lua bindings and the debug HTTP server's /rayQuery and /coneQuery
-    // routes call into, so Lua and HTTP callers share one code path instead of each
-    // publishing their own copy of the same command.
+    // Debug-draw the last ray/cone query; the single implementation behind both the Lua bindings and
+    // the debug HTTP routes.
     void showDebugRay(const glm::vec3& origin, const glm::vec3& direction, float maxDistance);
     void showDebugCone(const glm::vec3& apex, const glm::vec3& direction, float halfAngleDegrees, float maxDistance);
-    // Requests a window resize (issue #108) - single code path shared by EC_GameAPI's Lua
-    // setResolution() and the debug HTTP server's GET /resize, same pattern as
-    // showDebugRay/showDebugCone above. Publishes SystemChangeResolution (an
-    // already-declared but previously-unused ECXCommandType) rather than calling the window
-    // directly, since this can be invoked from the scripting thread and SDL window calls
-    // must happen on the main/GL thread - the renderer picks the command up via its own
-    // receive() and calls Window::resize() from there. That triggers an OS resize event,
-    // which Window::onResized()/EC_Game::run()'s event loop turns into the actual
-    // GL_Deferred_Renderer::changeResolution() call once the new size is confirmed.
+    // Requests a window resize, shared by Lua setResolution() and GET /resize. Published as a command
+    // because SDL window calls must happen on the main/GL thread and this can be called from the
+    // scripting thread.
     void setResolution(int width, int height);
-    // Same reasoning/pattern as setResolution() above - published as commands
-    // (SystemToggleFullScreen/SystemMaximiseWindow/SystemMinimiseWindow, all previously
-    // declared but unused) rather than called directly, since these are SDL window calls
-    // that must happen on the main/GL thread and these methods may be invoked from Lua's
-    // scripting thread via GameAPI.
+    // Same as setResolution(): published as commands, since these are SDL window calls that must run
+    // on the main/GL thread.
     void toggleFullscreen();
     void maximizeWindow();
     void minimizeWindow();
@@ -104,8 +87,7 @@ public:
     // Forwards to the scene manager's engine - see EC_Engine::getThreadRates(). Main
     // thread's own rate is getFPS() above, not included here.
     std::vector<EC_Engine::ThreadRate> getThreadRates() const;
-    // Issue #130. Forwards to the scene manager's prefab registry - see
-    // EC_SceneManager::spawnEntity/destroyEntity's own comments.
+    // Forwards to the scene manager's prefab registry (see EC_SceneManager::spawnEntity/destroyEntity).
     EntityID spawnEntity(const std::string& alias, float x, float y, float z);
     void destroyEntity(EntityID id);
     float getFPS() const { return m_Timer->getFPS(); }

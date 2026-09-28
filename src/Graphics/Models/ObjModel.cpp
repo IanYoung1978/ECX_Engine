@@ -42,8 +42,6 @@ bool ObjModel::loadModel(const std::string& filename)
 
 	loadFromScene(v_assimpScene);	// Start model loading from the Assimp scene structure
 
-									//and finally generate tangents
-									//generateTangents(v_Faces,temp_uvs,temp_normals);
 	return true;
 }
 

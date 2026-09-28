@@ -14,34 +14,22 @@
 #include <cmath>
 
 namespace {
-    // A true infinite plane has no finite AABB, so broad-phase needs a
-    // stand-in bound large enough that it never becomes the actual limiting
-    // factor for real scene geometry. Half-extent in world units - a plane
-    // collider participates correctly in broad-phase pairing with anything
-    // inside +-10000 units of its center; scene geometry placed further out
-    // than that would fail to pair against a Plane collider at all.
+    // A plane has no finite AABB, so use a large stand-in half-extent; scene geometry further than
+    // 10000 units from a Plane collider's centre won't pair with it.
     constexpr float kPlaneColliderHalfExtent = 10000.0f;
 }
 
 void EC_BroadPhase::broadPhaseCollisionDetection()
 {
-    // Active+sceneState filtered: without this, every collider entity
-    // across EVERY loaded scene (not just the active one) formed broad-phase pairs with
-    // every other one, regardless of whether either scene was actually active - an
-    // inactive scene's geometry could spuriously collide with the active scene's, and a
-    // scene with many entities loading in the background (see EC_SceneManager::loadScene)
-    // suddenly added a large, unrelated batch of pairs the moment its entities existed,
-    // before it was even the active scene.
+    // Active+sceneState filtered, so entities in inactive scenes never form pairs with the active
+    // scene's.
     auto entities = EC_DOD_EntityManager::getInstance().getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_DOD_Collider)),
         std::type_index(typeid(EC_DOD_Spatial))
         });
 
-    // Built entirely into locals - this function runs on the physics/scripting worker
-    // thread, while receive() is called synchronously from the renderer on the main
-    // thread. Doing the (potentially expensive) AABB computation and sweep-and-prune
-    // here, unlocked, and only taking m_Mutex for the final swap-in keeps the critical
-    // section short and avoids exposing partially-built state to the reader thread.
+    // Built into locals on the physics thread while receive() is called from the main thread; only the
+    // final swap-in takes m_Mutex, keeping the critical section short and never exposing partial state.
     std::vector<EntityAABB> localAABBs;
     std::unordered_map<uint32_t, size_t> localIndex;
     EC_SpatialGrid localGrid;
@@ -54,15 +42,9 @@ void EC_BroadPhase::broadPhaseCollisionDetection()
             localAABBs.reserve(entities.size());
 
             for (uint32_t entityId : entities) {
-                // A deactivated scene's entities (EC_GameScene::deactivate(), on
-                // switching scenes) must drop out of the spatial index entirely - this
-                // is the single point rendering (via queryVisibleEntities), gameplay
-                // collision, and ray/cone queries all read from, so filtering here is
-                // what actually stops a deactivated scene's geometry from continuing to
-                // render/collide/hit-test after a scene switch. Checks both `active`
-                // (gameplay-level, e.g. a script deactivating one specific entity) and
-                // `sceneState` (scene-membership) - see EC_DOD_EntityInfo's comment for why
-                // they're separate.
+                // Inactive-scene and deactivated entities must drop out of the spatial index, which rendering,
+                // collision and ray/cone queries all read. Checks both `active` (a script's toggle) and `sceneState`
+                // (scene membership); see EC_DOD_EntityInfo.
                 if (EC_DOD_EntityManager::getInstance().hasComponent<EC_DOD_EntityInfo>(entityId)) {
                     const auto& info = EC_DOD_EntityManager::getInstance().getComponent<EC_DOD_EntityInfo>(entityId);
                     if (!info.active || info.sceneState != EC_SceneLifecycleState::Active) continue;
@@ -283,14 +265,9 @@ ECXResponse EC_BroadPhase::handleEntitySearch(ECXRequest& request)
 	return response;
 }
 
-// castsShadow (EC_DOD_GraphicsData::castsShadow) is only ever consulted by ray/cone
-// queries, so it's looked up live here rather than cached per-entity in
-// broadPhaseCollisionDetection()'s per-tick snapshot - that loop runs on the physics
-// thread's unthrottled busy-spin (EC_PhysicsThreadTask::execute()), so paying this cost
-// for every collider entity on every tick, regardless of whether anyone is even
-// querying, is wasted work on a hot path. Entities with no graphics component (pure
-// trigger volumes etc.) default to true so they don't silently disappear from ray
-// queries that don't care about shadows.
+// castsShadow is only used by ray/cone queries, so it's looked up live here rather than cached in
+// the per-tick snapshot for every collider entity. Entities with no graphics component (trigger
+// volumes) default to true.
 bool EC_BroadPhase::entityCastsShadow(EntityID entity) const
 {
 	auto& manager = EC_DOD_EntityManager::getInstance();
@@ -299,9 +276,8 @@ bool EC_BroadPhase::entityCastsShadow(EntityID entity) const
 	return manager.getComponent<EC_DOD_GraphicsData>(entity).castsShadow;
 }
 
-// Shared broad+precise ray logic (Issue #30) used directly by handleRayCheck, and by
-// handleConeCheck for its "unobstructed line-of-sight to apex" occlusion test - this is
-// the code-level link satisfying Issue #29's stated dependency on #30.
+// Shared broad+precise ray logic, used by handleRayCheck and by handleConeCheck for its
+// line-of-sight test.
 std::vector<RayQueryHit> EC_BroadPhase::castRay(const glm::vec3& origin, const glm::vec3& dir, float maxDistance,
 	uint32_t layerMask, bool requireCastsShadow, bool firstHitOnly)
 {
@@ -582,13 +558,9 @@ ECXResponse EC_BroadPhase::handleConeCheck(ECXRequest& request)
 	// coarse - the exact GJK cone-vs-shape test below does the real filtering).
 	AABB queryRegion{ apex - glm::vec3(maxDistance), apex + glm::vec3(maxDistance) };
 
-	// Support function for the cone itself (apex + a finite base disk of radius
-	// maxDistance*tan(halfAngle) at distance maxDistance) - the convex hull of a point
-	// and a disk. Paired with EC_RayIntersection::colliderSupport() via EC_GJK::intersects,
-	// this is an exact geometric cone-vs-shape test (not a bounding-sphere/corner
-	// approximation), consistent with the debug wireframe drawn for the same cone.
-	// EC_ConvexSupport::coneSupport is the same function EC_GJK_Tests.cpp exercises in
-	// isolation.
+	// Support function for the cone: its apex plus a base disk of radius maxDistance*tan(halfAngle),
+	// the convex hull of a point and a disk. With EC_RayIntersection::colliderSupport() and
+	// EC_GJK::intersects this is an exact cone-vs-shape test, consistent with the debug wireframe.
 	EC_GJK::SupportFn coneSupport = [&apex, &direction, halfAngleRadians, maxDistance](const glm::vec3& dir) {
 		return EC_ConvexSupport::coneSupport(apex, direction, halfAngleRadians, maxDistance, dir);
 	};
@@ -607,11 +579,8 @@ ECXResponse EC_BroadPhase::handleConeCheck(ECXRequest& request)
 				continue;
 			if (castsShadowOnly && !entityCastsShadow(candidate))
 				continue;
-			// Plane/Frustum/Mesh/None have no bounded support function (colliderSupport()'s
-			// degenerate single-point fallback would misrepresent them in a real GJK
-			// test) - not valid GJK cone targets, matching rayVsCollider's exclusion. Mesh
-			// gets its own containment test below instead (non-convex, same reason it
-			// can't use GJK for ray casting either).
+			// Plane/Frustum/Mesh/None have no bounded support function, so they aren't valid GJK cone targets
+			// (as in rayVsCollider); Mesh gets its own containment test below since it's non-convex.
 			if (entry.collider.type == EC_DOD_Collider::Type::Plane ||
 				entry.collider.type == EC_DOD_Collider::Type::Frustum ||
 				entry.collider.type == EC_DOD_Collider::Type::None)
@@ -662,11 +631,9 @@ ECXResponse EC_BroadPhase::handleConeCheck(ECXRequest& request)
 		}
 	}
 
-	// Pure geometric containment by default - every entity whose shape overlaps the
-	// cone. checkOcclusion opts into additionally requiring unobstructed line-of-sight
-	// to the apex (a candidate stacked behind a closer one along the same line is
-	// excluded) - an independent, optional layer on top of containment, not fused into
-	// it, since callers may want either.
+	// Pure geometric containment by default. checkOcclusion additionally requires an unobstructed line
+	// of sight to the apex (a candidate behind a closer one is excluded), as an optional layer
+	// independent of containment.
 	std::vector<RayQueryHit> results;
 	results.reserve(candidatesInCone.size());
 	for (const auto& [candidateEntity, candidatePos] : candidatesInCone)

@@ -43,10 +43,7 @@ namespace ScriptAPI
         glm::vec4 getColour();
         void setColour(float r, float g, float b, float a = 1.0f);
 
-        // Issue #98 - lets a reusable script (e.g. ArcadeGravity.lua) read an entity's own
-        // authored collider dimensions back, instead of hand-keeping a separate hardcoded
-        // copy in sync with whatever <Collider><Radius>/<Height> the entity was actually
-        // given. 0 for an entity with no Collider component at all.
+        // The entity's authored collider radius/height; 0 if it has no Collider.
         float getColliderRadius();
         float getColliderHeight();
 
@@ -61,24 +58,20 @@ namespace ScriptAPI
         void setString(const std::string& name, const std::string& value);
         std::string getString(const std::string& name, const std::string& defaultVal = "");
 
-        // Issue #129. Camera (EC_DOD_Camera) - no-op / 0 on an entity with no Camera
-        // component, same convention as getColliderRadius/Height above.
+        // Camera: no-op / 0 on an entity with no Camera.
         float getFOV();
         void setFOV(float degrees);
         float getNearPlane();
         void setNearPlane(float distance);
         float getFarPlane();
         void setFarPlane(float distance);
-        // isActive here is exactly the flag GL_Deferred_Renderer already checks at every
-        // render call site to decide which camera(s) to draw from - switching the active
-        // camera from script (cutscene cuts, security-cam mechanics) is just flipping this
-        // on the new camera and off the old one, no separate engine-level switch needed.
+        // isActive is the flag the renderer checks to choose which cameras to draw from; switch cameras by
+        // setting it on the new one and off the old one.
         bool isCameraActive();
         void setCameraActive(bool active);
 
-        // Issue #129. Lights (EC_DOD_Light). direction is a separate field from
-        // orientation/getForward above - see the component's own comment - so spotlight
-        // sweeps need this rather than the regular orientation setter.
+        // Lights. direction is separate from orientation/getForward (see the component), so spotlight
+        // sweeps need this setter.
         glm::vec3 getLightColour();
         void setLightColour(float r, float g, float b);
         float getLightIntensity();
@@ -88,9 +81,7 @@ namespace ScriptAPI
         bool getLightCastsShadow();
         void setLightCastsShadow(bool castsShadow);
 
-        // Issue #129. Collider (EC_DOD_Collider) - center/extents beyond the existing
-        // radius/height, plus runtime layer/mask for phasing/ghost-mode/"bullet ignores
-        // shooter" patterns that today can only be authored once in XML.
+        // Collider: center/extents beyond radius/height, plus runtime layer/mask (phasing, ghost mode).
         glm::vec3 getColliderCenter();
         void setColliderCenter(float x, float y, float z);
         glm::vec3 getColliderExtents();
@@ -100,9 +91,8 @@ namespace ScriptAPI
         unsigned int getCollisionMask();
         void setCollisionMask(unsigned int mask);
 
-        // Issue #129. GraphicsData (EC_DOD_GraphicsData) - visible is a pure render toggle,
-        // distinct from activate()/deactivate() above (which also gates
-        // physics/collision/logic via EC_DOD_EntityInfo::active).
+        // GraphicsData: visible is a pure render toggle, unlike activate()/deactivate(), which also gate
+        // physics, collision and logic.
         bool isVisible();
         void setVisible(bool visible);
         float getEmissiveIntensity();
@@ -112,40 +102,30 @@ namespace ScriptAPI
         bool getReceivesShadow();
         void setReceivesShadow(bool receivesShadow);
 
-        // Issue #129. Hierarchy (EC_DOD_Hierarchy) - hasParent/getParentID/getDepth above
-        // only let a script walk UP the hierarchy; these walk down.
+        // Hierarchy: walk down (the getters above only walk up).
         unsigned int getChildCount();
         unsigned int getChildID(unsigned int index);
 
-        // Issue #129. Skybox (EC_DOD_Skybox) - see the component's own comment: this is the
-        // only way to align the HDR panorama's baked-in sun with a scene's actual
-        // directional light direction (e.g. a script-driven day/night cycle) without
-        // re-exporting the HDR asset.
+        // Skybox: aligns the HDR panorama's baked-in sun with a scene's directional light (e.g. a
+        // day/night cycle) without re-exporting the asset.
         float getSkyboxRotation();
         void setSkyboxRotation(float degrees);
 
-        // Issue #129. ScriptData (EC_DOD_ScriptData::enabled) - suppresses this entity's own
-        // event handlers (OnUpdate/OnKeyDown/etc, see EC_LuaScriptSystem) without touching
-        // activate()/deactivate() above, e.g. a stunned/frozen state that should keep
-        // rendering/colliding but stop reacting to input.
+        // ScriptData::enabled suppresses this entity's own event handlers without touching
+        // activate()/deactivate() (e.g. a stunned entity that keeps rendering and colliding).
         bool isScriptEnabled();
         void setScriptEnabled(bool enabled);
 
-        // Issue #130. Persistent, script-set external force (EC_DOD_ExternalForce) -
-        // integrated into velocity every physics substep exactly like gravity, until
-        // changed again (call with 0,0,0 to turn it off) - the standard "thruster" idiom.
-        // No-op on an entity with no RigidBody. See that component's own comment for why
-        // this must persist rather than clear after one substep.
+        // Persistent external force, integrated every physics substep like gravity until changed
+        // (0,0,0 turns it off). No-op on an entity with no RigidBody.
         void applyForce(float x, float y, float z);
 
-        // Issue #130. One-shot instantaneous change, added directly to velocity/
-        // angular velocity this frame - the standard recoil/knockback/jump-pad/explosion
-        // idiom. No-op on an entity with no RigidBody (or a static one).
+        // One-shot change added directly to velocity/angular velocity (recoil, knockback). No-op on an
+        // entity with no RigidBody or a static one.
         void applyImpulse(float x, float y, float z);
         void applyTorque(float x, float y, float z);
 
-        // Issue #130. Runtime RigidBody (EC_DOD_RigidBody) property access - authoring-
-        // time-only (XML <RigidBody>) until now. 0/false on an entity with no RigidBody.
+        // Runtime RigidBody property access; 0/false on an entity with no RigidBody.
         float getMass();
         void setMass(float mass);
         float getRestitution();
@@ -154,12 +134,9 @@ namespace ScriptAPI
         void setFriction(float friction);
         float getStaticFriction();
         void setStaticFriction(float staticFriction);
-        // Static/Kinematic/Dynamic - see EC_BodyType's own comment. getBodyType/setBodyType
-        // use the same strings XML's <BodyType> authors ("Static"/"Kinematic"/"Dynamic");
-        // isStatic/setStatic and isKinematic/setKinematic are convenience wrappers matching
-        // getMass/setMass's existing shape - setStatic(false)/setKinematic(false) both mean
-        // "make it Dynamic", not "toggle back to whatever it was before". "" / no-op on an
-        // entity with no RigidBody.
+        // Static/Kinematic/Dynamic (see EC_BodyType); getBodyType/setBodyType use the XML strings.
+        // setStatic(false) and setKinematic(false) both mean Dynamic. "" / no-op on an entity with no
+        // RigidBody.
         std::string getBodyType();
         void setBodyType(const std::string& bodyType);
         bool isStatic();
@@ -169,10 +146,8 @@ namespace ScriptAPI
         bool isSleeping();
         void wake();
 
-        // Runtime toggle for the "arcade physics" pattern: an OnCollisionBegin handler
-        // deciding what it hit sets this directly instead of the full impulse solver
-        // deciding for it - see EC_DOD_RigidBody::ignoreGravity's own comment. false on an
-        // entity with no RigidBody.
+        // Runtime toggle, typically set by an OnCollisionBegin handler (see EC_DOD_RigidBody::ignoreGravity).
+        // false on an entity with no RigidBody.
         bool getIgnoreGravity();
         void setIgnoreGravity(bool ignore);
     };

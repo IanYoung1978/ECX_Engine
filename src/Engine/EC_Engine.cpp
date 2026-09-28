@@ -56,12 +56,8 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Spatial]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Transform]);
 	task->addSystem(m_Systems[(size_t)EC_SystemType::Camera]);
-	// Collision + Physics are substepped instead - see
-	// EC_PhysicsThreadTask::setSubstepCount for why (stacking stability:
-	// the same fix Box2D v3/Rapier use for marginal-equilibrium creep).
-	// Must stay in this relative order (Collision before Physics) within
-	// each substep, since Physics consumes the manifolds Collision just
-	// cached that same substep.
+	// Collision + Physics are substepped (see EC_PhysicsThreadTask::setSubstepCount); Collision must
+	// stay before Physics, which consumes the manifolds Collision just cached.
 	task->addSubsteppedSystem(m_Systems[(size_t)EC_SystemType::Collision]);
 	task->addSubsteppedSystem(m_Systems[(size_t)EC_SystemType::Physics]);
 	task->setSubstepCount(substeps);
@@ -69,16 +65,7 @@ void EC_Engine::init(const std::string& config, EC_Game& game, ECXMessenger& mes
 	task->setName("Physics");
 	m_tasks.push_back(task);
 
-	// Scripting and Audio each get their own dedicated thread - NOT the physics thread
-	// above (that class is scoped to Collision+Physics; see its own header comment).
-	// Scripting was always supposed to be on its own thread - EC_SingleSystemTask (this
-	// same generic task class) existed for exactly this purpose but was never actually
-	// instantiated anywhere, and Scripting had been folded onto the physics thread
-	// instead. That meant the Lua state, and everything a script touches through it (e.g.
-	// EC_SceneManager's entity lookup maps, populated on the main thread right after a
-	// scene loads), was being read/written from two threads at once with no synchronization
-	// - the real cause of a "cannot dereference value-initialized iterator" crash found
-	// investigating #135, not fixable by patching individual containers one at a time.
+	// Scripting and Audio each run on their own thread, not the physics thread.
 	auto scriptingTask = std::make_shared<EC_SingleSystemTask>();
 	scriptingTask->addGameRef(*m_game);
 	scriptingTask->addSystem(m_Systems[(size_t)EC_SystemType::Scripting]);

@@ -220,12 +220,9 @@ EntityID EC_DOD_EntityFactory::constructEntity(TiXmlElement& descriptor) {
         elem = elem->NextSiblingElement();
     }
 
-    // Any renderable entity needs to be discoverable by spatial queries (camera
-    // frustum, light influence radius) serviced by EC_BroadPhase, which only ever
-    // iterates entities with EC_DOD_Collider + EC_DOD_Spatial. Rather than requiring
-    // every renderable entity to author a <Collider> just to be found, tag it with
-    // the reserved Renderable layer bit automatically - existing scene XML needs no
-    // changes.
+    // Renderable entities must be found by EC_BroadPhase's spatial queries (camera frustum, light
+    // radius), which only iterate Collider + Spatial entities. Tag them with the reserved Renderable
+    // layer bit automatically so scenes needn't author a <Collider> just for that.
     if (hasGraphics && hasSpatial) {
         if (!hasCollider) {
             EC_DOD_Collider autoCollider;
@@ -634,11 +631,9 @@ void EC_DOD_EntityFactory::resolveHierarchyReferences() {
         }
     }
 
-    // Scoped to this batch's entities only (not the whole EC_DOD_Hierarchy component
-    // array) - entities from earlier scene loads or the UI framework already have a
-    // resolved EntityID in hierarchy.parent by this point, not a raw UID, and must not
-    // be reprocessed here (would wipe or, worse, silently misresolve their parent link
-    // against this batch's unrelated uidToEntity map).
+    // Scoped to this batch's entities only: entities from earlier loads or the UI already have a
+    // resolved EntityID in hierarchy.parent, and reprocessing them would wipe or misresolve their parent
+    // link.
     for (EntityID entity : s_Entities) {
         if (!manager.hasComponent<EC_DOD_Hierarchy>(entity)) continue;
         auto& hierarchy = manager.getComponent<EC_DOD_Hierarchy>(entity);
@@ -887,8 +882,7 @@ void EC_DOD_EntityFactory::parseRigidBody(TiXmlElement* elem, EntityID entity) {
     if (angularDampingElem && angularDampingElem->GetText())
         rigidBody.angularDamping = static_cast<float>(atof(angularDampingElem->GetText()));
 
-    // Static/Kinematic/Dynamic - see EC_BodyType's own comment. Defaults to Dynamic
-    // (every RigidBody's implicit assumption before this distinction existed).
+    // Static/Kinematic/Dynamic (see EC_BodyType); defaults to Dynamic.
     auto bodyTypeElem = elem->FirstChildElement("BodyType");
     if (bodyTypeElem && bodyTypeElem->GetText())
     {
@@ -915,10 +909,6 @@ void EC_DOD_EntityFactory::parseRigidBody(TiXmlElement* elem, EntityID entity) {
         rigidBody.ignoreGravity = (strcmp(ignoreGravityElem->GetText(), "true") == 0);
 
     manager.addComponent(entity, rigidBody);
-    // Every RigidBody needs somewhere for collision resolution to cache its
-    // per-tick momentum contributions; without this the physics system's
-    // hasComponent<EC_DOD_ImpulseAccumulator> check silently drops them.
-    manager.addComponent(entity, EC_DOD_ImpulseAccumulator{});
 }
 
 void EC_DOD_EntityFactory::parseSkybox(TiXmlElement* elem, EntityID entity) {

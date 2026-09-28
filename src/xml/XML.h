@@ -49,10 +49,8 @@ namespace XML
 		return true;
 	}
 
-	// Issue #130 - alias -> filepath, one small step below Scenes.xml: no precache/unload
-	// flags, since a prefab is loaded fresh on every spawnEntity() call rather than kept
-	// resident like a scene. Absence of the file itself (not this function's own failure)
-	// is handled by the caller checking GameModeSettings::prefabs_file for emptiness first.
+	// alias -> filepath, like Scenes.xml but without precache/unload flags, since a prefab is loaded
+	// fresh on each spawnEntity(). The caller checks GameModeSettings::prefabs_file for emptiness first.
 	inline bool loadPrefabsFile(const std::string& file, std::map<std::string, std::string>& aliasToPath)
 	{
 		TiXmlDocument doc(file.c_str());
@@ -151,9 +149,7 @@ namespace XML
 				}
 				else if (strcmp(child->Value(), "Prefabs") == 0)
 				{
-					// Issue #130 - optional, unlike every entry above: no null-check
-					// needed elsewhere only because every other entry is mandatory in
-					// every existing TestMode.xml; this one may simply be absent.
+					// Optional, unlike the entries above.
 					auto att = child->FirstAttribute();
 					if (att) settings.prefabs_file = att->Value();
 				}
@@ -211,11 +207,8 @@ namespace XML
 		return true;
 	}
 
-	// Parses EngineConfig.xml's <Physics><Substeps> - how many times
-	// Collision+Physics re-run per visual tick (see
-	// EC_PhysicsThreadTask::setSubstepCount). Missing file/section/tag
-	// default to 1 (no substepping, original behaviour) rather than
-	// failing.
+	// Parses EngineConfig.xml's <Physics><Substeps> (see EC_PhysicsThreadTask::setSubstepCount). A
+	// missing file, section or tag defaults to 1.
 	inline bool loadPhysicsSubstepCount(const std::string& file, int& outSubsteps)
 	{
 		outSubsteps = 1;
@@ -237,9 +230,8 @@ namespace XML
 		return true;
 	}
 
-	// EngineConfig.xml's <DebugHTTP enabled="" port=""/> - the dev-build-only debug HTTP
-	// server (Issue #87's first slice, GET /log only). Defaults to disabled on any
-	// missing file/section/attribute, since this must never turn on unexpectedly.
+	// EngineConfig.xml's <DebugHTTP enabled port/>: the dev-build-only debug HTTP server. Off unless
+	// explicitly enabled (a missing file, section or attribute means off).
 	struct DebugHTTPSettings
 	{
 		bool enabled = false;
@@ -271,16 +263,9 @@ namespace XML
 		return true;
 	}
 
-	// EngineConfig.xml's <VoxelTerrain enabled="" script=""/> - issue #99: this whole
-	// subsystem (a background worker thread, a grid of chunk entities, generation work)
-	// used to run unconditionally for every game regardless of whether it wanted voxel
-	// terrain at all. Defaults to disabled on any missing file/section/attribute, matching
-	// DebugHTTPSettings' own "never turn on unexpectedly" reasoning - though unlike
-	// DebugHTTP this gates a gameplay-visible feature, not just a dev tool, so an author
-	// must always opt in explicitly. `script` only needs to say WHICH generation script to
-	// run - everything else content-configurable (chunk material, tint, grid size) is set
-	// by that script itself via the volume.* Lua API (see VoxelTerrainConfig), not more XML
-	// attributes here.
+	// EngineConfig.xml's <VoxelTerrain enabled script/>. Off unless explicitly enabled (a missing
+	// file, section or attribute all mean off). `script` names the generation script; chunk material,
+	// tint and grid size are set by that script through the volume.* Lua API.
 	struct VoxelTerrainSettings
 	{
 		bool enabled = false;
@@ -312,14 +297,10 @@ namespace XML
 		return true;
 	}
 
-	// EngineConfig.xml's <EntityLifecycle quarantineFrames=""/> - how many consecutive
-	// main-thread frames an entity must stay Inactive/MarkedForDeletion (excluded from
-	// every subsystem's per-frame queries) before EC_SceneManager's deferred sweep actually
-	// destroys it. This quarantine is what makes the sweep safe without any additional
-	// locking: after this many frames with zero readers, nothing can be holding a live
-	// reference to that entity's components. Defaults to 30 (~0.5s at 60fps) - deliberately
-	// generous, not tuned to a minimum; a game with heavier per-frame work than this
-	// engine's own test scenes may want a larger value.
+	// EngineConfig.xml's <EntityLifecycle quarantineFrames/>: main-thread frames an entity stays
+	// Inactive/MarkedForDeletion before the deferred sweep destroys it. After that many frames with no
+	// readers nothing can hold a reference to it. Default 30 (~0.5s at 60fps); a game with heavier
+	// per-frame work may want more.
 	struct EntityLifecycleSettings
 	{
 		int quarantineFrames = 30;
@@ -347,15 +328,10 @@ namespace XML
 		return true;
 	}
 
-	// EngineConfig.xml's <ComponentStorage initialCapacity="" growthThreshold=""/> - each
-	// EC_ComponentArray<T> reserves initialCapacity up front so normal play never triggers a
-	// reallocation (see EC_ComponentArray<T>::insert()'s own comment for why that matters: a
-	// reference obtained via getComponent<T>() and held across a call, e.g. a Lua handler
-	// dispatch, would otherwise dangle the instant another thread's insert() reallocates the
-	// buffer under it). growthThreshold (0..1) is how full an array gets, as a fraction of
-	// capacity, before insert() grows it ahead of actually running out. Seeing the "reached
-	// capacity" warning in the log at all means initialCapacity is set too low for real
-	// usage - defaults are deliberately generous so it should be rare in practice.
+	// EngineConfig.xml's <ComponentStorage initialCapacity growthThreshold/>: each component array
+	// reserves initialCapacity up front so normal play never reallocates (a held reference would dangle).
+	// growthThreshold (0..1) is how full an array gets before insert() grows it. The "reached capacity"
+	// log warning means initialCapacity is too low.
 	struct ComponentStorageSettings
 	{
 		size_t initialCapacity = 512;
@@ -388,11 +364,8 @@ namespace XML
 		return true;
 	}
 
-	// EngineConfig.xml's <Startup pauseOnStart=""/> - whether EC_SceneManager::update()
-	// auto-pauses the engine right after the first scene finishes loading (see that call
-	// site's own comment for why that pause exists at all). Defaults to true (existing
-	// behaviour) on any missing file/section/attribute, so only an explicit opt-out
-	// changes anything.
+	// EngineConfig.xml's <Startup pauseOnStart/>: whether EC_SceneManager::update() pauses after the
+	// first scene loads. Defaults to true; only an explicit opt-out changes it.
 	inline bool loadPauseOnStartSetting(const std::string& file)
 	{
 		TiXmlDocument doc(file.c_str());

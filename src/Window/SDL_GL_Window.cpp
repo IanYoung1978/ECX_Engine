@@ -115,11 +115,6 @@ bool SDL_GL_Window::init(WindowSettings & settings)
 
 	m_Width = settings.width;
 	m_Height = settings.height;
-	// During init, enable debug output
-//#ifndef _NDEBUG
-//	glEnable(GL_DEBUG_OUTPUT);
-//	glDebugMessageCallback((GLDEBUGPROC)openglCallbackFunction, 0);
-//#endif
 	return true;
 }
 
@@ -152,9 +147,8 @@ void SDL_GL_Window::toggleFullscreen()
 
 void SDL_GL_Window::maximize()
 {
-	// Triggers SDL_WINDOWEVENT_SIZE_CHANGED like any other resize, so the existing resize
-	// handling (Window::onResized -> EC_SceneManager::changeResolution, see issue #108)
-	// picks up the new size with no separate code path needed here.
+	// Triggers SDL_WINDOWEVENT_SIZE_CHANGED like any resize, so the existing resize handling picks up
+	// the new size.
 	SDL_MaximizeWindow(m_Window);
 }
 

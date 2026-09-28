@@ -157,13 +157,9 @@ namespace EC_RayIntersection
 
         if (collider.type == EC_DOD_Collider::Type::Mesh)
         {
-            // EC_DOD_MeshCollisionData's positions are chunk-local (0..kChunkWorldSize),
-            // matching EC_MarchingCubesMesher's own local-grid-index output - not world
-            // space (rendering places them via the entity's transform, same as any other
-            // local-space mesh + world placement). Test in that same local space by
-            // offsetting the ray, then translate the hit back to world space - direction
-            // needs no adjustment (chunks are never rotated, and a direction vector is
-            // translation-invariant regardless).
+            // Mesh positions are chunk-local (0..kChunkWorldSize), not world space: test in that space by
+            // offsetting the ray, then translate the hit back. Direction needs no adjustment (chunks are never
+            // rotated).
             RayIntersectionResult meshResult = rayMesh(origin - spatial.position, dir, meshData);
             if (meshResult.hit)
                 meshResult.position += spatial.position;

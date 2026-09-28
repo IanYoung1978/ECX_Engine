@@ -39,7 +39,7 @@
 		</Light>
 	</Entity>
 
-	<!-- Collision-based impulse physics demo (Issue: cube stack + rolling ball).
+	<!-- Collision-based impulse physics demo: a cube stack and a rolling ball.
 	     Floor is a single entity with both the visible plane mesh and a real
 	     (non-zero mask) AABB collider, so cubes/ball actually rest on it -
 	     unlike auto-generated colliders on purely visual geometry elsewhere,

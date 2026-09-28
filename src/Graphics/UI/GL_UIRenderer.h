@@ -7,12 +7,8 @@
 
 class Window;
 
-// Generic screen-space (pixel, top-left origin, Y-down) 2D rendering foundation - text via a
-// baked font atlas, and flat-colour quads. This is the shared drawing toolkit for ALL UI work
-// (Issue #6's scripted game-UI elements, a future debug CLI, etc.), not specific to any one
-// feature. Owns no concept of what to draw or when - callers (e.g. a debug telemetry overlay)
-// decide content, this class only knows how to put pixels/glyphs on screen.
-//
+// Generic screen-space (pixels, top-left origin, Y-down) 2D rendering: text from a baked font
+// atlas and flat-colour quads. Callers decide what to draw.
 // Usage per frame: beginFrame() once, any number of drawText()/drawQuad() calls, endFrame() once.
 class GL_UIRenderer
 {

@@ -38,25 +38,18 @@ namespace {
 void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    // Gravity/external-force/integration below must not run for an entity outside the
-    // active scene - a scene loading in the background (see EC_SceneManager::loadScene)
-    // would otherwise start falling under gravity and integrating position the moment its
-    // entities existed, well before it became the active scene. Same active+sceneState
-    // check EC_DOD_EntityManager::getActiveEntitiesWithComponents already applies
-    // elsewhere, inlined here since these loops iterate a component array's raw data
-    // directly rather than going through that helper.
+    // Gravity, force and integration must not run for entities outside the active scene (a scene
+    // loading in the background would start falling before activation). Same active+sceneState check as
+    // getActiveEntitiesWithComponents, inlined because these loops iterate raw component data.
     auto isActiveInScene = [&manager](EntityID entity) {
         if (!manager.hasComponent<EC_DOD_EntityInfo>(entity)) return true;
         const auto& info = manager.getComponent<EC_DOD_EntityInfo>(entity);
         return info.active && info.sceneState == EC_SceneLifecycleState::Active;
     };
 
-    // Detection (and CollisionBeginEvent/CollisionEndEvent) already happened upstream in
-    // EC_CollisionSystem regardless of this - it only gates whether this pair gets run
-    // through the impulse solver below. A pair with either side Kinematic is handed
-    // entirely to script instead (see EC_BodyType's own comment). An entity with no
-    // RigidBody at all (e.g. voxel terrain) is neutral here, not Dynamic-by-default - it
-    // never forces a skip on its own, only an explicit Kinematic side does.
+    // Detection and Begin/End events already happened upstream; this only gates the impulse solver. A
+    // pair with a Kinematic side is left to script (see EC_BodyType). An entity with no RigidBody (e.g.
+    // terrain) is neutral: only an explicit Kinematic side forces a skip.
     auto pairSkipsResolution = [&manager](EntityID a, EntityID b) {
         auto isKinematic = [&manager](EntityID e) {
             return manager.hasComponent<EC_DOD_RigidBody>(e) &&
@@ -65,14 +58,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         return isKinematic(a) || isKinematic(b);
     };
 
-    // --- Gravity applied first, before the solve, so the constraint solve
-    // below sees and cancels THIS tick's gravity directly. Applying it after
-    // instead leaves the solve chasing last tick's residual one step behind
-    // forever, so the cached normal impulse a resting contact converges to
-    // never reflects the real steady-state weight - it keeps ratcheting up
-    // by a fresh increment each tick, understating the friction budget
-    // (proportional to that cached impulse) for as long as it takes to
-    // build up. ---
+    // --- Gravity first, before the solve, so the solve sees and cancels this tick's gravity. Applied
+    // after, a resting contact's cached normal impulse never reflects its real weight and understates
+    // the friction budget. ---
     {
         auto* rbArrayGravity = manager.getComponentArray<EC_DOD_RigidBody>();
         if (rbArrayGravity) {
@@ -91,11 +79,8 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         }
     }
 
-    // Issue #130 - script-set persistent external force (see EC_DOD_ExternalForce's own
-    // comment), integrated exactly like gravity above: force/mass * dt added straight to
-    // velocity, every substep, for as long as the force stays set. A separate, sparse
-    // component (most entities never have one) rather than folded into the gravity loop
-    // above, so entities that never call applyForce() pay zero extra cost here.
+    // Script-set persistent external force, integrated like gravity (force/mass * dt every substep).
+    // A sparse component, so entities without one pay nothing here.
     {
         auto* forceArray = manager.getComponentArray<EC_DOD_ExternalForce>();
         if (forceArray) {
@@ -119,11 +104,8 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         // once, up front. This recorded state is never mutated again this
         // tick - everything below only ever adds to a separate accumulator. ---
         std::unordered_map<EntityID, EC_PhysicsResolution::BodyState> bodies;
-        // Every colliding pair's contact points, per entity - published
-        // below as EC_DOD_DebugContacts so debug rendering (F1) can draw
-        // them via the normal shared_mutex-protected component-array path,
-        // instead of reading EC_PairManager (physics-thread-internal) from
-        // the render thread.
+        // Contact points per entity, published as EC_DOD_DebugContacts for debug rendering (F1) through
+        // the component-array path instead of reading EC_PairManager from the render thread.
         std::unordered_map<EntityID, std::vector<glm::vec3>> bodyContactPoints;
         for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
@@ -153,13 +135,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         }
         m_LastDebugContactEntities = std::move(currentContactEntities);
 
-        // --- WARM START: re-apply every contact point's previously
-        // converged impulse in full, before any new pass runs. Kinetic
-        // friction is an ongoing force - it needs to keep decelerating a
-        // sliding body every substep, not just once - so the cached
-        // impulse has to be reapplied fresh each tick, not merely used as
-        // a baseline that only the CHANGE from is ever applied to real
-        // velocity (see EC_PhysicsResolution::applyWarmStart). ---
+        // --- WARM START: re-apply each contact point's previously converged impulse before the new
+        // passes, so kinetic friction keeps decelerating a sliding body every substep (see
+        // EC_PhysicsResolution::applyWarmStart). ---
         for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
             if (!pair.m_Colliding) continue;
             if (pairSkipsResolution(pair.body_A, pair.body_B)) continue;
@@ -186,12 +164,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             }
         }
 
-        // --- ITERATE: every contact point on every colliding pair
-        // contributes an incremental impulse each pass. Repeating the whole
-        // pass over every pair (rather than just each pair's own manifold)
-        // is what lets a multi-body system - a stack - converge within one
-        // tick: resolving the bottom pair changes velocities the next pair
-        // up needs to see. ---
+        // --- ITERATE: every contact point on every pair adds an incremental impulse each pass. Repeating
+        // over all pairs lets a stack converge in one tick (resolving the bottom pair changes what the next
+        // one needs to see). ---
         for (int pass = 0; pass < kSolverPasses; pass++) {
             for (EC_CollisionPair& pair : EC_PairManager::getAllPairs()) {
                 if (!pair.m_Colliding) continue;
@@ -236,13 +211,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             }
         }
 
-        // --- APPLY: every recorded body's total accumulated impulse
-        // becomes a real velocity change, exactly once, now that every
-        // pass and every contact point is done. A sleeping body that
-        // genuinely got pushed (real resulting speed, not just numerical
-        // noise) wakes up right here, so it's picked up by the gravity/
-        // integration loop below in the same tick instead of losing a
-        // frame reacting to it. ---
+        // --- APPLY: each recorded body's accumulated impulse becomes a velocity change, once, after every
+        // pass. A sleeping body that got a real push wakes here, so the integration loop below picks it up
+        // this tick. ---
         for (auto& [entity, body] : bodies) {
             if (body.invMass <= 0.0f) continue;
             if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
@@ -309,16 +280,8 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
         auto& rb = rigidBodies[i];
         EntityID entity = rbArray->getEntityUnlocked(i);
 
-        // Damping, sleeping, and quaternion-based orientation are all real physics
-        // simulation, which only a Dynamic body wants (see EC_BodyType's own comment) -
-        // Static never moves, and Kinematic (a RigidBody kept only for gravity bookkeeping
-        // on an otherwise script/mouse-controlled entity, the "arcade physics" pattern)
-        // is moved directly, never by this. Skipping this whole block for non-Dynamic also
-        // fixes a real bug the first version of this pattern had: sitting still while
-        // grounded would eventually sleep it regardless, and since gravity's own check
-        // skips sleeping bodies, jumping (which only clears ignoreGravity) would leave
-        // gravity permanently inert - the entity would float upward forever instead of
-        // arcing back down.
+        // Damping, sleep and quaternion orientation only apply to Dynamic bodies. Skipping Kinematic also
+        // stops it sleeping while grounded, which would leave gravity inert after a jump.
         if (rb.bodyType != EC_BodyType::Dynamic) continue;
         if (!isActiveInScene(entity)) continue;
         if (!manager.hasComponent<EC_DOD_Spatial>(entity)) continue;
@@ -376,12 +339,9 @@ void EC_PhysicsSystem::update(const float& deltaTimeS, EC_Game& game) {
             continue;
         }
 
-        // --- Integrate orientation from the final angular velocity. Position is
-        // integrated once, for every entity with a Spatial (RigidBody included), by
-        // EC_SpatialSystem instead - doing it here too would double it. Angular velocity
-        // is composed as a real quaternion rotation, not summed component-wise into Euler
-        // angles and rebuilt via three sequential single-axis rotations - that only tracks
-        // rotation correctly about one fixed axis at a time. ---
+        // --- Integrate orientation from the final angular velocity as a real quaternion rotation (summing
+        // into Euler angles only tracks rotation about one fixed axis). Position is integrated once by
+        // EC_SpatialSystem for every entity with a Spatial; doing it here too would double it. ---
         const glm::mat3 basis(spatial.right, spatial.up, -spatial.direction);
         const glm::quat currentQuat = glm::normalize(glm::quat_cast(basis));
 

@@ -56,9 +56,8 @@ void EC_SceneManager::init(EC_Game& game, std::string& config, ECXMessenger& mes
     EC_UI_Factory::loadUI(m_Settings.ui_file, messenger);
     EC_DOD_EntityFactory::loadManifestFile(m_Settings.physics_materials_file);
 
-    // Issue #130 - optional: a GameMode file with no <Prefabs> entry at all leaves this
-    // registry empty, and spawnEntity() just fails per-alias (same graceful-absence
-    // convention as VoxelTerrain's `enabled` flag) rather than logging a startup error.
+    // Optional: a GameMode file with no <Prefabs> entry leaves the registry empty and spawnEntity()
+    // fails per alias.
     if (!m_Settings.prefabs_file.empty())
     {
         if (!XML::loadPrefabsFile(m_Settings.prefabs_file, m_PrefabRegistry))
@@ -168,12 +167,8 @@ void EC_SceneManager::update(float deltaTimeS, EC_Game& game)
 
         if (!m_InitialPauseDone)
         {
-            // First scene load has finished - all its entities (and their
-            // Transform components) now exist. Bake a correct initial
-            // transform/camera state once, synchronously, then pause so
-            // that first frame (rather than an identity-matrix/origin frame,
-            // or several seconds of unwatched physics) is what's shown until
-            // the player resumes.
+            // First scene load has finished: bake a correct initial transform/camera state once, then pause,
+            // so the first frame shown isn't an identity-matrix frame or seconds of unwatched physics.
             m_Engine.stepOnce(1.0f / 60.0f);
             if (m_PauseOnStart) m_Engine.pause();
             m_InitialPauseDone = true;
@@ -322,11 +317,9 @@ EntityID EC_SceneManager::spawnEntity(const std::string& alias, float x, float y
         return INVALID_ENTITY;
     }
 
-    // Same load idiom as EC_DOD_LoadingWorker::loadEntityFile - a standalone file whose
-    // root element IS the <Entity> block itself, safe to call from any thread (see that
-    // function's own comment: constructEntity never touches GL directly, graphics
-    // resolution is deferred to finalizePendingGraphics, already swept every frame by
-    // update() above regardless of which entity/scene it belongs to).
+    // Same load idiom as EC_DOD_LoadingWorker::loadEntityFile: a file whose root is the <Entity> block.
+    // Safe from any thread: constructEntity never touches GL, and graphics resolution is deferred to
+    // finalizePendingGraphics, swept every frame by update().
     TiXmlDocument doc(it->second.c_str());
     if (!doc.LoadFile())
     {
@@ -376,15 +369,11 @@ void EC_SceneManager::activateSceneByIndex(size_t index)
         m_Scenes[previous].deactivate();
         if (m_Scenes[previous].isUnloadOnDeactivate())
         {
-            // Entities are excluded from every subsystem's per-frame query the instant
-            // deactivate() above runs - immediate and safe, since it's just a flag flip.
-            // Actual destruction is queued for the deferred sweep instead of happening
-            // here: this can run on the Scripting thread, as a direct result of one of the
-            // deactivated scene's OWN entities calling game:activateScene() - destroying
-            // that entity synchronously here would free it while its own script is still
-            // mid-execution on this same call stack. markForDeletion() schedules it; the
-            // sweep (see sweepPendingDeletions()) waits out the quarantine period before
-            // actually calling destroyEntity() on the main thread.
+            // Entities drop out of every per-frame query as soon as deactivate() runs (just a flag flip).
+            // Destruction is deferred: this can run on the Scripting thread because one of the scene's own
+            // entities called game:activateScene(), and destroying it here would free it mid-script.
+            // markForDeletion() queues it for sweepPendingDeletions(), which destroys it on the main thread after
+            // the quarantine.
             m_Scenes[previous].markForDeletion();
             std::lock_guard<std::mutex> lock(m_PendingDeletionsLock);
             m_PendingDeletions.push_back({ previous, m_FrameCounter });

@@ -83,13 +83,9 @@ void EC_LuaScriptSystem::update(const float& deltaTimeS, EC_Game& game) {
     if (m_shuttingDown) return;
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    // Excludes a deactivated scene's entities (EC_GameScene::deactivate() -> sceneState)
-    // and any entity a script has individually deactivated (EntityAPI::deactivate() ->
-    // active) - see EC_DOD_EntityInfo's comment for why the two are separate. Without the
-    // sceneState check, an inactive scene's OnKeyHeld/update handlers kept firing right
-    // alongside the active scene's - notably breaking any script logic (e.g. a debug
-    // scene-switch toggle) that multiple simultaneously-alive entities across scenes both
-    // subscribe to.
+    // Excludes a deactivated scene's entities (sceneState) and individually deactivated ones (active);
+    // see EC_DOD_EntityInfo. Without the sceneState check, an inactive scene's handlers kept firing
+    // alongside the active scene's.
     auto entities = manager.getActiveEntitiesWithComponents(
         { std::type_index(typeid(EC_DOD_ScriptData)) }
     );
@@ -194,13 +190,10 @@ const char* EC_LuaScriptSystem::getEventFunctionName(ECXEventType type) {
 }
 
 namespace {
-    // Every global function name a script might define to handle an event - must stay in
-    // sync with EC_LuaScriptSystem::getEventFunctionName() below, plus "update" (the name
-    // update() actually looks up at its call site above - note getEventFunctionName maps
-    // system_update to "onSystemUpdate", a name nothing ever calls; "update" is the real
-    // one every script uses). Not derived programmatically from the enum - this list
-    // rarely changes and a flat, reviewable array is clearer than threading ECXEventType
-    // through here just to avoid duplicating a dozen string literals.
+    // Every global function name a script might define as a handler; keep in sync with
+    // getEventFunctionName() below, plus "update", which update() actually calls (getEventFunctionName
+    // maps system_update to an unused "onSystemUpdate"). A flat array rather than derived from the enum,
+    // since it rarely changes.
     constexpr const char* kHandlerFunctionNames[] = {
         "onEntityCreate", "onEntityKill", "onEntityDestroy", "onEntityLoaded",
         "onStopRotation", "onStopMotion", "onPositionChanged", "onOrientationChanged",
@@ -544,9 +537,7 @@ void EC_LuaScriptSystem::registerAPI() {
         .beginClass<ScriptAPI::VolumeHandle>("VolumeHandle")
         .endClass()
 
-        // Author-facing procedural generation toolbox (Stage 1/2 of the terrain generation
-        // plan: "create a volume" / "subtract from it") - a growing library of tools meant
-        // to be invoked from a one-shot generation script (see runScriptOnce()), not a
+        // Procedural generation toolbox for a one-shot generation script (see runScriptOnce()), not a
         // per-frame handler.
         .beginClass<ScriptAPI::VolumeAPI>("volume")
         .addFunction("constant", &ScriptAPI::VolumeAPI::constant)

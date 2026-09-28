@@ -7,24 +7,15 @@
 namespace
 {
     constexpr float kEpsilon = 1e-6f;
-    // Below this closing speed, a contact is a resting contact (its
-    // velocity is just gravity's per-substep residual, not a real impact)
-    // and restitution is treated as zero. Without this, (1+restitution)
-    // amplifies that tiny residual into a phantom bounce every single
-    // tick, which compounds into visible jitter - Millington's resting-
-    // contact handling. Comfortably above a typical per-substep gravity
-    // residual (~0.04 m/s at this engine's default gravity/timestep) while
-    // still well under any real, meaningful impact speed.
+    // Below this closing speed a contact is resting (its velocity is just gravity's per-substep
+    // residual) and restitution is treated as zero; otherwise (1+restitution) amplifies the residual into
+    // a phantom bounce and jitter. Set above a typical per-substep residual (~0.04 m/s), well below a real
+    // impact.
     constexpr float kRestingVelocityThreshold = 0.2f;
 
-    // Bullet's btPlaneSpace1: builds a stable orthonormal basis {t1, t2}
-    // perpendicular to n, purely from n's own geometry. Deriving a friction
-    // tangent from relative velocity instead (as this file used to) is
-    // numerically unstable right where it matters most: a nearly-resting
-    // contact has a tiny, noisy relative velocity, and normalizing a
-    // near-zero vector turns that noise into a friction direction that
-    // swings wildly pass to pass - which, once friction is actually strong
-    // enough to matter, reads as violent oscillation rather than settling.
+    // Bullet's btPlaneSpace1: a stable orthonormal basis {t1, t2} perpendicular to n, from n alone. A
+    // tangent derived from relative velocity is unstable near rest, where normalizing a tiny noisy
+    // vector makes the friction direction swing.
     void planeSpace(const glm::vec3& n, glm::vec3& t1, glm::vec3& t2)
     {
         if (std::abs(n.z) > 0.7071067f) {
@@ -177,11 +168,8 @@ namespace EC_PhysicsResolution
             rbCross[i] = glm::cross(rB, axes[i]);
         }
 
-        // Effective-mass matrix for the full 3-axis contact space (normal +
-        // 2 fixed tangents), all three constraints coupled together through
-        // the bodies' rotational inertia - not solved as separate 1D
-        // problems, so a normal impulse's effect on tangential velocity
-        // (and vice versa) is accounted for rather than ignored.
+        // Effective-mass matrix for the 3-axis contact space (normal + 2 tangents), coupled through the
+        // bodies' rotational inertia rather than solved as separate 1D problems.
         glm::mat3 K;
         for (int col = 0; col < 3; col++) {
             for (int row = 0; row < 3; row++) {
@@ -201,12 +189,8 @@ namespace EC_PhysicsResolution
             : std::min(bodyA.restitution, bodyB.restitution);
         const glm::vec3 targetDeltaVel(-(1.0f + restitution) * velAlongNormal, -velAlongT1, -velAlongT2);
 
-        // A near-singular K (some contact-point geometries push a tangent
-        // axis's effective mass toward the normal axis's, even though the
-        // system is never exactly singular) blows up under direct
-        // inversion. Falling back to the decoupled (off-diagonals zeroed)
-        // solve there is exact in the well-conditioned limit and merely
-        // uncoupled - never unstable - in the ill-conditioned case.
+        // A near-singular K blows up under direct inversion, so fall back to the decoupled (off-diagonals
+        // zeroed) solve: exact when well-conditioned, merely uncoupled (never unstable) otherwise.
         glm::vec3 lambda;
         const float det = glm::determinant(K);
         if (std::abs(det) <= 0.01f * K[0][0] * K[1][1] * K[2][2]) {
@@ -233,16 +217,10 @@ namespace EC_PhysicsResolution
         if (tangentMag <= maxStaticFriction || tangentMag <= kEpsilon) {
             newTangentTotal = unclampedTangentTotal;
         } else {
-            // Friction cone exceeded: normal and tangent totals are solved
-            // SIMULTANEOUSLY as one pair (Millington's technique), not by
-            // clamping tangent and then patching normal against the
-            // already-stale pre-clamp estimate (which systematically
-            // suppressed the normal impulse pass over pass - confirmed by
-            // reverting it and reproducing the dancing/rotation bug again).
-            // With tangentTotal constrained to kineticCoefficient*Pn*direction,
-            // substituting into the normal-row equation
+            // Friction cone exceeded: solve the normal and tangent totals together (Millington). With
+            // tangentTotal fixed at kineticCoefficient*Pn*direction, the normal-row equation
             // K00*(Pn-cache.n) + K10*(tangentTotal.x-cache.t.x) + K20*(tangentTotal.y-cache.t.y) = targetDeltaVel.x
-            // and solving for Pn directly gives:
+            // gives Pn directly:
             const glm::vec2 direction = unclampedTangentTotal / tangentMag;
             const float coupling = K[1][0] * direction.x + K[2][0] * direction.y;
             const float denom2 = K[0][0] + kineticCoefficient * coupling;

@@ -23,9 +23,8 @@ public:
     // but a shown ray/cone should still render even while that toggle is off.
     bool hasVisualization() const { return m_Enabled || m_HasRay || m_HasCone; }
 
-    // Issue #30/#29 verification: visualize the last ray/cone query fired from script,
-    // drawn every frame regardless of the collider-wireframe toggle above until replaced
-    // by a newer call - independent, on-demand debug drawing, not lumped with m_Enabled.
+    // Visualizes the last ray/cone query fired from script, drawn every frame until replaced,
+    // independent of the collider-wireframe toggle.
     void showRay(const DebugRayVisualization& ray) { m_Ray = ray; m_HasRay = true; }
     void showCone(const DebugConeVisualization& cone) { m_Cone = cone; m_HasCone = true; }
 
@@ -36,15 +35,10 @@ private:
         const EC_DOD_Collider& collider, const EC_DOD_Transform& transform);
     void renderOBB(const glm::mat4& view, const glm::mat4& projection,
         const EC_DOD_Collider& collider, const EC_DOD_Transform& transform);
-    // Draws a small 3-axis cross marker at every contact point of every
-    // currently-colliding entity, read via EC_DOD_DebugContacts (published
-    // once per physics tick by EC_PhysicsSystem) - the same manifold points
-    // EC_PhysicsResolution actually resolves against, so this is a direct
-    // visual check of what the narrow phase is generating (point count,
-    // position, clustering) rather than just the coarse collider wireframes
-    // above. Tied to the same m_Enabled toggle. Deliberately does not read
-    // EC_PairManager directly - that's physics-thread-internal state; this
-    // component is the sanctioned cross-thread hand-off.
+    // Draws a small 3-axis cross at every contact point of every colliding entity, read from
+    // EC_DOD_DebugContacts (published per physics tick), so the narrow phase's real manifolds are visible
+    // (point count, position, clustering). Tied to m_Enabled. Doesn't read EC_PairManager, which is
+    // physics-thread-internal.
     void renderContactPoints(const glm::mat4& view, const glm::mat4& projection);
     void buildCrossLines(const glm::vec3& point, float halfSize, std::vector<glm::vec3>& outLines) const;
 

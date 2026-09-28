@@ -3,17 +3,9 @@
 #include <memory>
 #include <string>
 
-// Generic audio playback (Issue #112) - load/play sound assets, both fire-and-forget one-
-// shots (footsteps, impacts, UI clicks) and a persistent looping track (BGM), mixed through
-// author-adjustable volume categories ("music"/"sfx"/"voice"/...). Built on miniaudio
-// (single-header, public-domain) rather than middleware - see that issue's own notes for
-// why. Pure playback mechanism; a Lua script decides what to play and when (matches the
-// standing engine=mechanism/scripts=decide rule).
-//
-// Deliberately not exposed as a widely-included component/header (unlike e.g.
-// EC_DOD_Components.h) - EC_AudioSystem.h itself is safe to include anywhere (miniaudio.h
-// stays behind the pimpl below, entirely inside EC_AudioSystem.cpp), so nothing pulls in
-// that ~40k-line single header just to reach this class's public surface.
+// Sound playback: one-shots and a looping music track, mixed through volume categories.
+// Mechanism only; scripts decide what to play. miniaudio stays behind the pimpl in the .cpp so
+// this header is cheap to include.
 class EC_AudioSystem : public EC_System {
 public:
     EC_AudioSystem();
@@ -28,9 +20,8 @@ public:
     // first use if it doesn't exist yet (see setCategoryVolume) and defaults to full volume.
     void playSound(const std::string& path, float volume, const std::string& category);
 
-    // A single persistent BGM-style slot, not a general N-track music system (issue #112's
-    // first slice) - calling this again while a track is already loaded stops the previous
-    // one first. Always routed through the "music" category.
+    // A single persistent music slot: calling this again stops the previous track. Always routed
+    // through the "music" category.
     void playMusic(const std::string& path, float volume, bool loop);
     void stopMusic();
 

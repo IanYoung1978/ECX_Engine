@@ -7,10 +7,8 @@ public:
 	std::string windowName;
 	int OGLMinor = 0, OGLMajor = 0;
 	int DXVersion = 0;
-	// false/1 unless an <AA> tag is present in window.xml (see XML.h's Window parser) - see
-	// window.xml's own comment for why this engine deliberately doesn't request window-level
-	// MSAA. Previously uninitialized when no <AA> tag was present, an indeterminate-value
-	// bug independent of (but easy to conflate with) that same MSAA/blit issue.
+	// false/1 unless an <AA> tag is present in window.xml; see window.xml's comment for why window-level
+	// MSAA isn't requested.
 	bool multisampling = false;
 	int MSAALevel = 1;
 	// false unless <Resizable> is present in window.xml (see XML.h's Window parser) - a
