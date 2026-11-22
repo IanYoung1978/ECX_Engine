@@ -9,23 +9,17 @@
 #include "Terrain/EC_TerrainMeshData.h"
 #include "Procedural/EC_VolumeNode.h"
 
-// Off-thread chunk mesh generation, shaped like EC_DOD_LoadingWorker (see that class for
-// the precedent this mirrors): a long-lived EC_Task added once to the shared thread pool,
-// whose execute() loops on its own job queue for the life of the program. Unlike the
-// loading worker's single "ready to finalize" flag (suited to one batch finishing
-// together), chunks complete independently and at different times, so results are
-// reported through a queue the main thread drains one at a time each frame.
+// Off-thread chunk mesh generation: a long-lived EC_Task on the shared pool looping on its own job
+// queue, like EC_DOD_LoadingWorker. Chunks finish independently, so results go through a queue the
+// main thread drains one at a time per frame.
 class EC_VoxelChunkWorker : public EC_Task {
 public:
     EC_VoxelChunkWorker();
     ~EC_VoxelChunkWorker();
 
-    // Set once on the main thread before any chunk is scheduled (see
-    // EC_VoxelChunkSystem::init(), which runs the active game's generation script and
-    // retrieves the resulting tree via EC_Game::getVolumeRoot() before scheduling any
-    // chunks). EC_VolumeNode::evaluate() is pure/stateless, so reading this shared_ptr from
-    // execute()'s worker thread with no additional locking is safe once set - the same
-    // reasoning EC_Noise3D's use already relies on.
+    // Set once on the main thread before any chunk is scheduled (see EC_VoxelChunkSystem::init()).
+    // EC_VolumeNode::evaluate() is stateless, so the worker can read this shared_ptr without locking once
+    // set.
     void setVolumeRoot(EC_VolumeNodePtr root) { m_Root = std::move(root); }
 
     // Producer side (main thread): queue a chunk for generation.

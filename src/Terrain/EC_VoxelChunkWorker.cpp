@@ -71,12 +71,9 @@ void EC_VoxelChunkWorker::execute() {
             }
         }
 
-        // Hand the mesher the live volume tree (already known to be safe to evaluate from
-        // this worker thread - see setVolumeRoot's comment) so it can compute normals from
-        // the true continuous shape instead of differentiating the baked field's coarser
-        // trilinear reconstruction - see EC_MarchingCubesMesher.h's DensityFunction comment
-        // for why that distinction matters (it's what was producing black ridge-line
-        // artifacts). The field itself still drives isosurface placement unchanged.
+        // Give the mesher the live volume tree (safe to evaluate from this thread, see setVolumeRoot) so
+        // normals come from the true continuous shape rather than the baked field's coarser reconstruction,
+        // which caused black ridge-line artifacts. The field still places the isosurface.
         EC_MarchingCubesMesher::DensityFunction analyticDensity;
         if (m_Root) {
             auto root = m_Root;

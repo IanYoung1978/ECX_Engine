@@ -82,11 +82,6 @@ void ShaderManager::finaliseShaders()
 std::shared_ptr<Shader> ShaderManager::finaliseShader(const std::string& vert, const std::string& frag)
 {
 	std::lock_guard<std::recursive_mutex> lock(m_Mutex);
-	// if this is being called then data should have been loaded from file
-	// if find shader == false create shader
-	// if find shader data == false log error
-	// load shader from memory to gpu and store
-	// return shader
 	auto s = getShader(vert, frag);
 	if (s == nullptr)
 	{

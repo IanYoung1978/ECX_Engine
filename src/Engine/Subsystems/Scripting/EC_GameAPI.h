@@ -34,12 +34,10 @@ namespace ScriptAPI
         void clearParent(unsigned int childID);
 
         void setExposure(float exposure);
-        // Issue #96 - scales the derived (from active scene lights, not authored) ambient
-        // colour. See GL_Deferred_Renderer.h's m_DerivedAmbientColour/m_AmbientScale.
+        // Scales the ambient colour derived from the active scene lights (see GL_Deferred_Renderer.h).
         void setAmbientScale(float scale);
         void toggleDebug();
-        // Issue #108. Requests a window/render resolution change - see Game.h's
-        // setResolution() for why this goes through a command rather than a direct call.
+        // Requests a window/render resolution change through a command (see Game.h's setResolution()).
         void setResolution(int width, int height);
         void toggleFullscreen();
         void maximizeWindow();
@@ -48,16 +46,11 @@ namespace ScriptAPI
         void loadScene(const std::string& alias);
         void unloadScene(const std::string& alias);
         void activateScene(const std::string& alias);
-        // Issue #130. Returns an invalid EntityAPI (getID() == 0) on any failure - unknown
-        // alias, or the prefab file failed to load - matching getEntityByName's existing
-        // not-found convention. destroyEntity takes a raw numeric ID, matching setParent/
-        // clearParent's existing convention for cross-entity operations.
+        // Returns an invalid EntityAPI (getID() == 0) if the alias is unknown or the prefab fails to load.
+        // destroyEntity takes a raw ID, like setParent/clearParent.
         EntityAPI spawnEntity(const std::string& alias, float x, float y, float z);
         void destroyEntity(unsigned int entityId);
-        // Issue #129. Already used internally (e.g. EC_VoxelChunkSystem gating chunk
-        // visibility) but never bound - without this, scripts calling loadScene/unloadScene/
-        // activateScene had no way to query current state and had to track their own
-        // bookkeeping in setString/setFloat script vars instead.
+        // Scene state queries, so scripts don't have to track it themselves.
         bool isSceneActive(const std::string& alias);
 
         void setUIText(unsigned int entityID, const std::string& text);
@@ -74,64 +67,47 @@ namespace ScriptAPI
         int getRecentLogCount();
         std::string getRecentLog(int index);
 
-        // Per-background-task (Physics, Scripting, Audio) real-updates-per-second, for
-        // diagnosing which of the engine's fixed-timestep threads is actually the one
-        // throttled rather than guessing from the main thread's own getFPS() alone - see
-        // EC_SystemTask::getTickRate()'s own comment. Same paginated-getter pattern as
-        // getRecentLogCount/getRecentLog above.
+        // Real updates per second for each background task (Physics, Scripting, Audio), to see which
+        // fixed-timestep thread is falling behind (see EC_SystemTask::getTickRate()). Paginated getters like
+        // getRecentLogCount/getRecentLog.
         int getThreadCount();
         std::string getThreadName(int index);
         float getThreadFPS(int index);
         void setMouseCaptured(bool captured);
         void log(const std::string& message);
 
-        // Issue #129. Polling-style input, distinct from EventAPI's event-driven
-        // getMouseMotionX/Y and mouseButtonPressed/Held/Released (which only report
-        // something inside a handler firing this frame) - lets an update(entity, dt) loop
-        // just ask "where's the mouse / is this button down right now" without waiting for
-        // an event. button matches EventAPI::getMouseButton()'s own int-cast-of-MouseButton
-        // convention (0=LMB, 1=RMB, 2=Middle, 3=MB4, 4=MB5).
+        // Polling-style input for update() loops, unlike EventAPI's handler-only getters. button matches
+        // EventAPI::getMouseButton() (0=LMB, 1=RMB, 2=Middle, 3=MB4, 4=MB5).
         glm::vec2 getMousePosition();
         bool isMouseButtonPressed(int button);
 
-        // Issue #30. Returns all entities the ray intersects (not just the nearest) unless
-        // firstHitOnly is set. Caches the result for the paginated getters below - avoids
-        // marshaling a vector-of-struct across the Lua boundary, matching the
-        // getRecentLogCount/getRecentLog pattern already used for the debug overlay.
+        // Returns all entities the ray intersects unless firstHitOnly is set. The result is cached for the
+        // paginated getters below rather than marshaled across the Lua boundary as a vector of structs.
         int rayQuery(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance, bool firstHitOnly = false);
         EntityAPI getRayHitEntity(int index);
         glm::vec3 getRayHitPosition(int index);
         glm::vec3 getRayHitNormal(int index);
         float getRayHitDistance(int index);
 
-        // Issue #29. Entities whose shape overlaps the cone, restricted to castsShadow ==
-        // true geometry by default. checkOcclusion opts into additionally requiring
-        // unobstructed line-of-sight to the apex (a candidate stacked behind a closer one
-        // is excluded) - independent of containment, not fused into it. Same caching
-        // pattern as rayQuery above.
+        // Entities whose shape overlaps the cone, castsShadow geometry only by default. checkOcclusion
+        // additionally requires an unobstructed line of sight to the apex. Cached like rayQuery.
         int coneQuery(float ax, float ay, float az, float dx, float dy, float dz, float halfAngleDegrees, float maxDistance, bool castsShadowOnly = true, bool checkOcclusion = false);
         EntityAPI getConeHitEntity(int index);
         glm::vec3 getConeHitPosition(int index);
         float getConeHitDistance(int index);
 
-        // Visualizes the last ray/cone query (Issues #30/#29) - a debug draw only, no
-        // effect on collision/query behaviour. Persists until replaced by another call.
+        // Debug draw of the last ray/cone query; no effect on collision or queries. Persists until replaced.
         void showDebugRay(float ox, float oy, float oz, float dx, float dy, float dz, float maxDistance);
         void showDebugCone(float ax, float ay, float az, float dx, float dy, float dz, float halfAngleDegrees, float maxDistance);
 
-        // Re-runs TerrainGeneration.lua and re-schedules every voxel chunk against the new
-        // shape - see EC_VoxelChunkSystem::requestRegenerate(). Safe to call from any
-        // script context; only takes effect on the next chunk-system update tick.
+        // Re-runs the terrain generation script and reschedules every chunk (see
+        // EC_VoxelChunkSystem::requestRegenerate()); takes effect on the next chunk-system update.
         void regenerateTerrain();
 
-        // Real capsule-vs-scene-geometry overlap query (see EC_Game::queryCapsule) -
-        // includes real Mesh/terrain collision via EC_CollisionChecks::CapsuleVsMesh, not
-        // a raycast stand-in. Static overlap test, not a sweep: getCapsuleHitDistance
-        // returns penetration depth, and getCapsuleHitNormal points away from the capsule
-        // toward whatever it's touching. Same caching pattern as rayQuery/coneQuery above.
-        // excludeEntityId skips one entity (its own ID, typically) so a capsule querying
-        // its own surroundings doesn't find itself - pass 0 (INVALID_ENTITY) for no
-        // exclusion.
+        // Capsule-vs-scene overlap (see EC_Game::queryCapsule), including Mesh/terrain. A static overlap
+        // test, not a sweep: getCapsuleHitDistance is penetration depth and getCapsuleHitNormal points away
+        // from the capsule. Cached like rayQuery/coneQuery. excludeEntityId skips one entity (typically the
+        // caller's own ID); 0 excludes none.
         int capsuleQuery(float ax, float ay, float az, float bx, float by, float bz, float radius,
             bool firstHitOnly = false, unsigned int excludeEntityId = 0);
         EntityAPI getCapsuleHitEntity(int index);
@@ -139,9 +115,8 @@ namespace ScriptAPI
         glm::vec3 getCapsuleHitNormal(int index);
         float getCapsuleHitDistance(int index);
 
-        // Issue #112. See EC_AudioSystem.h for what each call does - category is any
-        // author-chosen name ("sfx", "music", ...) plus the reserved "master" for the
-        // overall engine volume.
+        // See EC_AudioSystem.h. category is any author-chosen name ("sfx", "music", ...) plus the
+        // reserved "master".
         void playSound(const std::string& path, float volume, const std::string& category);
         void playMusic(const std::string& path, float volume, bool loop);
         void stopMusic();

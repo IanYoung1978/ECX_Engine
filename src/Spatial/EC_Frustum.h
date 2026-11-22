@@ -3,8 +3,7 @@
 #include <array>
 #include "Engine/Subsystems/CollisionSystems/EC_CollisionShapes.h"
 
-// Frustum-plane extraction and testing. No frustum-plane infrastructure existed
-// anywhere in the engine before this - cameras only ever built a view matrix.
+// Frustum-plane extraction and testing.
 namespace EC_Frustum
 {
     // Extracts the 6 frustum planes (left, right, bottom, top, near, far) from a

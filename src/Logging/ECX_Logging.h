@@ -53,12 +53,9 @@ namespace LOGGING
 			outputFilename = output;
 		}
 		void printToFile();
-		// For a dying process (CRT assertion / unhandled exception - see ECX_CrashHook.h):
-		// appends `message` as a CRITICAL entry, then immediately writes the whole log to
-		// file. Waits briefly for the log's mutex but proceeds without it if it can't get
-		// it - the crashing thread may be the one holding it (e.g. an assertion fired inside
-		// LogMessage itself), and hanging there would lose the very report this exists to
-		// save. The process is about to die anyway, so best-effort beats deadlock.
+		// For a dying process (see ECX_CrashHook.h): appends `message` as a CRITICAL entry and writes the
+		// whole log to file. Waits briefly for the log's mutex, then proceeds without it, since the crashing
+		// thread may hold it and hanging would lose the report.
 		void logCrashAndFlush(const std::string& message);
 		std::deque<std::string> GetRecentPlainLogs(size_t maxLines) const;
 	};

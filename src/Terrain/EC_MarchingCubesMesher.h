@@ -9,41 +9,21 @@
 // dependency - see the "Marching-cubes voxel terrain mesher" plan for the full design.
 namespace EC_MarchingCubesMesher {
 
-// Optional continuous density function, in the SAME local coordinate space as the field
-// passed to polygonise (a caller with a chunk-origin offset, e.g. EC_VoxelChunkWorker, is
-// responsible for folding that offset into the closure). When supplied, normals are
-// computed as a small-epsilon central difference of THIS function directly, instead of a
-// central difference of the field's own (coarser, cell-quantized) trilinear interpolation
-// - see this header's `polygonise` comment for why that distinction matters.
+// Optional continuous density function in the same local space as the field (fold any chunk-origin
+// offset into the closure). When given, normals are a central difference of this function rather than
+// of the field's coarser trilinear interpolation (see polygonise).
 using DensityFunction = std::function<float(const glm::vec3&)>;
 
-// Walks the field's 32^3 interior cells and emits a triangle soup (no vertex welding -
-// each triangle gets 3 fresh vertices). Normals come from a central-difference gradient,
-// which is why the field's 1-sample halo matters even for cells right at the interior
-// boundary.
-//
-// analyticDensity (optional): the field itself is already a discretization of some
-// underlying continuous shape (typically an EC_VolumeNode tree, baked once per chunk into
-// a grid of samples) - fine for placing the isosurface, but differentiating the field's
-// own piecewise-trilinear reconstruction of that shape adds cell-boundary noise that isn't
-// in the true shape at all. That noise is harmless where the surface is nearly flat, but
-// right at a sharp ridge/crest - where the true analytic gradient is still well-defined and
-// smoothly-varying, just changing quickly - it was enough to occasionally rotate a
-// vertex's computed normal far enough to clip against the light, rendering as a scatter of
-// near-black triangles running along ridgelines. Differentiating the original continuous
-// function directly (when the caller can provide it) sidesteps that discretization noise
-// entirely, since the true shape has no such cell-boundary artifacts. Omit (default
-// nullptr) to fall back to the original field-based gradient - e.g. for a caller with only
-// a baked field and no live volume tree to hand back.
+// Walks the field's interior cells and emits a triangle soup (no welding); normals are
+// central-difference gradients, hence the halo. analyticDensity (optional) is the original continuous
+// function, which avoids cell-boundary noise in the baked gradient that can flip normals along
+// ridgelines. Omit it to use the field gradient.
 EC_TerrainMeshData polygonise(const EC_DensityField& field, float isoLevel,
     const DensityFunction& analyticDensity = nullptr);
 
-// Produces `lodCount` variants: LOD 0 is polygonise(field, isoLevel) unchanged; each
-// subsequent LOD box-downsamples the field by a factor of 2 (halo included) before
-// polygonising, then drops small connected components (a triangle-count-based "clutter"
-// filter) from that LOD's output. Coarser LODs are listed later in the returned vector.
-// analyticDensity, if given, is reused unchanged for every LOD's normals (it describes the
-// same true shape regardless of how coarsely the field approximates it at a given LOD).
+// Produces `lodCount` variants: LOD 0 is polygonise(field, isoLevel); each later LOD
+// box-downsamples the field by 2 (halo included), polygonises, then drops small connected components.
+// Coarser LODs come later. analyticDensity, if given, is reused for every LOD's normals.
 std::vector<EC_TerrainMeshData> generateLODs(const EC_DensityField& field, float isoLevel, int lodCount = 3,
     const DensityFunction& analyticDensity = nullptr);
 

@@ -42,11 +42,8 @@ void EC_GameScene::activate()
     auto& manager = EC_DOD_EntityManager::getInstance();
     for (EntityID entity : m_Entities)
     {
-        // sceneState only - NOT `active` (see EC_DOD_EntityInfo's comment). `active` is a
-        // gameplay-level toggle a script may have set deliberately (e.g. a debug light-
-        // cycling feature); scene activation must not silently overwrite it. Reactivating
-        // a scene whose entities were only ever deactivated (never marked for deletion)
-        // reuses the same components directly - no reconstruction needed.
+        // sceneState only, not `active` (a script's own toggle; see EC_DOD_EntityInfo). Reactivating a
+        // scene whose entities were only deactivated reuses the same components.
         if (manager.isAlive(entity) && manager.hasComponent<EC_DOD_EntityInfo>(entity))
             manager.getComponent<EC_DOD_EntityInfo>(entity).sceneState = EC_SceneLifecycleState::Active;
     }
@@ -65,11 +62,9 @@ void EC_GameScene::deactivate()
 
 void EC_GameScene::markForDeletion()
 {
-    // One-way door (see EC_SceneLifecycleState's own comment) - called only for scenes
-    // with unloadondeactivate=true, right after deactivate(). Entities are already
-    // excluded from every subsystem's per-frame queries the instant they go Inactive;
-    // this just additionally schedules them for the deferred sweep's actual destruction
-    // once the quarantine period has elapsed (see EC_SceneManager's own comments).
+    // One-way (see EC_SceneLifecycleState): called only for scenes with unloadondeactivate=true, right
+    // after deactivate(). Entities are already excluded from queries; this schedules them for the
+    // deferred sweep's destruction after the quarantine.
     std::lock_guard<std::mutex> lock(m_Mutex);
     auto& manager = EC_DOD_EntityManager::getInstance();
     for (EntityID entity : m_Entities)

@@ -50,31 +50,16 @@ namespace {
         return corners;
     }
 
-    // Small, fixed padding on the X/Y (texel-density-determining) axes, just enough to
-    // cover a caster whose center sits right at the frustum edge but whose geometry pokes
-    // a little past it. Deliberately NOT m_ShadowQueryRadius-sized - padding X/Y directly
-    // widens the box and divides the same tile resolution across more world space, so a
-    // large XY margin quietly destroys shadow resolution instead of catching more casters.
+    // Small fixed padding on the X/Y axes, just enough to catch a caster at the frustum edge. Not
+    // m_ShadowQueryRadius-sized: padding X/Y spreads the same tile resolution over more world space and
+    // costs shadow resolution.
     constexpr float kShadowBoxXYMargin = 3.0f;
-    // Same reasoning as the XY margin above, applied to depth: catches casters just beyond
-    // the visible frustum's near/far without blowing the box's Z range out to hundreds of
-    // units. A too-large Z margin doesn't cost texel density, but it does wreck the shadow
-    // map's DEPTH PRECISION (the whole range gets crammed into the same fixed-point depth
-    // buffer), which shows up as false self-shadowing/acne once the existing polygon-offset
-    // bias (tuned for the old ~30-unit range) is no longer big enough relative to how
-    // coarsely a much larger range quantizes.
+    // Same as the XY margin, for depth: catches casters just beyond the frustum's near/far. Keep it
+    // small; a large Z range costs depth precision and brings back acne.
     constexpr float kShadowBoxZMargin = 20.0f;
 
-    // Bounding-sphere fit, not a raw AABB of the transformed corners. An AABB's own size
-    // depends on the corners' orientation relative to the light's axes, so it changes as
-    // the camera rotates in place (no translation needed) - same frustum, different
-    // projected extent - which makes the box's size, its texel density, and any bias tuned
-    // against that size all drift with camera orientation. A frustum's bounding SPHERE has
-    // a radius that depends only on fov/aspect/near/far (all orientation-invariant), so a
-    // box sized to that sphere (same half-extent on every axis) stays a constant size no
-    // matter which way the camera looks - only its center moves. X/Y center is then snapped
-    // to whole shadow-map texels so the box doesn't sub-texel-jitter as the camera moves
-    // (standard stable-fit stabilization).
+    // Bounding-sphere fit rather than an AABB of the transformed corners, so the box size doesn't
+    // change as the camera rotates. The X/Y centre is snapped to whole shadow texels to stop jitter.
     ShadowBoxBounds computeLightSpaceBounds(
         const std::array<glm::vec3, 8>& corners, const glm::mat4& lightView, float zMargin, int tileSize)
     {
@@ -246,8 +231,8 @@ void GL_Deferred_Renderer::init(std::shared_ptr<Window> window, ECXMessenger& me
         "data/assets/shaders/PointShadowLightPass.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "failed to load point shadow light shader", LOGGING::LogLevel::CRITICAL);
-    // Issue #28 receivesShadow-exempt shaders: paired with shadow.vert (bare MVP transform,
-    // no varyings) since these draw real mesh geometry rather than a full-screen quad.
+    // Receives-shadow-exempt shaders: paired with shadow.vert (bare MVP, no varyings) since these draw
+    // real mesh geometry, not a full-screen quad.
     if (!m_ExemptDirLightShader.loadShader("data/assets/shaders/shadow.vert", "data/assets/shaders/ShadowExemptDirLightPass.frag"))
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "failed to load exempt directional shadow shader", LOGGING::LogLevel::CRITICAL);
@@ -503,12 +488,8 @@ void GL_Deferred_Renderer::lightPass(EC_GameScene& scene)
 
         updateLights(scene);
 
-        // Real Cook-Torrance/GGX PBR, same as the shadow-casting path (just with no
-        // shadow-map term - visibility is implicitly 1.0), one additive full-screen-quad
-        // draw per light rather than the old lightpass.frag's single-shader UBO-array
-        // batch. That also fixes a real bug the old batched approach had: only
-        // m_Directionals[0] was ever lit, silently dropping any additional non-shadow
-        // directional lights - every light here gets its own draw, so there's no cap.
+        // Cook-Torrance/GGX PBR like the shadow-casting path, with no shadow term (visibility 1.0): one
+        // additive full-screen-quad draw per light, so there is no cap on non-shadow lights.
         for (const DirLightData& light : m_Directionals) {
             m_NonShadowDirLightShader.activate();
             m_FrameBuffer.LightingPass(m_NonShadowDirLightShader);
@@ -572,10 +553,8 @@ void GL_Deferred_Renderer::updateLights(EC_GameScene& scene)
     for (EntityID entityID : scene.getLights()) {
         if (!manager.isAlive(entityID)) continue;
         if (!manager.hasComponent<EC_DOD_Light>(entityID)) continue;
-        // A deactivated light (EntityAPI::deactivate(), e.g. a debug light-cycling script)
-        // must stop contributing entirely, and so must one whose scene is no longer active
-        // - matches the same active+sceneState check EC_BroadPhase's broad-phase build
-        // already does. See EC_DOD_EntityInfo's comment for why they're separate.
+        // A deactivated light, or one in an inactive scene, must not contribute; same active+sceneState
+        // check as EC_BroadPhase.
         if (manager.hasComponent<EC_DOD_EntityInfo>(entityID)) {
             const auto& info = manager.getComponent<EC_DOD_EntityInfo>(entityID);
             if (!info.active || info.sceneState != EC_SceneLifecycleState::Active) continue;
@@ -677,14 +656,10 @@ void GL_Deferred_Renderer::bakeStaticShadows(EC_GameScene& scene)
             glm::mat4 shadowTransform;
             ShadowBoxBounds bounds;
             int drawn = shadowDirPass(id, m_ShadowDirs[i], allEntities, camView, camPos, camFov, aspect, camNear, shadowTransform, bounds);
-            // bakeStaticShadows() runs exactly once per scene (EC_SceneManager, right as it
-            // finishes loading) - permanently caching a bake where nothing actually drew
-            // (mesh handles not finalized yet, this early after scene load) would leave the
-            // light silently unshadowed forever with no way to retry. Leaving it out of the
-            // baked set here means shadowLightingPass()'s per-frame loop falls through to the
-            // ordinary dynamic-light soft-bake path instead (which does retry every frame) -
-            // effectively degrading a failed static bake to dynamic rather than losing the
-            // shadow outright.
+            // bakeStaticShadows() runs once per scene, right after load. If nothing was actually drawn (mesh
+            // handles not finalized yet), don't record a bake: leaving the light out of the baked set lets
+            // shadowLightingPass() fall back to the per-frame dynamic path instead of leaving it unshadowed
+            // forever.
             if (m_ShadowAtlas.hasTile(id) && drawn > 0)
             {
                 m_BakedStaticDirLights.insert(id);
@@ -766,11 +741,8 @@ int GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, c
     up[1] = eye[2] - eye[0];
     up[2] = eye[0] - eye[1];
 
-    // Eye is offset from the camera (not the world origin) along the light's direction -
-    // only fixes *where* the view matrix is anchored, not its orientation, which still
-    // comes entirely from `eye`/`up` as before. See "Directional shadow: camera-following
-    // frustum fit" plan - the old glm::lookAt(eye, glm::vec3(0.0f), up) anchored the whole
-    // frustum at the world origin regardless of where the camera or its content actually was.
+    // The eye is offset from the camera along the light direction (not the world origin), which
+    // anchors the view matrix near the camera; orientation still comes from eye/up.
     glm::mat4 view = glm::lookAt(camPos + eye * m_ShadowQueryRadius, camPos, up);
 
     auto corners = computeCameraFrustumCorners(camView, camFov, aspect, camNear, m_RenderConfig.dirShadowDistance);
@@ -783,17 +755,8 @@ int GL_Deferred_Renderer::shadowDirPass(EntityID lightID, DirLightData& light, c
     glm::mat4 projection = glm::ortho(bounds.minX, bounds.maxX, bounds.minY, bounds.maxY, -bounds.maxZ, -bounds.minZ);
     outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
-    // Bias lives entirely on the READ side now (DirLightShadowPBR.frag's computeOcclusion,
-    // slope-scaled against the receiving surface - see learnopengl.com/Advanced-Lighting/
-    // Shadows/Shadow-Mapping, which uses no glPolygonOffset at all for exactly this reason).
-    // No write-side glPolygonOffset here, and no front-face culling either - front-face
-    // culling is ITSELF a (cruder, geometric) bias technique: it deliberately records the
-    // far/back surface instead of the near one as an implicit offset. Stacking it on top of
-    // the new read-side bias is the same double-biasing mistake as the glPolygonOffset one,
-    // and the reference tutorial explicitly warns front-face culling "may still give
-    // incorrect results" for a caster close to its receiver - exactly the contact-point gap
-    // seen here. Render normally (GL_BACK, the frame's default) and let the read-side bias
-    // be the only bias mechanism.
+    // Bias is applied only on the read side (DirLightShadowPBR.frag's computeOcclusion, slope-scaled).
+    // No glPolygonOffset and no front-face culling here: either would double-bias.
     m_ShadowAtlas.bindTileForWriting(lightID);
 
     int drawn = renderShadowCasters(view, projection, entities);
@@ -825,13 +788,9 @@ int GL_Deferred_Renderer::shadowSpotPass(EntityID lightID, SpotLightData& light,
     glm::mat4 projection = glm::perspective(2.0f * light.cutoffAngle, 1.0f, m_SpotShadowNearPlane, m_SpotShadowFarPlane);
     outShadowTransform = m_ShadowAtlas.getTileBiasMatrix(lightID) * projection * view;
 
-    // No front-face culling here (unlike the original) - for a near-overhead spot and a
-    // short caster, the "back" (far-from-light) face front-culling would record is the
-    // object's underside, nearly coplanar with the floor it's supposedly occluding -
-    // producing almost no usable depth difference to compare against, which reads as no
-    // shadow at all. Same lesson as the directional-light fix earlier this session.
-    // glPolygonOffset stays - a genuinely different, complementary technique (slope-scaled
-    // depth-buffer bias, not "which surface gets recorded").
+    // No front-face culling: for a near-overhead spot and a short caster, the far face it would record
+    // is nearly coplanar with the floor and gives no usable depth difference. glPolygonOffset stays as
+    // a complementary slope-scaled bias.
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(2.0, 2.0);
     m_ShadowAtlas.bindTileForWriting(lightID);
@@ -865,14 +824,9 @@ void GL_Deferred_Renderer::shadowPointPass(EntityID lightID, LightData& light, c
         glm::lookAt(lightPos, lightPos + glm::vec3(0, 0,-1), glm::vec3(0,-1, 0))
     };
 
-    // No write-side glPolygonOffset here - point_shadow.frag writes gl_FragDepth manually
-    // (linear light-distance / FarPlane), which overrides the hardware-rasterized depth
-    // glPolygonOffset would have biased, so it had zero effect. No front-face culling
-    // either, for the same reason removed from the directional/spot passes: recording the
-    // far (light-facing-away) surface instead of the near one is itself a crude geometric
-    // bias, and for a caster close to its receiver that gap reads as the shadow detaching
-    // from the object. Render normally (GL_BACK, the frame's default) and let the read-side
-    // slope-scaled bias in PointShadowLightPass.frag's computeOcclusion be the only bias.
+    // No write-side glPolygonOffset (point_shadow.frag writes gl_FragDepth itself, so it has no effect)
+    // and no front-face culling (a crude bias that detaches the shadow from close casters). Render
+    // normally and let PointShadowLightPass.frag's read-side slope-scaled bias be the only bias.
     auto& manager = EC_DOD_EntityManager::getInstance();
 
     for (int face = 0; face < 6; face++)
@@ -1055,13 +1009,10 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             camera.farPlane);
         glm::mat4 camView = camera.viewMatrix;
 
-        // Shadow casters are never narrowed by camera visibility - an entity fully
-        // outside the camera's frustum can still cast a shadow onto something that is
-        // visible. Each shadow pass gets only the light's own influence radius.
-        // Directional lights have no meaningful world position or cutoff radius, so
-        // this queries around the camera instead, purely as a bounding heuristic (not
-        // a visibility test). Spot/point lights use their cached per-light cutoff
-        // radius (EC_DOD_Light::cutoffRadius) instead.
+        // Shadow casters aren't narrowed by camera visibility: an entity outside the frustum can still
+        // shadow something visible. Each pass gets only the light's influence radius; directional lights have
+        // no position or radius, so they query around the camera as a bounding heuristic. Spot/point lights
+        // use EC_DOD_Light::cutoffRadius.
         std::vector<EntityID> activeAtlasLights;
         activeAtlasLights.insert(activeAtlasLights.end(), m_ShadowDirIDs.begin(), m_ShadowDirIDs.end());
         activeAtlasLights.insert(activeAtlasLights.end(), m_ShadowSpotIDs.begin(), m_ShadowSpotIDs.end());
@@ -1094,16 +1045,8 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             }
             else
             {
-                // Always re-render for dynamic=true lights - no soft-bake caching. A caching
-                // scheme was attempted here (skip re-render when the camera's view is still
-                // covered by the last box and nothing nearby is moving) but proved unsafe in
-                // practice: the caster query can stabilize its *count* before the underlying
-                // entities are actually fully populated (mesh handles finalize a frame or two
-                // behind broad-phase indexing), so a render could report a plausible non-zero
-                // "drew something" result while still missing some of the real casters -
-                // caching that wrong result then never gets corrected, since nothing in a
-                // static scene invalidates it afterward. Unconditional per-frame rendering is
-                // always correct; revisit caching later with a more robust readiness check.
+                // Always re-render dynamic lights. A cache was tried, but the caster query's count can settle
+                // before every entity's mesh handle is finalized, and a wrong cached result is never corrected.
                 shadowDirPass(id, m_ShadowDirs[i], dirCasters, camView, spatial.position, camera.fov, aspect, camera.nearPlane, shadowTransform, activeBounds);
             }
             if (!m_ShadowAtlas.hasTile(id)) continue; // atlas full, skip this light entirely this frame
@@ -1120,9 +1063,8 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             // into the right NDC offset - this varies with the camera-fit frustum, unlike the
             // old fixed ~30-unit box, so it can't be a shader constant.
             m_ShadowDirLightShader.setUniform("ShadowDepthRange", activeBounds.maxZ - activeBounds.minZ);
-            // Author-configurable (RenderConfig::dirShadowBiasScale, GraphicsSetting.xml's
-            // <DirShadow biasScale="...">) - issue #97. See that field's own comment for why
-            // a fixed shader constant doesn't generalize across scenes at different scales.
+            // Author-configurable via RenderConfig::dirShadowBiasScale (GraphicsSetting.xml <DirShadow
+            // biasScale>).
             m_ShadowDirLightShader.setUniform("BiasScale", m_RenderConfig.dirShadowBiasScale);
             m_ShadowDirLightShader.bindTexture("shadowMap", 5, m_ShadowAtlas.getDepthTexture());
             renderQuad();
@@ -1134,12 +1076,9 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
         for (size_t i = 0; i < m_ShadowSpots.size(); i++)
         {
             EntityID id = m_ShadowSpotIDs[i];
-            // A spot's influence is a cone, not a sphere - queryEntitiesNear's sphere-center
-            // test both over-includes (candidates behind the light within the radius) and
-            // under-includes (a large caster whose bounds cross into the cone but whose own
-            // center falls outside it). queryEntitiesInCone runs the exact GJK cone-vs-shape
-            // test EC_BroadPhase already uses for interaction cone checks (see
-            // RayConeClickTest.lua), so partial overlaps are correctly included.
+            // A spot's influence is a cone, so a sphere test over- and under-includes casters.
+            // queryEntitiesInCone runs the exact GJK cone-vs-shape test EC_BroadPhase uses for interaction
+            // cones.
             auto nearby = queryEntitiesInCone(glm::vec3(m_ShadowSpots[i].position), glm::vec3(m_ShadowSpots[i].direction),
                 m_ShadowSpots[i].cutoffAngle, m_SpotShadowFarPlane);
             glm::mat4 shadowTransform;
@@ -1148,14 +1087,8 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
                 shadowTransform = m_BakedSpotShadowTransforms.at(id);
             else
             {
-                // Always re-render for dynamic=true lights - no soft-bake caching. See the
-                // identical note in the directional loop above for why: a caching scheme
-                // here proved unsafe in practice (a render can report a plausible non-zero
-                // "drew something" result while still missing some real casters, if the
-                // caster query's count stabilizes before every entity's mesh handle actually
-                // finalizes - and that wrong result then never self-corrects). Unconditional
-                // per-frame rendering is always correct; revisit caching later with a more
-                // robust readiness check.
+                // Always re-render dynamic lights (see the note in the directional loop above): a cached result
+                // can miss casters whose mesh handles haven't finalized yet and is never corrected.
                 shadowSpotPass(id, m_ShadowSpots[i], nearby, shadowTransform);
             }
             if (!m_ShadowAtlas.hasTile(id)) continue; // atlas full, skip this light entirely this frame
@@ -1184,11 +1117,7 @@ void GL_Deferred_Renderer::shadowLightingPass(EC_GameScene& scene)
             bool baked = m_BakedStaticPointLights.count(id) != 0;
             if (!baked)
             {
-                // Always re-render for dynamic=true lights - no soft-bake caching. See the
-                // identical note in shadowLightingPass()'s directional/spot loops for why:
-                // a caching scheme here has the same unexercised risk (a render could report
-                // success while still missing casters whose mesh handles hadn't finished GPU
-                // upload yet, and that wrong result would never self-correct afterward).
+                // Always re-render dynamic lights (see the note in shadowLightingPass()'s directional/spot loops).
                 shadowPointPass(id, m_ShadowPoints[i], nearby);
             }
             if (!m_PointShadowPool.hasSlot(id)) continue; // pool full, skip this light entirely this frame
@@ -1273,11 +1202,8 @@ bool GL_Deferred_Renderer::captureFrame(const std::string& target, std::vector<u
     std::vector<unsigned char> pixels;
 
     if (target.empty() || target == "final") {
-        // Reading GL_BACK here (rather than the real backbuffer post-swap, which the
-        // issue's wording suggested) is the same pixels with none of the "just-swapped
-        // buffer contents are undefined on most drivers" fragility - this is what a
-        // viewer would see the instant it appears on screen, skybox/debug overlay/UI
-        // included (all drawn to this same default framebuffer before the swap).
+        // Read GL_BACK rather than the post-swap backbuffer (undefined on most drivers): it's the same
+        // pixels a viewer sees, with skybox, debug overlay and UI included.
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glReadBuffer(GL_BACK);
         pixels.resize(pixelCount * kChannels);

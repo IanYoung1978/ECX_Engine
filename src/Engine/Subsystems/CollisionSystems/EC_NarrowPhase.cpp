@@ -11,14 +11,11 @@
 void EC_NarrowPhase::init(ECXMessenger& messenger)
 {
     m_Messenger = &messenger;
-    initCollisionDispatchTable();  // Add this line
+    initCollisionDispatchTable();
 }
 
-// Purely geometric: detects overlap and caches the resulting manifold
-// (contact points, normal, penetration depth) on the pair for the physics
-// system to consume later this tick. Computes no impulses/forces at all -
-// that's entirely the physics system's job (see EC_PhysicsSystem), which
-// iterates the same pairs afterward via EC_PairManager::getAllPairs().
+// Purely geometric: detects overlap and caches the manifold (points, normal, depth) on the pair for
+// the physics system later this tick. Computes no impulses or forces.
 void EC_NarrowPhase::narrowPhaseCollisionDetection()
 {
     // For each pair in the pair manager, perform narrow phase collision detection
@@ -56,11 +53,9 @@ void EC_NarrowPhase::narrowPhaseCollisionDetection()
         if (entityManager.hasComponent<EC_DOD_MeshCollisionData>(pair.body_B))
             meshDataB = entityManager.getComponent<EC_DOD_MeshCollisionData>(pair.body_B);
 
-        // A Kinematic body moving while already mid-contact (e.g. walking across uneven
-        // terrain) needs a fresh BEGIN to give script another chance to react to the new
-        // contact - Dynamic bodies don't need this at all, since EC_PhysicsSystem already
-        // re-resolves every currently-colliding pair every tick regardless of BEGIN/END.
-        // See EC_CollisionPair's own comment on the fields this reads/writes.
+        // A Kinematic body moving while already in contact needs a fresh BEGIN so script can react to the
+        // new contact; Dynamic bodies are re-resolved every tick anyway. See EC_CollisionPair for the fields
+        // used.
         auto isKinematic = [&entityManager](EntityID e) {
             return entityManager.hasComponent<EC_DOD_RigidBody>(e) &&
                 entityManager.getComponent<EC_DOD_RigidBody>(e).bodyType == EC_BodyType::Kinematic;
@@ -178,10 +173,8 @@ void EC_NarrowPhase::initCollisionDispatchTable()
                     OBB{b.center, b.extents, orientB}, sb.position, m);
             }},
 
-        // OBB vs AABB (AABB never rotates, so treat it as an identity-oriented
-        // OBB and reuse the same SAT manifold code - OBBVsOBB already
-        // self-orients its normal body_A -> body_B, no extra sign-flip needed
-        // here unlike the Sphere pairs above).
+        // AABB never rotates, so treat it as an identity-oriented OBB; OBBVsOBB already orients its
+        // normal body_A -> body_B.
         {makeKey(EC_DOD_Collider::Type::OBB, EC_DOD_Collider::Type::AABB),
             [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 glm::mat3 orientA = glm::mat3(glm::normalize(sa.right),
@@ -332,11 +325,9 @@ void EC_NarrowPhase::initCollisionDispatchTable()
                 return hit;
             }},
 
-        // Capsule vs Mesh - real triangle-level collision (e.g. voxel terrain), reusing
-        // the same math EC_BroadPhase::castCapsule already uses for one-shot queries (see
-        // EC_CollisionChecks::CapsuleVsMesh). Its contactNormal is the winning triangle's
-        // own absolute surface normal, not relative to dispatch order like the primitive-
-        // vs-primitive entries above - no flip needed in either direction below.
+        // Capsule vs Mesh: real triangle-level collision (e.g. terrain), using the same math as
+        // EC_BroadPhase::castCapsule. contactNormal is the triangle's absolute surface normal, so no flip is
+        // needed in either dispatch order.
         {makeKey(EC_DOD_Collider::Type::Capsule, EC_DOD_Collider::Type::Mesh),
             [](auto& a, auto& sa, auto& mda, auto& b, auto& sb, auto& mdb, auto& m) {
                 if (!mdb.positions || !mdb.normals || !mdb.indices) return false;

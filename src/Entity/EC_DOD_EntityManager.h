@@ -33,29 +33,17 @@ public:
     T& get(EntityID entity);
     const T& get(EntityID entity) const;
 
-    // get()/getComponent<T>() hand back a bare reference with the lock released before the
-    // caller ever sees it (by design - callers hold it across other work, e.g.
-    // EC_LuaScriptSystem::update() holds one across a Lua handler dispatch). A vector's
-    // push_back can reallocate its ENTIRE backing buffer once capacity is exceeded,
-    // silently invalidating every outstanding reference into it - including one a
-    // completely different thread is mid-read on. insert() reserves ahead of actually
-    // hitting capacity (see its own comment) specifically so this is rare in practice;
-    // EngineConfig.xml's <ComponentStorage> is how an author tunes how rare.
+    // get()/getComponent<T>() return a bare reference with the lock already released (callers hold it
+    // across other work, e.g. a Lua handler dispatch). A push_back past capacity reallocates and dangles
+    // every outstanding reference, so insert() reserves ahead; <ComponentStorage> in EngineConfig.xml
+    // tunes how rare that is.
     std::vector<T>& getData();
     const std::vector<T>& getData() const;
 
     EntityID getEntity(size_t index) const;
 
-    // For a caller that's already taken its own lock via getMutex() and wants to index
-    // m_Entities repeatedly without re-locking - e.g. EC_PhysicsSystem::update() holding a
-    // single shared_lock across its whole loop instead of one per iteration. Calling
-    // getEntity() (which takes its own internal shared_lock) in that situation is
-    // undefined behaviour per the standard: a thread may not acquire a shared_mutex in any
-    // mode while it already owns it in any mode, shared included - two "read" locks sounds
-    // harmless but isn't. This is exactly what caused a real, reproducible deadlock: a
-    // pending writer can make a std::shared_mutex block a *new* shared-lock request even
-    // from a thread that already holds one, so the caller can never finish acquiring the
-    // inner lock, never releases the outer one, and the waiting writer never gets in either.
+    // For a caller already holding getMutex(): calling getEntity() would lock the shared_mutex a
+    // second time on the same thread, which is undefined and can deadlock behind a waiting writer.
     EntityID getEntityUnlocked(size_t index) const { return m_Entities[index]; }
 
     void removeEntity(EntityID entity) override;
@@ -110,14 +98,9 @@ public:
     std::vector<EntityID> getEntitiesWithComponent(std::type_index type) const;
     std::vector<EntityID> getEntitiesWithComponents(const std::vector<std::type_index>& types) const;
 
-    // Same as getEntitiesWithComponents, further filtered to entities whose
-    // EC_DOD_EntityInfo has `active` (gameplay-level) set and `sceneState` (scene-
-    // membership) equal to Active - the "should this entity actually participate right
-    // now" check every subsystem needs, consolidated here instead of each one
-    // re-implementing its own isAlive+hasComponent<EntityInfo>+.active loop (see
-    // EC_DOD_EntityInfo's comment for why the two are separate). An entity with no EC_DOD_EntityInfo at
-    // all is treated as active (permissive default - every entity constructed via the
-    // normal factory path has one, so this only matters for hand-built test entities).
+    // getEntitiesWithComponents, further filtered to entities whose EC_DOD_EntityInfo is active and has
+    // sceneState Active: the check every subsystem needs, in one place (see EC_DOD_EntityInfo). An entity
+    // with no EntityInfo counts as active (only hand-built test entities lack one).
     std::vector<EntityID> getActiveEntitiesWithComponents(const std::vector<std::type_index>& types) const;
 
     void clear();
@@ -125,11 +108,9 @@ public:
     size_t getEntityCount() const;
     size_t getAliveEntityCount() const;
 
-    // Author-configurable via EngineConfig.xml's <ComponentStorage> - see
-    // EC_ComponentArray<T>'s own comments for what each controls. Must be called before
-    // any entity/component is ever created (EC_SceneManager::init() does this immediately
-    // after loading engine settings, before any scene starts loading) since it only takes
-    // effect for arrays constructed afterward.
+    // Configured via EngineConfig.xml's <ComponentStorage>. Must be called before any entity or
+    // component is created (EC_SceneManager::init() does), since it only affects arrays constructed
+    // afterward.
     static void configureComponentStorage(size_t initialCapacity, float growthThreshold);
     static size_t getInitialComponentCapacity();
     static float getComponentGrowthThreshold();
@@ -178,15 +159,9 @@ void EC_ComponentArray<T>::insert(EntityID entity, const T& component) {
         return;
     }
 
-    // Grow ahead of actually hitting capacity, under the same lock every other mutator
-    // already takes - a component reference obtained via get()/getComponent<T>() and held
-    // across a call (e.g. EC_LuaScriptSystem holding one across a Lua handler dispatch)
-    // can still be dangled by this the instant it runs on a different thread, same as any
-    // vector-backed container; there's no way to defer it without breaking the equally
-    // common same-call pattern of reading a component right back after adding it (e.g.
-    // EC_DOD_EntityFactory::constructEntity() does exactly this). Reaching this at all is
-    // an author-visible signal that initialCapacity is set too low for real usage - the
-    // mitigation is a generous default and configuring it higher, not a runtime lock.
+    // Grow ahead of hitting capacity, under the same lock as every other mutator. A reference held
+    // across a call can still dangle if this runs on another thread; the mitigation is a generous default
+    // initialCapacity, not a runtime lock. Reaching this warning means initialCapacity is too low.
     if (m_Components.size() + 1 >= static_cast<size_t>(m_Components.capacity() * EC_DOD_EntityManager::getComponentGrowthThreshold())) {
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "Component array of type '" + std::string(typeid(T).name()) + "' reached " +
@@ -254,12 +229,9 @@ EntityID EC_ComponentArray<T>::getEntity(size_t index) const {
 
 template<typename T>
 void EC_ComponentArray<T>::removeEntity(EntityID entity) {
-    // This had NO locking at all, unlike insert()/get()/has() right next to it.
-    // EC_DOD_EntityManager::destroyEntity() and removeComponent<T>() both call
-    // this directly through the EC_IComponentArray base pointer (bypassing remove()'s own
-    // locking wrapper above entirely), so without a lock here, entity destruction could run
-    // fully concurrently with another thread's get()/insert()/getData() iteration - torn
-    // reads of m_Components/m_Entities/m_EntityToIndex, no synchronization at all.
+    // removeEntity() must lock: EC_DOD_EntityManager::destroyEntity() and removeComponent<T>() call it
+    // directly through the base pointer, bypassing remove()'s wrapper, and would otherwise race other
+    // threads' get()/insert()/getData().
     std::unique_lock lock(m_Mutex);
 
     auto it = m_EntityToIndex.find(entity);

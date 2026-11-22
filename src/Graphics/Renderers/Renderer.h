@@ -19,13 +19,10 @@ public:
     // shadow map exactly once. Called after a scene finishes loading; default no-op for any
     // Renderer implementation that doesn't support shadow baking.
     virtual void bakeStaticShadows(EC_GameScene& scene) {}
-    // Encodes the most recently rendered frame (or, for a non-empty `target`, a single
-    // G-buffer attachment - "albedo"/"normal"/"depth") as a PNG (see EC_DebugHTTPServer's
-    // GET /screenshot) - default no-op/unsupported, matching bakeStaticShadows'
-    // convention, since this is a GL_Deferred_Renderer-specific capability. Must be
-    // called from the GL/main thread - this does real glReadPixels/glGetTexImage work,
-    // not just data access. An empty/unrecognised target falls back to the final
-    // composited frame.
+    // Encodes the last rendered frame, or for a non-empty `target` one G-buffer attachment ("albedo",
+    // "normal", "depth"), as a PNG (EC_DebugHTTPServer's GET /screenshot). No-op by default:
+    // GL_Deferred_Renderer-specific. Must be called on the GL/main thread (real glReadPixels work). An
+    // empty or unrecognised target gives the final composited frame.
     virtual bool captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes) { return false; }
     virtual ~Renderer();
 };

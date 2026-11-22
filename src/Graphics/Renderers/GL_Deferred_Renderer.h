@@ -40,8 +40,7 @@ public:
     virtual void bakeStaticShadows(EC_GameScene& scene) override;
     void setExposure(float exposure) { m_Exposure = exposure; }
     float getExposure() const { return m_Exposure; }
-    // Scales the derived ambient colour (see updateLights()'s comment) - not an authored
-    // colour itself, see issue #96.
+    // Scales the derived ambient colour (see updateLights()).
     void setAmbientScale(float scale) { m_AmbientScale = scale; }
     float getAmbientScale() const { return m_AmbientScale; }
     virtual bool captureFrame(const std::string& target, std::vector<unsigned char>& outPNGBytes) override;
@@ -54,35 +53,22 @@ private:
     // every per-light shader.
     void emissivePass();
     void updateLights(EC_GameScene& scene);
-    // Shared entity-draw loop used by shadowDirPass/shadowSpotPass (identical body -
-    // alive/Transform/GraphicsData/mesh-handle checks + m_ShadowShader uniform sets + draw
-    // call - only the view/projection construction differs between the two callers, which
-    // they each keep). shadowPointPass's 6-face loop is structurally different enough that
-    // forcing it into this helper would hurt readability more than it would help.
-    // Returns how many casters were actually drawn (passed every filter: alive, has
-    // Transform/GraphicsData, mesh handle finalized, castsShadow) - NOT just entities.size().
-    // A caster's mesh handle can still be 0 for a frame or two after it starts appearing in
-    // spatial queries (GPU resource finalization lags a frame behind broad-phase indexing),
-    // so entities.size() > 0 alone doesn't mean anything was actually rendered - callers
-    // that cache a render need this to avoid caching an effectively-empty one.
+    // Shared caster draw loop for shadowDirPass/shadowSpotPass, which differ only in view/projection.
+    // Returns how many casters were actually drawn: a mesh handle can lag the spatial query by a frame
+    // or two, so entities.size() alone doesn't mean anything rendered.
     int renderShadowCasters(const glm::mat4& view, const glm::mat4& projection, const std::vector<EntityID>& entities);
-    // Builds the ortho box by fitting it to the camera's current view frustum (clamped to
-    // RenderConfig::dirShadowDistance) instead of a fixed world-space box - see the
-    // "Directional shadow: camera-following frustum fit" plan. outBounds is the light-space
-    // AABB the box was built from, so callers can later test whether a new camera frustum
-    // is still covered by it without re-rendering (the dynamic-light soft-bake check).
-    // Return value: same "how many casters were actually drawn" as renderShadowCasters, or
-    // 0 if the tile couldn't be acquired.
+    // Builds the ortho box by fitting it to the camera's view frustum (clamped to
+    // RenderConfig::dirShadowDistance) rather than a fixed world box. outBounds is the light-space AABB
+    // it was built from, so callers can test whether a new frustum is still covered. Returns how many
+    // casters were drawn (as renderShadowCasters), or 0 if the tile couldn't be acquired.
     int shadowDirPass(EntityID lightID, DirLightData& light, const std::vector<EntityID>& entities,
         const glm::mat4& camView, const glm::vec3& camPos, float camFov, float aspect, float camNear,
         glm::mat4& outShadowTransform, ShadowBoxBounds& outBounds);
     int shadowSpotPass(EntityID lightID, SpotLightData& light, const std::vector<EntityID>& entities, glm::mat4& outShadowTransform);
     void shadowPointPass(EntityID lightID, LightData& light, const std::vector<EntityID>& entities);
-    // Issue #28: redraws just the receivesShadow==false entities among `entities` with this
-    // light's full (unshadowed) contribution, depth-testing GL_EQUAL against the G-buffer so
-    // only their own pixels are touched. view/projection must be the same camera matrices
-    // geometryPass used, not recomputed, to avoid a GL_EQUAL floating-point mismatch. No-op
-    // if none of `entities` are exempt.
+    // Redraws only the receivesShadow==false entities among `entities` with this light's unshadowed
+    // contribution, depth-testing GL_EQUAL against the G-buffer. view/projection must be the same
+    // matrices geometryPass used, or GL_EQUAL mismatches. No-op if none are exempt.
     void exemptDirShadowPass(DirLightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities);
     void exemptSpotShadowPass(SpotLightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities);
     void exemptPointShadowPass(LightData& light, const glm::mat4& view, const glm::mat4& projection, const glm::vec3& camPos, const std::vector<EntityID>& entities);
@@ -108,11 +94,8 @@ private:
 
     ECXMessenger* m_Messenger = nullptr;
     RenderConfig m_RenderConfig;
-    // Camera-visible set, computed once in geometryPass() - what actually gets drawn
-    // to the gbuffer. Deliberately NOT reused by the shadow passes: a shadow caster
-    // outside the camera's frustum can still cast a shadow onto something that is
-    // visible, so narrowing shadow casters by camera visibility is wrong, not just an
-    // optimization detail.
+    // Camera-visible set, computed once in geometryPass() for the gbuffer. Not reused by the shadow
+    // passes: a caster outside the frustum can still shadow something visible.
     std::vector<EntityID> m_VisibleEntities;
     // Directional lights have no meaningful world position/radius, so their shadow-
     // caster search is a bounding heuristic around the camera instead of a per-light
@@ -140,28 +123,9 @@ private:
     Shader m_ExemptSpotLightShader;
     Shader m_ExemptPointLightShader;
     Shader m_EmissiveShader;
-    // Flat ambient term, applied once per frame in emissivePass() (see emissivePass.frag's
-    // comment for why it can't live in the per-light shaders) - this renderer has no real
-    // indirect/IBL lighting, just enough for AO to have a visible effect.
-    //
-    // The colour itself (m_DerivedAmbientColour) is NOT authored - issue #96 found the
-    // original flat authored constant broke down the moment a scene's lights didn't match
-    // whatever colour was guessed at authoring time (e.g. a scene lit only by red point
-    // lights getting a neutral-grey ambient fill). It's instead the intensity-weighted
-    // average colour of every currently-active light in the scene, recomputed each frame in
-    // updateLights() - so a scene with no directional light still gets a sensible ambient
-    // derived from whatever point/spot lights it actually has, and it never goes stale as
-    // lights are added/removed/recoloured at runtime. Defaults to white (a neutral
-    // multiplier) if a frame has zero active lights, rather than 0/0.
-    //
-    // m_AmbientScale (author-configurable - see RenderConfig::ambientScale) is the actual
-    // tuning knob: how strong that derived fill is. Raised from an original flat-colour
-    // 0.03 placeholder to 0.15 while fixing a terrain shading artifact (PR #92) - at 0.03,
-    // any NonShadowDirLightPass.frag fragment past a light's terminator (dot(N,L) <= 0,
-    // which a curved ridge crosses within a few screen pixels) got only this term with NO
-    // direct-light contribution, rendering as a hard, near-black band that was easily
-    // mistaken for a mesh/normal bug (it wasn't - both the normal and depth G-buffers were
-    // confirmed clean at that exact location).
+    // Flat ambient term applied in emissivePass(). The colour is derived each frame in
+    // updateLights() as the intensity-weighted average of the active lights (white if there are none);
+    // m_AmbientScale (RenderConfig::ambientScale) sets its strength.
     glm::vec3 m_DerivedAmbientColour = glm::vec3(1.0f);
     float m_AmbientScale = 0.15f;
     Shader m_BloomDownsampleShader;
@@ -186,13 +150,11 @@ private:
     std::vector<EntityID> m_ShadowSpotIDs;
     std::vector<EntityID> m_ShadowPointIDs;
 
-    // Static-light shadow baking (EC_DOD_Light::dynamic == false): a static light's depth
-    // is rendered once (see bakeStaticShadows(), called after scene load) and never again -
-    // shadowLightingPass() skips the depth re-render for any light present in these sets,
-    // reusing the cached transform (dir/spot) or the pool's already-populated cubemap
-    // (point). Entries are erased when ShadowAtlas/CubemapShadowPool::reconcile() evicts
-    // that light's tile/slot, so a later re-acquired tile/slot is never mistaken for
-    // already-baked data left behind by a different light.
+    // Static-light shadow baking (EC_DOD_Light::dynamic == false): a static light's depth is rendered
+    // once (bakeStaticShadows(), after scene load); shadowLightingPass() then skips its depth re-render,
+    // reusing the cached transform (dir/spot) or the pool's cubemap (point). Entries are erased when
+    // ShadowAtlas/CubemapShadowPool::reconcile() evicts the light, so a re-acquired slot is never
+    // mistaken for old baked data.
     std::unordered_set<EntityID> m_BakedStaticDirLights;
     std::unordered_set<EntityID> m_BakedStaticSpotLights;
     std::unordered_set<EntityID> m_BakedStaticPointLights;
@@ -200,11 +162,8 @@ private:
     std::unordered_map<EntityID, ShadowBoxBounds> m_BakedDirShadowBounds;
     std::unordered_map<EntityID, glm::mat4> m_BakedSpotShadowTransforms;
 
-    // Cached cutoff radius for each entry in m_ShadowPoints, indices aligned 1:1.
-    // Copied from EC_DOD_Light::cutoffRadius in updateLights() - not recomputed here,
-    // since the radius only depends on light data set at load time. Spot's equivalent
-    // caster query now uses queryEntitiesInCone (the light's own cutoffAngle/far plane),
-    // not a radius.
+    // Cutoff radius for each entry in m_ShadowPoints (aligned 1:1), copied from
+    // EC_DOD_Light::cutoffRadius in updateLights(). Spot casters use queryEntitiesInCone instead.
     std::vector<float> m_ShadowPointRadii;
     GL_DebugRenderer m_DebugRenderer;
     GL_UIRenderer m_UIRenderer;

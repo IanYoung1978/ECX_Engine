@@ -5,12 +5,9 @@
 #include "Entity/EC_DOD_Types.h"
 #include "CubemapBuffer.h"
 
-// Persistent pool of point-light shadow cubemaps, replacing the old single shared
-// CubemapBuffer that every point shadow-casting light overwrote in turn. Each light gets
-// a stable slot (persists frame to frame until it stops being an active caster), so up to
-// poolSize point lights' shadow cubemaps exist simultaneously instead of clobbering each
-// other. No shared-texture-space remapping is needed here (unlike ShadowAtlas) since each
-// slot is an independent CubemapBuffer sampled by direction (samplerCube), not by UV.
+// Persistent pool of point-light shadow cubemaps. Each light keeps a stable slot until it stops
+// being an active caster, so up to poolSize lights have shadows at once. Slots are independent
+// CubemapBuffers sampled by direction, so no UV remapping is needed (unlike ShadowAtlas).
 class CubemapShadowPool
 {
 public:

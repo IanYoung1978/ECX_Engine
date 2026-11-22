@@ -10,8 +10,6 @@ struct GameModeSettings
     std::string graphics_settings;
     std::string ui_file;
     std::string physics_materials_file;
-    // Issue #130 - optional. Empty if the GameMode file has no <Prefabs> entry at all,
-    // same graceful-absence convention as VoxelTerrain's `enabled` flag - a game with no
-    // use for runtime spawning gets zero side effects, not a missing-file error.
+    // Optional; empty if the GameMode file has no <Prefabs> entry.
     std::string prefabs_file;
 };

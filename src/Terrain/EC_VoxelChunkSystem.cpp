@@ -30,10 +30,9 @@ void EC_VoxelChunkSystem::shutdown() {
 
 void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
     m_Worker = std::make_shared<EC_VoxelChunkWorker>();
-    // Run the generation script first (issue #99): besides building the density shape
-    // (setRoot), it can also configure the chunk material/tint/grid size below via
-    // volume.setChunkMaterial()/setChunkColour()/setGridRadius() - see VoxelTerrainConfig's
-    // own comment for the defaults used if it doesn't.
+    // Run the generation script first: besides the shape (setRoot) it can configure chunk material,
+    // tint and grid size via volume.setChunkMaterial()/setChunkColour()/setGridRadius() (see
+    // VoxelTerrainConfig for the defaults).
     loadVolumeScript(game);
     ScriptAPI::VoxelTerrainConfig config = game.getVoxelTerrainConfig();
 
@@ -75,13 +74,9 @@ void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
             chunk.state = EC_DOD_VoxelChunk::State::Generating;
             manager.addComponent(entity, chunk);
 
-            // Chunks aren't in any EC_GameScene's own entity list (they're spawned
-            // procedurally here, not scene-authored), so EC_GameScene::activate()/
-            // deactivate() never touches them - without this component, every check that
-            // gates on active+sceneState (EC_BroadPhase, rendering) treats a component-less
-            // entity as always-active, so chunks stayed visible/collidable in every scene
-            // regardless of which was active. update() keeps sceneState in sync with
-            // whether voxelchunkdemo is the active scene every frame instead.
+            // Chunks aren't in any EC_GameScene's entity list, so scene switching never touches them; this
+            // component lets update() set their sceneState. Without it a component-less entity is treated as
+            // always active.
             EC_DOD_EntityInfo info;
             info.name = "voxelchunk_" + std::to_string(x) + "_" + std::to_string(z);
             info.active = true;
@@ -95,12 +90,9 @@ void EC_VoxelChunkSystem::init(ECXMessenger& messenger, EC_Game& game) {
 }
 
 void EC_VoxelChunkSystem::loadVolumeScript(EC_Game& game) {
-    // Author-controlled shape (Stage 1/2 of the terrain generation plan): run the active
-    // game's generation script once, synchronously, before scheduling any chunk jobs, then
-    // hand the resulting tree to the worker. Runs on the main thread - the same thread
-    // EC_LuaScriptSystem's shared lua_State always executes on - so this is safe even
-    // though EC_VoxelChunkWorker::execute() runs on a background thread afterward; the tree
-    // itself is pure/stateless once built (see EC_VolumeNode's own comment).
+    // Run the generation script once, synchronously, before scheduling chunk jobs, then hand the tree
+    // to the worker. The tree is stateless once built (see EC_VolumeNode), so the worker thread can
+    // evaluate it safely.
     if (!game.runLuaScriptOnce(m_GenerationScriptPath)) {
         LOGGING::ECX_Logger::GetInstance()->LogMessage(
             "EC_VoxelChunkSystem: failed to run " + m_GenerationScriptPath + " - chunks will generate as empty space",
@@ -162,12 +154,9 @@ void EC_VoxelChunkSystem::update(const float& deltaTimeS, EC_Game& game) {
         auto& gfx = manager.getComponent<EC_DOD_GraphicsData>(entity);
         gfx.model = model;
 
-        // Renderable so EC_BroadPhase's spatial index (and thus frustum culling) can find
-        // this entity at all - constructEntity() does this automatically for XML-authored
-        // entities, but chunks bypass that path entirely. Type::Mesh so ray/cone queries
-        // resolve against the real terrain surface (see EC_DOD_MeshCollisionData below)
-        // instead of this bounding box - center/extents still describe that box, which is
-        // all broad-phase itself needs.
+        // Renderable so EC_BroadPhase's spatial index (and frustum culling) can find the chunk;
+        // constructEntity() does this for XML entities but chunks bypass it. Type::Mesh so ray/cone queries
+        // hit the real surface; center/extents still give the broad-phase box.
         EC_DOD_Collider collider;
         collider.type = EC_DOD_Collider::Type::Mesh;
         float half = static_cast<float>(kChunkWorldSize) * 0.5f;

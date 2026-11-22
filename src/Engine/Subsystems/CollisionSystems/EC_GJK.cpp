@@ -4,11 +4,9 @@
 
 namespace
 {
-    // Conservative advancement (raycast) converges linearly, not quadratically, for
-    // near-tangential/grazing hits - a ray just clipping a sphere's edge can need well
-    // over 32 steps to reach a tight epsilon. Boolean intersects() converges much
-    // faster (it only needs to prove/disprove overlap, not pin down an exact point) but
-    // shares the same cap for simplicity.
+    // Conservative advancement converges linearly for grazing hits, so a ray just clipping a sphere can
+    // need well over 32 steps to reach a tight epsilon. Boolean intersects() converges faster but shares
+    // the cap.
     constexpr int kMaxIterations = 64;
 }
 
@@ -209,13 +207,8 @@ namespace EC_GJK
                     return false;
                 x = origin + dir * lambda;
                 n = v;
-                // The simplex was built from support points extreme relative to the OLD
-                // x - after jumping x to a new position along the ray, those points no
-                // longer describe anything meaningful about x's relationship to the
-                // shape (recomputing w = x - p keeps them numerically valid but
-                // geometrically stale), so the point-to-shape distance search must
-                // restart fresh from here rather than accumulate them into a 3-point
-                // simplex alongside the new point below.
+                // The simplex's support points were extreme relative to the old x; after x jumps along the ray
+                // they are stale, so restart the point-to-shape search instead of adding them to a 3-point simplex.
                 pPoints.clear();
             }
 

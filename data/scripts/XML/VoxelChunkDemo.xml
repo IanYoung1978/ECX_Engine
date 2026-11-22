@@ -11,10 +11,7 @@
 		<LuaScript alias="debugoverlay">data/scripts/LUA/DebugOverlay.lua</LuaScript>
 	</Manifest>
 
-	<!-- Verification scene for EC_VoxelChunkSystem (see the "Voxel terrain: entity-per-
-	     chunk streaming integration" plan) - the chunk grid itself is NOT authored here;
-	     EC_VoxelChunkSystem::init() spawns it unconditionally (a permanent subsystem, not
-	     scene-gated), so this scene only needs a camera, light, and skybox to view it. -->
+	<!-- Voxel terrain demo. The chunk grid is spawned by EC_VoxelChunkSystem, not authored here; this scene only needs a camera, light and skybox. -->
 
 	<Entity uid="400" name="voxelchunk_skybox">
 		<Skybox>
@@ -31,9 +28,7 @@
 			<DrawDistance>300.0</DrawDistance>
 		</Camera>
 		<Spatial>
-			<!-- Centered over the box terrain (TerrainGeneration.lua's box is centered at
-			     16,9,16, top surface roughly y=6..16) and well above it, so there's a real
-			     fall to demonstrate before the capsule settles onto the surface. -->
+			<!-- Centered over the terrain (box centre 16,9,16) and well above it, so there is a fall before the capsule lands. -->
 			<Position>16.0,30.0,16.0</Position>
 			<Orientation>0.0,0.0,0.0</Orientation>
 		</Spatial>
@@ -45,13 +40,7 @@
 			<Height>2.0</Height>
 			<Center>0.0,0.0,0.0</Center>
 		</Collider>
-		<!-- "Arcade physics": a Kinematic body still gets gravity (see
-		     EC_DOD_RigidBody::ignoreGravity's own comment - orthogonal to BodyType) and
-		     still generates real OnCollisionBegin/OnCollisionEnd events, but
-		     EC_PhysicsResolution never runs its impulse solver on it - ArcadeCollision.lua's
-		     OnCollisionBegin handler decides what happens on contact instead (see
-		     EC_BodyType's own comment). mass/restitution/friction below are irrelevant since
-		     the impulse solver never touches this entity either way. -->
+		<!-- Kinematic: keeps gravity and collision events, but the impulse solver skips it; ArcadeCollision.lua decides what happens on contact. -->
 		<RigidBody><BodyType>Kinematic</BodyType></RigidBody>
 		<ScriptComponent>
 			<OnKeyDown alias="keydown"/>
@@ -64,9 +53,7 @@
 		</ScriptComponent>
 	</Entity>
 
-	<!-- voxelchunk_camera's own OnUpdate is already taken by ArcadeGravity.lua (an entity can
-	     only have one handler per event type) - a separate host entity is the simplest way
-	     to also tick DebugOverlay.lua's FPS/log UI every frame in this scene. -->
+	<!-- The camera's OnUpdate is taken by ArcadeMovementFeedback.lua (one handler per event type), so a separate host entity ticks DebugOverlay.lua. -->
 	<Entity name="voxelchunk_debug_overlay_host">
 		<ScriptComponent>
 			<OnUpdate alias="debugoverlay"/>
@@ -76,9 +63,7 @@
 	<Entity uid="402" name="voxelchunk_sun">
 		<Light>
 			<Type>Directional</Type>
-			<!-- Low, near-horizon sun (mostly horizontal, small downward tilt) so shadows
-			     stretch long across the hills - a good stress test for the shadow bias
-			     tuning at grazing angles, not just the near-overhead case. -->
+			<!-- Low, near-horizon sun so shadows stretch long across the hills (grazing-angle shadow bias test). -->
 			<Direction>0.95,-0.12,0.3,0.0</Direction>
 			<Colour>1.0,1.0,1.0,1.0</Colour>
 			<Intensity>1.0</Intensity>

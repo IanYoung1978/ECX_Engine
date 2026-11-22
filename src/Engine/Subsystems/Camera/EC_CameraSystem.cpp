@@ -15,11 +15,8 @@ void EC_CameraSystem::init(ECXMessenger& messenger, EC_Game& game) {
 void EC_CameraSystem::update(const float& deltaTimeS, EC_Game& game) {
     auto& manager = EC_DOD_EntityManager::getInstance();
 
-    // Active+sceneState filtered, matching EC_LuaScriptSystem/EC_BroadPhase/EC_PhysicsSystem:
-    // an inactive scene's cameras shouldn't keep computing view matrices (wasted work at
-    // best; since a deactivated scene's entities stay alive in memory through their
-    // quarantine period rather than being destroyed immediately, an indefinitely-inactive
-    // scene's camera must never be mistaken for a live one here).
+    // Active+sceneState filtered like the other systems: an inactive scene's cameras shouldn't compute
+    // view matrices, and its entities stay alive through the quarantine so must not pass for live ones.
     auto entities = manager.getActiveEntitiesWithComponents({
         std::type_index(typeid(EC_DOD_Spatial)),
         std::type_index(typeid(EC_DOD_Camera))

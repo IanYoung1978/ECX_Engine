@@ -119,13 +119,8 @@ unsigned int TextureManager::finalizeTexture(const std::string & fname, SDL_Surf
 	texID = findTexture(fname);
 	if (texID == 0)
 	{
-		// BytesPerPixel isn't just 3 (RGB) or 4 (RGBA) - a single-channel (grayscale) or
-		// dual-channel source image (e.g. an AO or height map authored as true grayscale,
-		// not an RGB file with equal channels - data/assets/Images/oakfloor_AO.png and the
-		// Grass texture set's AO map are both genuinely single-channel PNGs) loads as 1 or
-		// 2 bytes/pixel. Uploading that through glTexImage2D with a mismatched 3-byte
-		// format reads past the end of `surface->pixels` - a real access violation, not
-		// just a wrong-looking texture.
+		// BytesPerPixel isn't always 3 or 4: true grayscale or two-channel PNGs (some AO/height maps) load
+		// as 1 or 2 bytes/pixel, and uploading them through a 3-byte format reads past surface->pixels.
 		int BPP = surface->format->BytesPerPixel;
 		int mode = GL_RGB;
 		if (BPP == 1) {
@@ -138,12 +133,9 @@ unsigned int TextureManager::finalizeTexture(const std::string & fname, SDL_Surf
 			mode = GL_RGBA;
 		}
 
-		// Colour/albedo data is authored and stored sRGB-encoded; every other texture role
-		// (normal, height, glow, smoothness->roughness, metallic, AO) is linear data, not
-		// colour, and must never go through sRGB decode. Selecting an sRGB internal format
-		// here makes the GPU decode sRGB->linear automatically on every sample, so no
-		// shader anywhere needs its own manual pow(x, 2.2) - only meaningful for 3/4-channel
-		// colour data, never for single/dual-channel data textures.
+		// Colour/albedo textures are sRGB-encoded; every other role (normal, height, glow, roughness,
+		// metallic, AO) is linear data. An sRGB internal format makes the GPU decode on sampling, so no shader
+		// needs pow(x, 2.2). Only for 3/4-channel colour data.
 		int internalFormat = mode;
 		bool isSRGB = m_IsSRGB.count(fname) && m_IsSRGB[fname];
 		if (isSRGB) {

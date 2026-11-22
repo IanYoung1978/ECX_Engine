@@ -5,11 +5,9 @@
 namespace EC_Noise3D {
 
 namespace {
-    // Ken Perlin's reference permutation table (public domain, from "Improving Noise",
-    // 2002) - a fixed pseudo-random shuffle of 0..255, duplicated so `perm[x + 255]` never
-    // needs a modulo. Fixed (not seeded at runtime) so noise3D is a pure, deterministic
-    // function of its input alone - required for EC_TerrainWorldDensity's "two chunks
-    // sampling the same world position must agree exactly" property.
+    // Ken Perlin's reference permutation table (public domain, "Improving Noise", 2002), duplicated so
+    // perm[x + 255] needs no modulo. Fixed rather than seeded so noise3D is a pure function of its
+    // input, which chunks sampling the same world position rely on.
     const int kPermutation[256] = {
         151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,
         140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,

@@ -53,13 +53,10 @@ float sampleTrilinear(const EC_DensityField& field, const glm::vec3& p)
     return c0 * (1 - fz) + c1 * fz;
 }
 
-// Central-difference gradient at a (possibly fractional) position, of either the density
-// field's own trilinear reconstruction or (when given) a continuous analytic density
-// function describing the same shape - see EC_MarchingCubesMesher.h's DensityFunction/
-// polygonise comments for why the analytic path exists. Either way, the field/function is
-// low(negative)-inside/high(positive)-outside, so the gradient (direction of increasing
-// density) already points from inside to outside - the correct outward surface normal -
-// with no sign flip needed.
+// Central-difference gradient at a (possibly fractional) position, of the field's trilinear
+// reconstruction or, when given, a continuous analytic density function (see
+// EC_MarchingCubesMesher.h). Density is negative inside, so the gradient already points outward: no
+// sign flip.
 glm::vec3 computeNormal(const EC_DensityField& field, const glm::vec3& p,
     const EC_MarchingCubesMesher::DensityFunction& analyticDensity)
 {
@@ -122,11 +119,9 @@ EC_DensityField downsample(const EC_DensityField& field)
     return coarse;
 }
 
-// Drops small connected components (triangles linked via shared edges) below
-// `minTriangles` - removes small isolated blobs/spikes a downsampled field can introduce,
-// the "strip clutter/secondary geometry from lower LOD variants" requirement. Rebuilds the
-// mesh without welding (matches polygonise()'s own no-welding output), just with the
-// dropped triangles' vertices/indices omitted.
+// Drops small connected components (triangles linked by shared edges) below minTriangles, removing
+// isolated blobs/spikes a downsampled field can introduce. Rebuilds without welding, matching
+// polygonise().
 EC_TerrainMeshData stripSmallComponents(const EC_TerrainMeshData& mesh, size_t minTriangles)
 {
     size_t triCount = mesh.indices.size() / 3;
@@ -184,17 +179,10 @@ EC_TerrainMeshData stripSmallComponents(const EC_TerrainMeshData& mesh, size_t m
     return result;
 }
 
-// Merges vertices sharing (near-)identical positions into one, rewriting indices to
-// reference the shared copy. polygonise() emits a triangle soup (3 fresh vertices per
-// triangle, no sharing at all) - fine for the mesher's own correctness (proven by the unit
-// tests), but a real problem for anything downstream that assumes ordinary indexed-mesh
-// density: e.g. Assimp's aiProcess_JoinIdenticalVertices collapses this soup's massive
-// duplicate-position count at every shared cell edge down to a much smaller unique-vertex
-// set while leaving the index count unchanged, and any upload code that sizes a vertex
-// buffer off the index count (as this engine's ObjModel::initialise() does) reads far past
-// the end of the now-much-smaller vertex array. computeNormal() is a pure function of
-// position, so two vertices at the same position always get the same normal - keying the
-// weld purely on (quantized) position is sufficient, no need to also compare normals.
+// Merges vertices at (near-)identical positions and rewrites the indices. polygonise() emits a
+// triangle soup, which breaks downstream code (Assimp's JoinIdenticalVertices, ObjModel sizing its
+// buffers off the index count). Normals are a pure function of position, so keying on quantized
+// position alone is enough.
 void weldVertices(EC_TerrainMeshData& mesh)
 {
     struct PosHash {
@@ -239,27 +227,17 @@ void weldVertices(EC_TerrainMeshData& mesh)
     mesh = std::move(welded);
 }
 
-// Splits each cube into 6 tetrahedra sharing the cube's main space diagonal (corner 0 to
-// corner 6), the standard decomposition that keeps every cube in a uniform grid sliced the
-// same way - so two cubes sharing a face always agree on that face's diagonal and the
-// surface stitches with no possibility of a crack, unlike the flat 256-case cube table
-// this replaced. That table is topologically ambiguous for certain corner configurations
-// (some cube cases admit two different, mutually inconsistent triangulations of a shared
-// face; the table always picks one, and an adjacent cube can legally pick the other),
-// which is what left the scattered interior holes the diagnostic test caught - see
-// tests/EC_TerrainWorldDensity_Tests.cpp's "no non-manifold (hole) edges" case. A
-// tetrahedron's isosurface has no such ambiguity: a linear field over 4 points crosses an
-// isovalue in only one possible way per corner-sign pattern (derived below, not
-// table-driven, so there's no transcription-error surface for a bug to hide in).
+// Splits each cube into 6 tetrahedra along the main diagonal (corner 0 to 6). Adjacent cubes then
+// always agree on a shared face's diagonal, so the surface has no cracks, unlike the 256-case cube
+// table whose ambiguous cases can triangulate a shared face inconsistently. A tetrahedron's
+// isosurface is unambiguous and derived below rather than table-driven.
 constexpr int kTetraCorners[6][4] = {
     {0, 1, 2, 6}, {0, 2, 3, 6}, {0, 3, 7, 6},
     {0, 7, 4, 6}, {0, 4, 5, 6}, {0, 5, 1, 6},
 };
 
-// Fixes winding the same way the old cube-table path did: pick whichever ordering of the
-// triangle's own vertex-normal average, since the gradient-based normals are already known
-// to point outward. This matters more here, not less - the tetrahedron cases below are
-// derived from data flow, not by hand-checking each triangle's handedness.
+// Fixes winding by picking the ordering that agrees with the triangle's average vertex normal (the
+// gradient normals are known to point outward).
 void emitTriangle(const EC_DensityField& field, const EC_MarchingCubesMesher::DensityFunction& analyticDensity,
     EC_TerrainMeshData& mesh, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2)
 {
@@ -281,11 +259,9 @@ void emitTriangle(const EC_DensityField& field, const EC_MarchingCubesMesher::De
     mesh.indices.push_back(base); mesh.indices.push_back(base + 1); mesh.indices.push_back(base + 2);
 }
 
-// Polygonises one tetrahedron given its 4 corner positions/values (already resolved from
-// the parent cube's 8 corners via kTetraCorners). Every one of the 16 corner-inside
-// patterns is one of exactly 3 shapes - empty, a single vertex cut off (1 or 3 corners
-// inside), or a planar quad cut (2 and 2) - so the whole case table is this direct
-// classification rather than a hardcoded 16-row lookup.
+// Polygonises one tetrahedron from its 4 corner positions/values. Every corner-inside pattern is
+// empty, a single vertex cut off (1 or 3 inside) or a planar quad cut (2 and 2), so this
+// classification replaces a 16-row lookup table.
 void polygoniseTetrahedron(const EC_DensityField& field, const EC_MarchingCubesMesher::DensityFunction& analyticDensity,
     EC_TerrainMeshData& mesh, float isoLevel, const glm::vec3 p[4], const float v[4])
 {
@@ -313,11 +289,8 @@ void polygoniseTetrahedron(const EC_DensityField& field, const EC_MarchingCubesM
         return;
     }
 
-    // count == 2: two corners inside, two outside - the cross-section is a quadrilateral
-    // with one corner cut from each of the 4 (inside, outside) pairs. Going P(i0,o0),
-    // P(i0,o1), P(i1,o1), P(i1,o0) walks the quad's actual edge loop (each consecutive pair
-    // shares a tetrahedron vertex - i0, then o1, then i1, then o0), so splitting it along
-    // its own diagonal (i0,o0)-(i1,o1) gives two triangles rather than a bowtie.
+    // count == 2: the cross-section is a quad. Walking P(i0,o0), P(i0,o1), P(i1,o1), P(i1,o0) follows
+    // its edge loop, so splitting along the (i0,o0)-(i1,o1) diagonal gives two triangles, not a bowtie.
     int i0 = -1, i1 = -1, o0 = -1, o1 = -1;
     for (int c = 0; c < 4; c++) {
         bool cIsInside = (inside & (1 << c)) != 0;

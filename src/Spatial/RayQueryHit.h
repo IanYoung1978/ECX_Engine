@@ -2,14 +2,9 @@
 #include <glm/glm.hpp>
 #include "Entity/EC_DOD_Types.h"
 
-// Shared result type for ray and cone collision queries (Issues #30/#29). Deliberately
-// lightweight - just EntityID + glm::vec3/float - so callers like Game.cpp/EC_GameAPI.h
-// can use it without pulling in the collision system's broader headers.
-//
-// For ray-query hits, position/normal describe the actual surface intersection point.
-// For cone-query hits, position is the candidate entity's own world position (there is
-// no single "surface hit" for a containment/visibility test) and normal is unused
-// (left at its default).
+// Shared result type for ray and cone queries, kept lightweight so callers don't pull in the
+// collision headers. For ray hits, position/normal describe the surface intersection; for cone
+// hits, position is the entity's world position and normal is unused.
 struct RayQueryHit
 {
     EntityID entity = INVALID_ENTITY;

@@ -25,12 +25,9 @@ namespace EC_CollisionChecks
 	bool FrustumVsAABB(const Frustum& frustum, const glm::vec3& frustumPos,
 		const AABB& aabb, const glm::vec3& aabbPos);
 
-	// Capsule.pointA/pointB are local, same convention as Sphere.center/AABB.min-max/
-	// OBB.center - add the separate pos parameter to get world-space endpoints. Each
-	// function's contactNormal points toward its second parameter (sphere/aabb/obb),
-	// away from the capsule - EC_NarrowPhase's dispatch table flips it on whichever
-	// ordering puts that second parameter in dispatch-slot A, same as it already does
-	// for SphereVsAABB/SphereVsOBB's own "points toward the sphere" convention.
+	// Capsule.pointA/pointB are local (add the separate pos for world space), like the other shapes.
+	// Each Capsule function's contactNormal points toward its second parameter, away from the capsule;
+	// EC_NarrowPhase's dispatch table flips it where that parameter lands in slot A.
 	bool CapsuleVsSphere(const Capsule& capsule, const glm::vec3& capsulePos,
 		const Sphere& sphere, const glm::vec3& spherePos,
 		CollisionManifold& manifold);
@@ -46,24 +43,10 @@ namespace EC_CollisionChecks
 		const Capsule& capsuleB, const glm::vec3& posB,
 		CollisionManifold& manifold);
 
-	// Real capsule-vs-triangle-mesh collision detection (not a raycast substitute) -
-	// brute-force closest point between the capsule's segment and every triangle in
-	// meshPositions/meshIndices, same computational pattern as EC_RayIntersection::
-	// rayMesh's per-triangle iteration but testing closest-approach distance instead of
-	// ray crossing. Deliberately takes plain vectors rather than EC_DOD_MeshCollisionData
-	// directly, so this file (and its pure-C++ unit tests) stay free of any ECS/engine
-	// dependency - callers with a live EC_DOD_MeshCollisionData (e.g. EC_BroadPhase) just
-	// dereference its shared_ptr<vector>s. meshPositions/meshNormals are in the mesh's own
-	// local space; meshPos is added to get world space, matching EC_DOD_MeshCollisionData's
-	// chunk-local convention.
-	// contactNormal is the winning triangle's own per-vertex gradient normal (averaged over
-	// its 3 vertices, from meshNormals - NOT derived from the triangle's vertex winding via
-	// a cross product). EC_MarchingCubesMesher::emitTriangle's winding fix-up has a known
-	// parity bug at some cube-decomposition boundaries that can flip a triangle's winding
-	// relative to its neighbours even on a perfectly flat, continuous surface - a
-	// cross-product-based normal inherits that flip, but the gradient normals in
-	// meshNormals are computed straight from the density field and don't depend on winding
-	// at all, so they stay reliable exactly where cross-product normals aren't.
+	// Capsule vs triangle mesh, testing every triangle (with a bounding-box cull). Takes plain vectors
+	// so this file stays free of ECS dependencies; positions/normals are mesh-local, meshPos moves them
+	// to world space. contactNormal is the winning triangle's averaged per-vertex gradient normal, not a
+	// cross product: the mesher's winding can flip on some triangles, the gradient normals can't.
 	bool CapsuleVsMesh(const Capsule& capsule, const glm::vec3& capsulePos,
 		const std::vector<glm::vec3>& meshPositions, const std::vector<glm::vec3>& meshNormals,
 		const std::vector<uint32_t>& meshIndices,

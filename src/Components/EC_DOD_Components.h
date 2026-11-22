@@ -18,12 +18,8 @@ struct ContactPoint {
     float penetration;
 };
 
-// Published once per physics tick by EC_PhysicsSystem (which already computes
-// per-entity contact points for the sleep/stability check) so debug rendering
-// can draw them without ever touching EC_PairManager - contact points reach
-// the render thread through the same shared_mutex-protected component-array
-// path as every other piece of debug-drawable state (colliders, transforms),
-// rather than reading physics-thread-internal collision-pair data directly.
+// Published per physics tick by EC_PhysicsSystem so debug rendering can draw contact points through
+// the normal component-array path, without reading EC_PairManager (physics-thread-internal).
 struct EC_DOD_DebugContacts {
     std::vector<glm::vec3> points;
 };
@@ -59,14 +55,9 @@ struct EC_DOD_Collider {
     uint32_t collisionMask = 0xFFFFFFFF;
 };
 
-// Real triangle-mesh geometry for entities whose Collider::Type is Mesh - deliberately
-// generic (not terrain-named): today only EC_VoxelChunkSystem populates this (retaining
-// the marching-cubes output it would otherwise discard after uploading to the GPU, since
-// ObjModel keeps no public accessor to its own vertex data), but nothing about this
-// component assumes voxel terrain specifically. shared_ptr rather than owning the
-// vectors directly - EC_DOD_Collider-adjacent components get copied around by collision
-// code, and this keeps that cheap (a refcount bump, not a data copy) regardless of mesh
-// size.
+// Triangle-mesh geometry for Collider::Type::Mesh entities (today only EC_VoxelChunkSystem
+// populates it, keeping the mesher output because ObjModel exposes none). shared_ptr so copying this
+// component is a refcount bump, not a mesh copy.
 struct EC_DOD_MeshCollisionData {
     std::shared_ptr<std::vector<glm::vec3>> positions;
     std::shared_ptr<std::vector<glm::vec3>> normals;
@@ -81,26 +72,13 @@ struct EC_DOD_Spatial {
     glm::vec3 direction{ 0.0f, 0.0f, -1.0f };
     glm::vec3 up{ 0.0f, 1.0f, 0.0f };
     glm::vec3 right{ 1.0f, 0.0f, 0.0f };
-    // Real 3-axis rotation state for rigid bodies (see EC_PhysicsSystem's
-    // integration step) - orientation/right/up/direction above are kept in
-    // sync FROM this every physics tick, not the other way round. Bodies
-    // without an EC_DOD_RigidBody (camera, script-driven entities via
-    // EC_SpatialSystem) never touch this field and keep using orientation/
-    // angVelocity directly, same as always.
+    // 3-axis rotation state for rigid bodies (see EC_PhysicsSystem's integration); orientation/right/
+    // up/direction are kept in sync from it each physics tick. Entities without a RigidBody never touch it.
     glm::quat orientationQuat{ 1.0f, 0.0f, 0.0f, 0.0f };
 };
 
-// The standard three-way rigid-body classification (matches Box2D's b2BodyType exactly):
-// Static never moves and has infinite mass - other bodies collide against it but it's never
-// affected. Kinematic moves (repositioned directly, by script) but the impulse solver never
-// applies forces or collision response to it - detection and CollisionBeginEvent/
-// CollisionEndEvent still fire normally, so it can still push around/be reacted to by
-// Dynamic bodies; this is the "arcade physics" pattern's whole mechanism (see
-// EC_DOD_RigidBody::ignoreGravity's own comment - gravity is a separate, orthogonal
-// concern from body type, since a Kinematic body may still want gravity applied to its
-// velocity even though nothing resolves its collisions). Dynamic is fully simulated:
-// forces, gravity, and collision response all drive its motion - the default, and what
-// every RigidBody was implicitly assumed to be before this distinction existed.
+// Static never moves. Kinematic is moved by scripts: the impulse solver skips it, but it still
+// gets collision events (and gravity unless ignoreGravity). Dynamic is fully simulated (default).
 enum class EC_BodyType : uint8_t {
     Static,
     Kinematic,
@@ -115,39 +93,12 @@ struct EC_DOD_RigidBody {
     // separate, normally-higher threshold that governs whether it starts
     // slipping in the first place.
     float friction = 0.5f;
-    // Static friction coefficient - the threshold a contact's tangential
-    // impulse must exceed before it's allowed to slip at all (real
-    // materials almost always have staticFriction >= friction; e.g. wood on
-    // wood is roughly 0.5 static vs 0.3 kinetic - it takes more force to
-    // START a resting object sliding than to KEEP it sliding). Defaults to
-    // matching friction (no distinct static regime) for any material/entity
-    // that doesn't specify one explicitly.
+    // Static friction coefficient: the tangential impulse a contact must exceed before it slips
+    // (usually >= friction: it takes more force to start sliding than to keep going). Defaults to
+    // matching friction.
     float staticFriction = 0.5f;
-    // Rolling resistance coefficient - a small torque, applied AT each
-    // contact point, that opposes ROLLING (not sliding) motion there.
-    // Ordinary Coulomb friction (friction/staticFriction above) only
-    // resists relative TANGENTIAL SLIP at a contact point; a box balanced
-    // on an edge, or a ball/cylinder, can ROTATE about that contact line
-    // with zero slip there at all (identical to a wheel rolling without
-    // slipping), so sliding friction alone can never stop it - the object
-    // just keeps slowly rolling/rocking indefinitely, limited only by the
-    // crude global angularDamping above, which can take many seconds to
-    // arrest a small residual spin. Real materials dissipate this via
-    // contact-patch deformation, modelled here the same way Bullet's
-    // rollingFriction/spinningFriction do: a small angular impulse at the
-    // contact, clamped by this coefficient times the normal impulse. Keep
-    // this an order of magnitude below friction/staticFriction - it's
-    // evaluated fresh against whatever angular velocity exists at the
-    // START of each tick, so a coefficient anywhere near sliding-friction
-    // scale can fully cancel a genuine gravity-driven topple's angular
-    // velocity increment before it has a chance to build up (the impulse
-    // needed to arrest a SMALL, just-starting angular velocity is itself
-    // small, well within a large coefficient's budget against a loaded
-    // contact's normal impulse) - that reads as an obviously-unstable
-    // overhang crawling over several real seconds instead of toppling in
-    // a fraction of one. Defaults to a small nonzero value rather than 0
-    // since 0 reproduces the original (frictionless-rolling) behaviour
-    // exactly.
+    // Rolling resistance: a small angular impulse at each contact opposing rolling, clamped to this
+    // times the normal impulse. Keep it well below friction or it cancels real topples.
     float rollingFriction = 0.01f;
     // Per-second fractional velocity decay (0 = none), applied every frame
     // regardless of contact - models drag/internal energy loss. Distinct
@@ -155,43 +106,20 @@ struct EC_DOD_RigidBody {
     float linearDamping = 0.01f;
     float angularDamping = 0.05f;
     EC_BodyType bodyType = EC_BodyType::Dynamic;
-    // EC_PhysicsSystem's gravity step skips any entity with this set - script-toggled (e.g.
-    // an OnCollisionBegin handler turning it on the instant it lands, then back off on
-    // jump) rather than a permanent per-entity authoring choice, though it can be authored
-    // that way too for something that should just never fall. Orthogonal to bodyType - a
-    // Kinematic body (see EC_BodyType's own comment) may still want gravity accumulating
-    // into its velocity even though nothing resolves its collisions.
+    // EC_PhysicsSystem's gravity step skips entities with this set. Usually toggled by script (on
+    // landing and on jump) but can be authored. Independent of bodyType: a Kinematic body may still want
+    // gravity.
     bool ignoreGravity = false;
-    // Runtime state (not authored via XML) - once velocity has been
-    // negligible for long enough, the body is frozen entirely (no gravity,
-    // no integration, no collision resolution) until something with real
-    // velocity hits it and wakes it back up. Without this, resting bodies
-    // keep receiving tiny numerical impulses every frame forever, which
-    // shows up as slow drift/sinking over time even when otherwise at rest.
+    // Runtime state, not authored: once velocity has been negligible long enough the body is frozen (no
+    // gravity, integration or resolution) until something with real velocity wakes it. Stops resting
+    // bodies drifting from tiny numerical impulses.
     bool isSleeping = false;
     float sleepTimer = 0.0f;
 };
 
-// Per-body running total of this frame's momentum changes from every source
-// (gravity, every contact point across every colliding pair) - added to but
-// never directly applied to EC_DOD_Spatial until the single, unified apply
-// step (EC_PhysicsResolution::applyAccumulatedImpulses), which adds the
-// total to velocity (linear) then angVelocity (angular) in one place, once
-// per frame. Momentum units throughout (impulse = delta-momentum), so
-// contributions from different sources/contact points are simply additive.
-struct EC_DOD_ImpulseAccumulator {
-    glm::vec3 deltaLinearMomentum{ 0.0f };
-    glm::vec3 deltaAngularMomentum{ 0.0f };
-};
-
-// Issue #130 - a persistent, script-set external force (thrusters, wind, conveyor belts),
-// integrated into velocity every physics substep exactly like gravity is - NOT a one-shot
-// impulse. Added lazily by EntityAPI::applyForce() the first time a script targets an
-// entity; never authored via XML. Stays in effect until a script calls applyForce() again
-// (e.g. with 0,0,0 to turn it off) - a script's own OnUpdate only runs once per outer
-// frame while physics substeps several times within it, so a value set once must persist
-// across all of that frame's substeps to integrate correctly, rather than being consumed
-// and cleared after just one.
+// A persistent, script-set force (thrusters, wind), integrated into velocity every physics
+// substep like gravity - not a one-shot impulse. Added by EntityAPI::applyForce(); stays
+// until applyForce() is called again (0,0,0 turns it off).
 struct EC_DOD_ExternalForce {
     glm::vec3 force{ 0.0f };
 };
@@ -215,13 +143,8 @@ struct EC_DOD_GraphicsData {
     bool castsShadow = true;
     bool receivesShadow = true;
     float emissiveIntensity = 1.0f;
-    // Defined out-of-line in EC_DOD_Components.cpp, not inline here, so this header only
-    // needs ObjModel forward-declared - EC_RayIntersection.h/.cpp pull this header in for
-    // unrelated structs (EC_DOD_Collider etc.) and are built into ECX_UnitTests, whose
-    // whole point (see CMakeLists.txt's ECX_BUILD_ENGINE option) is staying free of the
-    // full engine's SDL2/GLEW/assimp/Lua/OpenGL/Stb toolchain - an inline definition here
-    // would need ObjModel.h's full definition (and therefore assimp/scene.h) in every
-    // translation unit that includes this header, engine or not.
+    // Defined out-of-line in EC_DOD_Components.cpp so this header needs only a forward declaration of
+    // ObjModel; ECX_UnitTests includes it and must stay free of the engine's assimp/GL toolchain.
     uint32_t getMeshHandle() const;
     uint32_t getVertexCount() const;
 };
@@ -271,26 +194,8 @@ struct EC_DOD_Light {
     bool dynamic = false;
 };
 
-// An entity's scene-membership lifecycle - distinct from EC_DOD_EntityInfo::active (a
-// gameplay-level toggle a script sets deliberately, e.g. cycling which of several lights
-// is on). Active/Inactive/MarkedForDeletion, not a bool, because "temporarily off" and
-// "scheduled to actually be destroyed" are different things: an author may want to
-// reactivate a merely-deactivated scene later without reloading it, and collapsing that
-// into a single flag would make deletion look reversible when it isn't (or vice versa).
-//
-// MarkedForDeletion is a one-way door - once set, there is no path back to Active. In
-// gameplay this is correct: a deletion is the result of a real event (death, consumption,
-// expiry) and should be final. An author changing their mind about a deletion is an
-// editor-side undo concern operating on the editor's own document model, before a scene is
-// ever written out or handed to the running engine - not something this runtime lifecycle
-// needs to represent.
-//
-// Only Active entities are visible to any subsystem's per-frame query (see
-// EC_DOD_EntityManager::getActiveEntitiesWithComponents and every inline `if (!info.active
-// || info.sceneState != Active) continue;` check across the engine) - Inactive and
-// MarkedForDeletion are treated identically for that purpose. The two states exist to
-// support reactivation and the deferred-destroy sweep respectively (see
-// EC_SceneManager's own comments), not because any subsystem currently distinguishes them.
+// Scene-membership lifecycle, separate from EntityInfo::active (a script's on/off toggle). Only
+// Active entities take part in per-frame queries. MarkedForDeletion is one-way.
 enum class EC_SceneLifecycleState : uint8_t {
     Active,
     Inactive,
@@ -303,14 +208,9 @@ struct EC_DOD_EntityInfo {
     // isActive() control. A script (e.g. a debug light-cycling feature) sets this
     // deliberately per entity and expects it to stick.
     bool active = true;
-    // Scene-membership state - what EC_GameScene::activate()/deactivate()/markForDeletion()
-    // control when a scene is switched to/from/unloaded. Kept separate from `active`
-    // because the two used to share one flag: EC_GameScene::deactivate()/activate()
-    // unconditionally overwrote every one of its entities' `active`, silently discarding
-    // any gameplay-level state a script had set (e.g. cycling to one active light out of
-    // three, then switching scenes and back, reset all three to active again). Subsystems
-    // that need "should this entity actually participate right now" must check
-    // active && sceneState == Active (see EC_DOD_EntityManager::getActiveEntitiesWithComponents).
+    // Scene-membership state, kept separate from `active` so switching scenes doesn't overwrite a
+    // script's own on/off state. Subsystems must check active && sceneState == Active (see
+    // EC_DOD_EntityManager::getActiveEntitiesWithComponents).
     EC_SceneLifecycleState sceneState = EC_SceneLifecycleState::Active;
     uint32_t uid = 0;
 };

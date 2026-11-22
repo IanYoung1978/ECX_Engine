@@ -5,11 +5,9 @@
 #include "Entity/EC_DOD_EntityManager.h"
 #include "Components/EC_DOD_Components.h"
 
-// UI foundation (Issue #6). Marker component: an entity with this is a UI element. Position is
-// pixel-space, top-left origin, Y-down, relative to its EC_DOD_Hierarchy parent (if any) - the
-// existing hierarchy component is reused rather than inventing a separate UI tree. Layer is the
-// draw-order key (0 = furthest back), independent of hierarchy depth - all UI elements are
-// flattened and sorted by layer at render time, hierarchy only affects position.
+// Marker component for a UI element. Position is pixel-space, top-left origin, Y-down, relative to
+// its EC_DOD_Hierarchy parent if any. Layer is the draw-order key (0 = furthest back), independent
+// of hierarchy depth.
 struct EC_UI_Element {
     glm::vec2 position{ 0.0f };
     glm::vec2 size{ 0.0f };

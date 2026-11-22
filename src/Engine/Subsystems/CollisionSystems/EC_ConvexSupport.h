@@ -1,12 +1,9 @@
 #pragma once
 #include <glm/glm.hpp>
 
-// Pure, engine-independent support functions (farthest point on a shape's surface in a
-// given world-space direction) for GJK (EC_GJK.h). Deliberately takes only plain glm
-// types, no EC_DOD_Collider/EC_DOD_Spatial - keeps this math testable in isolation
-// (see tests/EC_GJK_Tests.cpp) without pulling in the ECS/engine header stack.
-// EC_RayIntersection::colliderSupport() is the thin adapter that unpacks a collider
-// component into these plain parameters.
+// Pure support functions (farthest point on a shape in a direction) for GJK, taking plain glm types
+// so the math is testable without the ECS (tests/EC_GJK_Tests.cpp). EC_RayIntersection::
+// colliderSupport() adapts a collider component to these.
 namespace EC_ConvexSupport
 {
     glm::vec3 sphereSupport(const glm::vec3& center, float radius, const glm::vec3& dir);

@@ -5,12 +5,8 @@
 #include <glm/glm.hpp>
 #include "Entity/EC_DOD_Types.h"
 
-// Single depth texture divided into a fixed grid of equal-size tiles, replacing the old
-// single-shared-ShadowBuffer approach where every directional/spot shadow-casting light
-// overwrote the same buffer in turn. Each light gets a stable tile assignment (persists
-// frame to frame until the light stops being an active caster), so all active lights'
-// shadow data exists simultaneously for the whole frame instead of being clobbered by
-// whichever light rendered last.
+// One depth texture divided into a fixed grid of equal tiles. Each light keeps a stable tile until
+// it stops being an active caster, so all active lights' shadows exist for the whole frame.
 class ShadowAtlas
 {
 public:
@@ -39,10 +35,8 @@ public:
     // the last tile's rect.
     void unbindTileForWriting();
 
-    // Remaps the old fixed [0,1]-covering bias matrix into lightEntity's tile sub-rect of
-    // the shared atlas texture, so the existing sampler2Shadow-based frag shaders keep
-    // working unmodified - they still just sample [0,1], it just now lands in this
-    // light's private slice of the atlas.
+    // Remaps the [0,1] bias matrix into lightEntity's tile of the atlas, so the sampler2Shadow shaders
+    // still sample [0,1] unmodified.
     glm::mat4 getTileBiasMatrix(EntityID lightEntity) const;
 
     unsigned int getDepthTexture() const { return m_DepthTexture; }

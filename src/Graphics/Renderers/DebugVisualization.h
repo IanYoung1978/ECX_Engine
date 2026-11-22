@@ -1,10 +1,8 @@
 #pragma once
 #include <glm/glm.hpp>
 
-// Params for visualizing the last ray/cone query (Issues #30/#29) via GL_DebugRenderer.
-// Shared between EC_GameAPI.h (script-facing setter) and GL_Deferred_Renderer/
-// GL_DebugRenderer (the consumer) so a single struct can travel through an
-// ECXCommand's std::any payload.
+// Params for visualizing the last ray/cone query via GL_DebugRenderer, shared by EC_GameAPI.h and
+// the renderers so one struct can travel in an ECXCommand's std::any.
 struct DebugRayVisualization
 {
     glm::vec3 origin{ 0.0f };

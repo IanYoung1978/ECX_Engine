@@ -1,12 +1,8 @@
 #pragma once
 
-// A small FBO that reuses the G-buffer's already-populated depth texture and writes into
-// the same colour texture the lighting passes accumulate into (FrameBuffer1), just for the
-// receivesShadow-exempt redraw pass (Issue #28). Reusing an existing depth texture lets
-// bindForWriting() depth-test with GL_EQUAL against exactly what geometryPass already
-// wrote, so the exempt pass only ever touches pixels belonging to the exempt entity's own
-// geometry - without restructuring GBuffer or FrameBuffer (both used unmodified elsewhere
-// in the pipeline).
+// Small FBO reusing the G-buffer's depth texture and the lighting accumulation colour texture
+// (FrameBuffer1) for the receivesShadow-exempt redraw. bindForWriting() depth-tests GL_EQUAL against
+// what geometryPass wrote, so only the exempt entity's own pixels are touched.
 class ExemptShadowCompositeBuffer
 {
 public:

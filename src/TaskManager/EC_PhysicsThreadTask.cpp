@@ -51,14 +51,8 @@ void EC_PhysicsThreadTask::execute()
 					s->update(m_timestep, *m_game);
 				}
 
-				// Collision + Physics run m_SubstepCount times against a
-				// proportionally smaller timestep instead of once at full
-				// m_timestep - each pass re-detects collisions against
-				// whatever the previous pass just integrated, so a body
-				// mid-topple gets its geometry/impulses refreshed several
-				// times within one visual tick rather than once. See
-				// setSubstepCount's declaration for why this specifically
-				// fixes marginal-equilibrium creep.
+				// Collision + Physics run m_SubstepCount times against a proportionally smaller timestep (see
+				// setSubstepCount).
 				const float substepDt = m_timestep / static_cast<float>(m_SubstepCount);
 				for (int i = 0; i < m_SubstepCount; i++)
 				{
