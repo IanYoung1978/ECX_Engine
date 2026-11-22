@@ -19,6 +19,9 @@ public:
     virtual bool hasEntity(EntityID entity) const = 0;
     virtual size_t size() const = 0;
     virtual size_t capacity() const = 0;
+    // A copy of every entity in the array, taken under one lock, safe to iterate while other
+    // threads add or remove components.
+    virtual std::vector<EntityID> entitiesSnapshot() const = 0;
 };
 
 template<typename T>
@@ -41,6 +44,7 @@ public:
     const std::vector<T>& getData() const;
 
     EntityID getEntity(size_t index) const;
+    std::vector<EntityID> entitiesSnapshot() const override;
 
     // For a caller already holding getMutex(): calling getEntity() would lock the shared_mutex a
     // second time on the same thread, which is undefined and can deadlock behind a waiting writer.
@@ -225,6 +229,12 @@ template<typename T>
 EntityID EC_ComponentArray<T>::getEntity(size_t index) const {
     std::shared_lock lock(m_Mutex);
     return m_Entities[index];
+}
+
+template<typename T>
+std::vector<EntityID> EC_ComponentArray<T>::entitiesSnapshot() const {
+    std::shared_lock lock(m_Mutex);
+    return m_Entities;
 }
 
 template<typename T>

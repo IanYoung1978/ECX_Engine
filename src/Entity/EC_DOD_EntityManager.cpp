@@ -109,15 +109,9 @@ std::vector<EntityID> EC_DOD_EntityManager::getEntitiesWithComponent(std::type_i
         return {};
     }
 
-    std::vector<EntityID> result;
-    result.reserve(it->second->size());
-
-    for (size_t i = 0; i < it->second->size(); i++) {
-        EntityID entity = static_cast<const EC_ComponentArray<int>*>(it->second.get())->getEntity(i);
-        if (isAlive(entity)) {
-            result.push_back(entity);
-        }
-    }
+    std::vector<EntityID> result = it->second->entitiesSnapshot();
+    result.erase(std::remove_if(result.begin(), result.end(),
+        [this](EntityID entity) { return !isAlive(entity); }), result.end());
 
     return result;
 }
@@ -151,9 +145,7 @@ std::vector<EntityID> EC_DOD_EntityManager::getEntitiesWithComponents(const std:
 
     result.reserve(smallestSize);
 
-    for (size_t i = 0; i < smallestArrayIt->second->size(); i++) {
-        EntityID entity = static_cast<const EC_ComponentArray<int>*>(smallestArrayIt->second.get())->getEntity(i);
-
+    for (EntityID entity : smallestArrayIt->second->entitiesSnapshot()) {
         if (!isAlive(entity)) {
             continue;
         }
