@@ -188,6 +188,7 @@ add_executable(ECX_UnitTests
     tests/EC_RayIntersection_Tests.cpp
     tests/EC_Noise3D_Tests.cpp
     tests/EC_VolumeNode_Tests.cpp
+    tests/ECX_Broker_Tests.cpp
     src/Engine/Subsystems/CollisionSystems/EC_GJK.cpp
     src/Engine/Subsystems/CollisionSystems/EC_ConvexSupport.cpp
     src/Engine/Subsystems/CollisionSystems/EC_CollisionChecks.cpp
@@ -200,6 +201,8 @@ add_executable(ECX_UnitTests
     src/Terrain/EC_MarchingCubesMesher.cpp
     src/Procedural/EC_Noise3D.cpp
     src/Procedural/EC_VolumeNode.cpp
+    src/Messaging/ECXEventBroker.cpp
+    src/Messaging/ECXCommandBroker.cpp
 )
 set_property(TARGET ECX_UnitTests PROPERTY CXX_STANDARD 17)
 target_include_directories(ECX_UnitTests PRIVATE ${SOURCE_DIR})

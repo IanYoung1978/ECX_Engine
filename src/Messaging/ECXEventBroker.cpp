@@ -19,20 +19,29 @@ void ECXEventBroker::publish(ECXEvent& Event)
 
 void ECXEventBroker::flush()
 {
-	dequeSelector = (dequeSelector == 0) ? 1 : 0;
-	while (!queues[!dequeSelector].empty())
+	// Swapped under pushLock so a publisher can never push into the queue being drained below.
+	int draining;
 	{
-		auto& listenerSet = listeners[queues[!dequeSelector].front().type];
-		if (listenerSet.size() > 0)
+		std::scoped_lock<std::mutex> lock(pushLock);
+		dequeSelector = (dequeSelector == 0) ? 1 : 0;
+		draining = !dequeSelector;
+	}
+
+	// Delivered without holding pushLock, so a listener may publish; that goes to the other
+	// queue and is delivered on the next flush. An event with no subscriber is dropped.
+	auto& pending = queues[draining];
+	while (!pending.empty())
+	{
+		ECXEvent event = std::move(pending.front());
+		pending.pop_front();
+
+		auto it = listeners.find(event.type);
+		if (it == listeners.end())
+			continue;
+		for (auto listener : it->second)
 		{
-			auto Event = queues[!dequeSelector].front();
-			queues[!dequeSelector].pop_front();
-			for (auto listener : listenerSet)
-			{
-				listener->receive(Event);
-			}
+			listener->receive(event);
 		}
-		
 	}
 }
 
