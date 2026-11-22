@@ -28,8 +28,9 @@ public:
 protected:
 	void recordTick();
 
-	bool m_Paused;
-	bool m_running;
+	// Written by the main thread (start/stop/pause/resume), read by the task's own thread.
+	std::atomic<bool> m_Paused;
+	std::atomic<bool> m_running;
 
 private:
 	std::string m_Name;
